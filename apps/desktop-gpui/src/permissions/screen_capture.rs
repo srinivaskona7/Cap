@@ -131,7 +131,7 @@ fn validate() -> bool {
 /// replayd that never recovers strands a bounded number of threads.
 fn query_displays(timeout: Duration) -> Option<usize> {
     if QUERIES_ALIVE
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |alive| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |alive| {
             (alive < MAX_QUERIES_ALIVE).then_some(alive + 1)
         })
         .is_err()

@@ -1,0 +1,8 @@
+[build]
+# Use modern multi-threaded linking on macOS
+rustflags = [
+    "-C", "split-debuginfo=unpacked",
+]
+
+[env]
+CARGO_INCREMENTAL = "1"

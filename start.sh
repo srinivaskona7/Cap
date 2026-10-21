@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
+# start.sh - Fast incremental build and launch for sricap-rec using cached objects
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 1. Stop any running instance quietly
+# 1. Stop any existing instance cleanly
 "$REPO_ROOT/stop.sh" --quiet 2>/dev/null || true
 
-# 2. Ensure tools and shims are in PATH
+# 2. Ensure tools are in PATH
 export PATH="$HOME/bin:$HOME/.cargo/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
 export RUST_LOG="${RUST_LOG:-warn,cap_desktop_gpui=info,cap_recording=info,cap_export=info}"
 
-# 3. Fast patch-stamp check (stored in target/ so ../zed-cap stays clean)
+# 3. Enable local incremental caching and unpacked debug info
+export CARGO_INCREMENTAL=1
+export RUSTFLAGS="${RUSTFLAGS:-} -C split-debuginfo=unpacked"
+
+# 4. Fast patch-stamp check for GPUI
 ZED_DIR="$REPO_ROOT/../zed-cap"
 rm -f "$ZED_DIR/.cap-gpui-patch-stamp" 2>/dev/null || true
 mkdir -p "$REPO_ROOT/target"
@@ -25,14 +30,15 @@ fi
 
 cd "$REPO_ROOT"
 SECONDS=0
-if [[ "$1" == "--release" ]]; then
-	echo "🔨 Building sricap-rec (release)..."
-	cargo +1.95.0 build --quiet --release --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
-	echo "✅ Build completed in ${SECONDS}s — running sricap-rec"
+
+if [[ "${1:-}" == "--release" ]]; then
+	echo "⚡ Building sricap-rec (release with cache)..."
+	cargo build --release --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	echo "✅ Build completed in ${SECONDS}s — Launching sricap-rec"
 	exec "$REPO_ROOT/apps/desktop-gpui/target/release/sricap-rec"
 else
-	echo "🔨 Building sricap-rec..."
-	cargo +1.95.0 build --quiet --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
-	echo "✅ Build completed in ${SECONDS}s — running sricap-rec"
+	echo "⚡ Building sricap-rec (incremental dev with cache)..."
+	cargo build --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	echo "✅ Build completed in ${SECONDS}s — Launching sricap-rec"
 	exec "$REPO_ROOT/apps/desktop-gpui/target/debug/sricap-rec"
 fi
