@@ -34,10 +34,8 @@ jobs:
 
       - name: Setup Rust Toolchains (Workspace 1.88.0 + GPUI 1.95.0)
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt clippy
-          rustup target add aarch64-apple-darwin --toolchain 1.88.0
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup target add aarch64-apple-darwin --toolchain 1.95.0
+          rustup toolchain install 1.88.0 --profile minimal -c rustfmt,clippy -t aarch64-apple-darwin
+          rustup toolchain install 1.95.0 --profile minimal -t aarch64-apple-darwin
 
       - name: Cache native dependencies (FFmpeg, ONNX Runtime, Spacedrive)
         uses: actions/cache@v4
