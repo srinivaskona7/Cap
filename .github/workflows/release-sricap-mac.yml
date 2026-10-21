@@ -66,6 +66,8 @@ jobs:
           ./scripts/build-desktop-binaries.sh aarch64-apple-darwin
 
       - name: Build & Bundle sricap-rec macOS App & DMG
+        env:
+          CI: "false"
         run: |
           node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app,dmg
 
