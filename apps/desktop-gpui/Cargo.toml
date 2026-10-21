@@ -9,7 +9,7 @@ members = [".", "kernels"]
 
 [package]
 name = "cap-desktop-gpui"
-version = "0.6.2"
+version = "0.6.3"
 description = "sricap-rec - High-definition screen & studio recording for macOS."
 edition = "2024"
 license = "AGPL-3.0"
