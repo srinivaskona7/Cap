@@ -5,6 +5,7 @@ if [[ "$1" != "--quiet" ]]; then
 fi
 
 pkill -f "Cap.app" 2>/dev/null || true
+pkill -f "sricap-rec" 2>/dev/null || true
 pkill -f "cap-gpui" 2>/dev/null || true
 pkill -f "cargo.*desktop-gpui" 2>/dev/null || true
 

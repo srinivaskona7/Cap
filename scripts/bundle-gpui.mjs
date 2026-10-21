@@ -37,7 +37,7 @@ export function gpuiBinaryPath(target, profile = "release") {
 		"target",
 		target,
 		profile,
-		`cap-gpui${extension}`,
+		`sricap-rec${extension}`,
 	);
 }
 

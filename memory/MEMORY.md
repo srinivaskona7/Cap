@@ -56,7 +56,8 @@ For every repository or new project worked on by Claude Code, OpenAI Codex, or G
 
 ### Mandatory Git Push & GitHub Actions / Pages Engineering Rules
 
-#### 1. Git Push & SSH Remote Invariant (Mandatory)
+#### 1. Git Push, Author Email & SSH Remote Invariant (Mandatory)
+- **Public Repo Git Author Email**: Always use `kona.srinivas.app@gmail.com` (`git config user.email "kona.srinivas.app@gmail.com"`) for public GitHub repositories. NEVER use `@apple.com` email addresses on public repos.
 - **Always push with standard git over SSH**: Always execute `git push origin <branch>` (e.g. `git push origin main`).
 - **Zero `gh auth` Friction**: Authentication on this machine is pre-configured via SSH (`git@github.com:...`). Never run `gh auth login`, `gh auth status`, or rely on GitHub CLI tokens to push code. Directly commit and push. Only investigate auth if `git push` returns an actual SSH permission error.
 - **Ensure SSH Remote**: If any repo remote URL starts with HTTPS (`https://github.com/...`), immediately convert it to SSH: `git remote set-url origin git@github.com:<org-or-user>/<repo>.git`.

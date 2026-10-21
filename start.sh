@@ -26,13 +26,13 @@ fi
 cd "$REPO_ROOT"
 SECONDS=0
 if [[ "$1" == "--release" ]]; then
-	echo "🔨 Building Cap GPUI (release)..."
-	cargo +1.95.0 build --quiet --release --manifest-path apps/desktop-gpui/Cargo.toml --bin cap-gpui
-	echo "✅ Build completed in ${SECONDS}s — running Cap GPUI"
-	exec "$REPO_ROOT/apps/desktop-gpui/target/release/cap-gpui"
+	echo "🔨 Building sricap-rec (release)..."
+	cargo +1.95.0 build --quiet --release --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	echo "✅ Build completed in ${SECONDS}s — running sricap-rec"
+	exec "$REPO_ROOT/apps/desktop-gpui/target/release/sricap-rec"
 else
-	echo "🔨 Building Cap GPUI..."
-	cargo +1.95.0 build --quiet --manifest-path apps/desktop-gpui/Cargo.toml --bin cap-gpui
-	echo "✅ Build completed in ${SECONDS}s — running Cap GPUI"
-	exec "$REPO_ROOT/apps/desktop-gpui/target/debug/cap-gpui"
+	echo "🔨 Building sricap-rec..."
+	cargo +1.95.0 build --quiet --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	echo "✅ Build completed in ${SECONDS}s — running sricap-rec"
+	exec "$REPO_ROOT/apps/desktop-gpui/target/debug/sricap-rec"
 fi

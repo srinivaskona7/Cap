@@ -4,10 +4,12 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - main
-      - feature1
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish (e.g. v0.6.1)"
+        required: false
+        default: "v0.6.1"
 
 permissions:
   contents: write
@@ -30,10 +32,17 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup target add aarch64-apple-darwin --toolchain 1.95.0
 
-      - name: Setup Rust Cache
+      - name: Cache native dependencies (FFmpeg, ONNX Runtime, Spacedrive)
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/native-deps
+            target/ffmpeg
+          key: native-deps-macos-arm64-${{ hashFiles('scripts/setup.js') }}
+
+      - name: Cache Rust workspaces
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: aarch64-apple-darwin
           workspaces: |
             . -> target
             apps/desktop-gpui -> apps/desktop-gpui/target
@@ -53,15 +62,17 @@ jobs:
           BUNDLE_DIR="apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle"
           DMG_FILE="$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -n 1)"
           cp "$DMG_FILE" dist-release/sricap-rec-arm64.dmg
+          cp "$DMG_FILE" dist-release/sricap-rec.dmg
           ditto -c -k --sequesterRsrc --keepParent "$BUNDLE_DIR/macos/sricap-rec.app" dist-release/sricap-rec-arm64.zip
           cd dist-release
-          shasum -a 256 sricap-rec-arm64.dmg sricap-rec-arm64.zip > SHA256SUMS.txt
+          shasum -a 256 sricap-rec.dmg sricap-rec-arm64.dmg sricap-rec-arm64.zip > SHA256SUMS.txt
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.1' }}
           files: |
+            dist-release/sricap-rec.dmg
             dist-release/sricap-rec-arm64.dmg
             dist-release/sricap-rec-arm64.zip
             dist-release/SHA256SUMS.txt
