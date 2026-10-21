@@ -5549,7 +5549,7 @@ impl EditorWindow {
             vo.stop_flag
                 .store(true, std::sync::atomic::Ordering::Release);
             if self.playing {
-                self.toggle_playback(cx);
+                self.toggle_play(window, cx);
             }
             let full_path = vo.full_path;
             let relative_path = vo.relative_path;
@@ -5601,69 +5601,62 @@ impl EditorWindow {
         let stop_clone = stop_flag.clone();
         let wav_out = full_path.clone();
 
-        let mic_label = crate::store::recording_microphone().or_else(|| {
-            cap_recording::feeds::microphone::MicrophoneFeed::list_names()
-                .into_iter()
-                .next()
-        });
-        let Some(mic_label) = mic_label else {
-            self.show_notice("No microphone found for voiceover recording.", window, cx);
-            return;
-        };
-        let device_settings = crate::store::RecordingDeviceSettings::load();
+        std::thread::spawn(move || {
+            use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 
-        gpui_tokio::Tokio::spawn(cx, async move {
-            use cap_recording::feeds::microphone::{self, MicrophoneFeed};
-            use kameo::Actor as _;
-
-            let (err_tx, _err_rx) = flume::unbounded();
-            let feed = MicrophoneFeed::spawn(MicrophoneFeed::new(err_tx));
-            let (samples_tx, samples_rx) = flume::unbounded();
-            if feed.ask(microphone::AddSender(samples_tx)).await.is_err() {
-                return;
-            }
-            let Ok(ready) = feed
-                .ask(microphone::SetInput {
-                    label: mic_label,
-                    settings: device_settings,
-                })
-                .await
-            else {
+            let host = cpal::default_host();
+            let Some(device) = host.default_input_device() else {
                 return;
             };
-            if ready.await.is_err() {
+            let Ok(supported) = device.default_input_config() else {
                 return;
-            }
-
-            let mut writer: Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>> = None;
-            while !stop_clone.load(std::sync::atomic::Ordering::Acquire) {
-                match samples_rx.recv_timeout(Duration::from_millis(60)) {
-                    Ok(chunk) => {
-                        if writer.is_none() {
-                            let spec = hound::WavSpec {
-                                channels: chunk.info.channels().max(1),
-                                sample_rate: chunk.info.sample_rate().max(16_000),
-                                bits_per_sample: 32,
-                                sample_format: hound::SampleFormat::Float,
-                            };
-                            writer = hound::WavWriter::create(&wav_out, spec).ok();
-                        }
-                        if let Some(w) = writer.as_mut() {
-                            for &sample in &chunk.data {
-                                let _ = w.write_sample(sample);
-                            }
+            };
+            let sample_rate = supported.sample_rate().0.max(16_000);
+            let channels = supported.channels().max(1);
+            let spec = hound::WavSpec {
+                channels,
+                sample_rate,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            };
+            let Ok(writer) = hound::WavWriter::create(&wav_out, spec) else {
+                return;
+            };
+            let shared_writer = Arc::new(std::sync::Mutex::new(Some(writer)));
+            let writer_cb = shared_writer.clone();
+            let config: cpal::StreamConfig = supported.into();
+            let stream = device.build_input_stream(
+                &config,
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    if let Ok(mut guard) = writer_cb.lock()
+                        && let Some(w) = guard.as_mut()
+                    {
+                        for &s in data {
+                            let _ = w.write_sample(s);
                         }
                     }
-                    Err(flume::RecvTimeoutError::Timeout) => continue,
-                    Err(flume::RecvTimeoutError::Disconnected) => break,
-                }
+                },
+                |err| {
+                    tracing::warn!("voiceover stream error: {err}");
+                },
+                None,
+            );
+            let Ok(stream) = stream else {
+                return;
+            };
+            if stream.play().is_err() {
+                return;
             }
-            let _ = feed.ask(microphone::RemoveInput).await;
-            if let Some(w) = writer.take() {
+            while !stop_clone.load(std::sync::atomic::Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            drop(stream);
+            if let Ok(mut guard) = shared_writer.lock()
+                && let Some(w) = guard.take()
+            {
                 let _ = w.finalize();
             }
-        })
-        .detach();
+        });
 
         let start_playhead = self.playhead;
         self.voiceover_recording = Some(VoiceoverRecording {
@@ -5674,7 +5667,7 @@ impl EditorWindow {
             start_playhead,
         });
         if !self.playing {
-            self.toggle_playback(cx);
+            self.toggle_play(window, cx);
         }
         cx.notify();
     }
@@ -5737,8 +5730,7 @@ impl EditorWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let start = self.playhead.max(0.0);
-        self.add_track_at(TrackKind::Text, 0, start, window, cx);
+        self.add_track_kind(TrackKind::Text, window, cx);
     }
 
     fn finish_audio_import(
