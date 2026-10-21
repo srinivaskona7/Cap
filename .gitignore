@@ -59,6 +59,7 @@ tauri.linux.conf.json
 .docs/
 .claude/
 .claude/settings.local.json
+.gemini/
 
 # Release backfill scripts (one-time use)
 scripts/backfill-releases.sh
