@@ -2875,7 +2875,7 @@ impl EditorWindow {
                     dur_s
                 );
 
-                let mut dur_row = div().flex().flex_row().gap(px(4.));
+                let mut dur_row = div().flex().flex_row().gap(px(3.));
                 for (btn_id, lbl, target_dur) in [
                     ("1s", "1s", 1.0_f64),
                     ("2s", "2s", 2.0_f64),
@@ -2904,9 +2904,31 @@ impl EditorWindow {
                         ),
                     );
                 }
+                for (nudge_id, nudge_lbl, delta) in
+                    [("minus", "-0.5s", -0.5_f64), ("plus", "+0.5s", 0.5_f64)]
+                {
+                    dur_row = dur_row.child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                SharedString::from(format!("img-nudge-{idx_copy}-{nudge_id}")),
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(nudge_lbl)
+                            .full_width()
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.adjust_image_segment_duration_delta(
+                                    idx_copy, delta, window, cx,
+                                );
+                            })),
+                        ),
+                    );
+                }
 
                 let mut pos_row = div().flex().flex_row().gap(px(4.));
                 for (pos_id, pos_lbl, cx_pos, cy_pos, sx, sy) in [
+                    ("slide", "Slide 85%", 0.50, 0.50, 0.85, 0.78),
                     ("center", "Center", 0.50, 0.50, 0.48, 0.48),
                     ("tl", "TL", 0.16, 0.12, 0.22, 0.14),
                     ("tr", "TR", 0.84, 0.12, 0.22, 0.14),
@@ -3071,6 +3093,26 @@ impl EditorWindow {
                 ),
             );
 
+        let mut speed_row = div().flex().flex_row().gap(px(4.));
+        for (spd_id, spd_lbl, rate) in [
+            ("spd-1x", "Speed 1x", 1.0_f64),
+            ("spd-15x", "1.5x", 1.5_f64),
+            ("spd-2x", "2x", 2.0_f64),
+            ("spd-4x", "4x", 4.0_f64),
+            ("spd-8x", "8x", 8.0_f64),
+        ] {
+            speed_row = speed_row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, spd_id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(spd_lbl)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.set_active_clip_speed(f64::from(rate), window, cx);
+                        })),
+                ),
+            );
+        }
+
         div()
             .flex()
             .flex_col()
@@ -3079,6 +3121,7 @@ impl EditorWindow {
             .child(row)
             .child(creator_row)
             .child(clips_row)
+            .child(speed_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))
             .into_any_element()

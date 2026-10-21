@@ -8051,6 +8051,84 @@ impl EditorWindow {
         cx.notify();
     }
 
+    pub(crate) fn adjust_image_segment_duration_delta(
+        &mut self,
+        index: usize,
+        delta_secs: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(cur_dur) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.image_segments.get(index))
+            .map(|img| (img.end - img.start).max(0.5))
+        {
+            self.set_image_segment_duration(index, (cur_dur + delta_secs).max(0.5), window, cx);
+        }
+    }
+
+    pub(crate) fn set_active_clip_speed(
+        &mut self,
+        rate: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let playhead = self.playhead;
+        let selected_clip = self
+            .selection
+            .as_ref()
+            .filter(|s| s.track == TrackKind::Clip)
+            .and_then(|s| s.indices.first().copied());
+        self.edit_project("set-clip-speed-preset", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            if tl.segments.is_empty() {
+                return false;
+            }
+            let target_idx = selected_clip.unwrap_or_else(|| {
+                let mut acc = 0.0_f64;
+                for (i, seg) in tl.segments.iter().enumerate() {
+                    let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.01);
+                    if playhead <= acc + dur || i + 1 == tl.segments.len() {
+                        return i;
+                    }
+                    acc += dur;
+                }
+                0
+            });
+            if let Some(seg) = tl.segments.get_mut(target_idx) {
+                seg.timescale = rate.clamp(0.25, 16.0);
+                return true;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn play_audio_segment_at(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(start) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.audio_segments.get(index))
+            .map(|seg| seg.start)
+        {
+            self.seek_to_time(start, cx);
+            if !self.playing {
+                self.toggle_play(window, cx);
+            }
+            cx.notify();
+        }
+    }
+
     pub(crate) fn move_image_segment_order(
         &mut self,
         index: usize,

@@ -2031,12 +2031,34 @@ impl EditorWindow {
                                                         ui::Button::plain(
                                                             &theme,
                                                             SharedString::from(format!(
+                                                                "vo-play-{idx_copy}"
+                                                            )),
+                                                            ui::ButtonVariant::Gray,
+                                                            ui::ButtonSize::Xs,
+                                                        )
+                                                        .label("Play")
+                                                        .icon("icons/play.svg")
+                                                        .full_width()
+                                                        .on_click(cx.listener(
+                                                            move |this, _, window, cx| {
+                                                                this.play_audio_segment_at(
+                                                                    idx_copy, window, cx,
+                                                                );
+                                                            },
+                                                        )),
+                                                    ),
+                                                )
+                                                .child(
+                                                    div().flex_1().child(
+                                                        ui::Button::plain(
+                                                            &theme,
+                                                            SharedString::from(format!(
                                                                 "vo-rerecord-{idx_copy}"
                                                             )),
                                                             ui::ButtonVariant::Gray,
                                                             ui::ButtonSize::Xs,
                                                         )
-                                                        .label("Re-record Take")
+                                                        .label("Re-record")
                                                         .icon("icons/microphone.svg")
                                                         .full_width()
                                                         .on_click(cx.listener(
