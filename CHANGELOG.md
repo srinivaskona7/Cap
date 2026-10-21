@@ -83,6 +83,17 @@ All notable features, presets, UI options, and architectural customizations buil
   28. **`+ Lo-Fi Ambient Pad` Royalty-Free Music Synthesizer (`Audio` Tab)**: Generates a warm 48kHz Lo-Fi chord progression pad `.wav` (`-14 dB`) natively in Rust across the video duration.
   29. **`+ Censor Bleep (1s)` (`Audio` Tab)**: Synthesizes and inserts a `1000 Hz` censor bleep `.wav` at the current playhead.
   30. **`Export All 3 Formats (16:9 YouTube + 9:16 Reels + 1:1 Square)` (`Export` Drawer)**: Batch-renders all 3 aspect ratios (`16:9`, `9:16`, and `1:1`) into `<recordings_dir>/Exports/` in 1 click.
+  31. **`YT 4K DevOps (16:9)` & `Export YouTube 4K DevOps/Coding (Max Screen · Compact Size)`**:
+      - Maximizes screen area (`padding = 2.0%`, `rounding = 10.0`) so 98% of the `3840×2160` 4K canvas is your Terminal / IDE / Cloud Console, with a compact `20%` bottom-right webcam, `+0.22` code contrast boost, `1.4x` smart click auto-zoom, and `0.08 bpp` H.264 High Profile encoding for **70% smaller 4K file sizes**.
+  32. **`Save Brand` & `Apply Brand` Default Brand Kit (`Background → Layout`)**: Saves and restores your exact layout, gradient, camera shape/border, cursor, and color grading (`sricap-brand-kit.json`) in 1 click.
+  33. **`Auto-Hook 🔥` Viral Headline Generator (`Background → Layout`)**: Extracts the opening phrase from your transcript and generates a bold top Hook Banner automatically.
+  34. **`Chapter Cards` Auto-Section Dividers (`Background → Layout`)**: Inserts `1.8s` `PART 1`, `PART 2`, `PART 3` chapter title cards at every split/merged clip boundary.
+  35. **`Silences 3x` Time-Lapse Coding Pauses (`Background → Layout`)**: Splits silent intervals (`>0.9s`) and speeds them up to `3.0x` while keeping spoken segments at `1.0x`.
+  36. **`Portrait Cam` DSLR Webcam Glow (`Background → Layout`)**: Applies warm skin-tone color grading, contrast boost, `4px` indigo glow ring, and `82%` ambient shadow to the webcam.
+  37. **`Safe Guide` 9:16 Social Safe-Zone Overlay (`Background → Layout`)**: Toggles non-destructive Reels/Shorts safe-zone guide boundaries on the video canvas.
+  38. **`Loop Reel ↺` Seamless Ending-to-Intro Bridge (`Background → Layout`)**: Adds crossfade transitions and a `"↺ REWATCH FROM STEP 1"` bridge card at the end of the Reel.
+  39. **`+ SFX Whoosh` & `+ SFX Ding Chime` (`Audio` Tab) + `Spread Across Video` (`Image Sequence Manager`)**: Synthesizes transition whoosh and notification chime cues at the playhead, and evenly spreads uploaded slide images across the timeline.
+  40. **`Export CLI & Shortcut Cheat-Sheet (.MD)` (`Export` Drawer)**: Extracts all recorded shortcuts and callout cards into `<title>-cheatsheet.md` in `Exports/` and copies it to the macOS Clipboard.
   21. **Top Header `Save`, `Discard Edits`, `Discard & Close`, and `Quit App` Controls**:
       - **`Save`**: Writes project changes to disk immediately and updates the restore checkpoint.
       - **`Discard Edits`**: Reverts all unsaved experimental edits back to the last saved checkpoint without closing the window.

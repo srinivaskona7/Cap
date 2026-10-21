@@ -2731,7 +2731,23 @@ impl EditorWindow {
         let creator_row = div()
             .flex()
             .flex_row()
-            .gap(px(6.))
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "preset-youtube-4k-devops",
+                        ui::ButtonVariant::Primary,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("YT 4K DevOps (16:9)")
+                    .icon("icons/terminal.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_youtube_4k_devops_preset(window, cx);
+                    })),
+                ),
+            )
             .child(
                 div().flex_1().child(
                     ui::Button::plain(
@@ -2740,7 +2756,7 @@ impl EditorWindow {
                         ui::ButtonVariant::Gray,
                         ui::ButtonSize::Xs,
                     )
-                    .label("Terminal Dev Reel (9:16)")
+                    .label("DevOps Reel (9:16)")
                     .icon("icons/terminal.svg")
                     .full_width()
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -2756,7 +2772,7 @@ impl EditorWindow {
                         ui::ButtonVariant::Gray,
                         ui::ButtonSize::Xs,
                     )
-                    .label("Web Demo Reel (9:16)")
+                    .label("Web Reel (9:16)")
                     .icon("icons/globe.svg")
                     .full_width()
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -2857,6 +2873,21 @@ impl EditorWindow {
                             .full_width()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.auto_sequence_images(3.0, window, cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "img-distribute-evenly",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Spread Across Video")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.distribute_images_across_timeline(window, cx);
                             })),
                         ),
                     ),
@@ -3680,6 +3711,136 @@ impl EditorWindow {
                 ),
             );
 
+        let brand_kit_and_ai_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-save-brand-kit",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Save Brand")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.save_as_default_brand_kit(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-apply-brand-kit",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Apply Brand")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_saved_brand_kit(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-viral-hook-ai",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Auto-Hook 🔥")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.generate_viral_hook_from_transcript(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-chapter-cards-splits",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Chapter Cards")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.insert_chapter_title_cards_at_splits(window, cx);
+                    })),
+                ),
+            );
+
+        let pro_polish_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-speed-silences-3x",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Silences 3x")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.speed_up_silences_3x(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-webcam-portrait-glow",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Portrait Cam")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_webcam_portrait_glow(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-safe-zone-guide",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Safe Guide")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_social_safe_zone_guides(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-seamless-loop",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Loop Reel ↺")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.make_seamless_reel_loop(window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3698,6 +3859,8 @@ impl EditorWindow {
             .child(focus_and_steps_row)
             .child(code_and_retention_row)
             .child(interactive_cards_row)
+            .child(brand_kit_and_ai_row)
+            .child(pro_polish_row)
             .child(color_looks_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))

@@ -1753,17 +1753,46 @@ impl EditorWindow {
                     .child(
                         ui::Button::plain(
                             &theme,
+                            "export-preset-youtube-4k-devops",
+                            ui::ButtonVariant::Primary,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export YouTube 4K DevOps/Coding (Max Screen · Compact Size)")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.project.aspect_ratio == Some(cap_project::AspectRatio::Vertical)
+                            {
+                                this.apply_youtube_4k_devops_preset(window, cx);
+                            }
+                            if let Some(ui) = this.export.as_mut() {
+                                ui.destination = ExportDestination::File;
+                                ui.format = ExportFormatKind::Mp4;
+                                ui.resolution = ExportResolution::P4k;
+                                ui.fps = 60;
+                                ui.compression = ExportCompression::Maximum;
+                                ui.custom_bpp = Some(0.08);
+                                ui.cursor_only = false;
+                                ui.persist();
+                            }
+                            this.refresh_export_preview(window, cx);
+                            this.start_export(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
                             "export-preset-reels-shorts",
                             ui::ButtonVariant::Gray,
                             ui::ButtonSize::Sm,
                         )
-                        .label("Export for Reels & Shorts (1080×1920 · 60fps)")
+                        .label("Export Insta / Shorts Coding Reel (1080×1920 · Compact Size)")
                         .full_width()
                         .disabled(ui.phase.is_busy())
                         .on_click(cx.listener(|this, _, window, cx| {
                             if this.project.aspect_ratio != Some(cap_project::AspectRatio::Vertical)
                             {
-                                this.apply_tech_reel_preset(false, window, cx);
+                                this.apply_tech_reel_preset(true, window, cx);
                             }
                             if let Some(ui) = this.export.as_mut() {
                                 ui.destination = ExportDestination::File;
@@ -1771,7 +1800,7 @@ impl EditorWindow {
                                 ui.resolution = ExportResolution::P1080;
                                 ui.fps = 60;
                                 ui.compression = ExportCompression::Maximum;
-                                ui.custom_bpp = Some(0.12);
+                                ui.custom_bpp = Some(0.09);
                                 ui.cursor_only = false;
                                 ui.persist();
                             }
@@ -1890,6 +1919,21 @@ impl EditorWindow {
                         .disabled(ui.phase.is_busy())
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.export_multi_platform_aspect_bundle(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-cheatsheet-md",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export CLI & Shortcut Cheat-Sheet (.MD) to Exports & Clipboard")
+                        .icon("icons/copy.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_keystroke_cheatsheet_md(window, cx);
                         })),
                     )
                     .child(self.export_cta(ui, cx)),

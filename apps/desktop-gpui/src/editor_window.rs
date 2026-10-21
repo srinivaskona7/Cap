@@ -6988,6 +6988,497 @@ impl EditorWindow {
         .detach();
     }
 
+    pub(crate) fn apply_youtube_4k_devops_preset(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use cap_project::{
+            AspectRatio, BackgroundSource, BorderConfiguration, CameraPosition, CameraShape,
+            CameraXPosition, CameraYPosition, CornerStyle, KeyboardData,
+        };
+
+        let clicks = load_recording_clicks(&self.project_path);
+        let meta = cap_project::RecordingMeta::load_for_project(&self.project_path).ok();
+
+        self.edit_project("preset-youtube-4k-devops", window, cx, move |project| {
+            project.aspect_ratio = Some(AspectRatio::Wide);
+            project.background.source = BackgroundSource::Gradient {
+                from: [10, 12, 18],
+                to: [20, 24, 36],
+                angle: 135,
+                noise_intensity: Some(8.0),
+                noise_scale: Some(1.0),
+                animated: Some(false),
+                animation_speed: None,
+            };
+            project.background.padding = 2.0;
+            project.background.rounding = 10.0;
+            project.background.rounding_type = CornerStyle::Squircle;
+            project.background.shadow = 52.0;
+            project.background.display_position = None;
+            project.background.frame = None;
+
+            project.camera.hide = false;
+            project.camera.shape = CameraShape::Square;
+            project.camera.rounding = 24.0;
+            project.camera.rounding_type = CornerStyle::Squircle;
+            project.camera.size = 20.0;
+            project.camera.shadow = 65.0;
+            project.camera.position = CameraPosition {
+                x: CameraXPosition::Right,
+                y: CameraYPosition::Bottom,
+            };
+            project.camera.manual_position = None;
+            project.camera.border = Some(BorderConfiguration {
+                enabled: true,
+                width: 2.5,
+                color: [99, 102, 241],
+                opacity: 90.0,
+            });
+
+            project.color_correction.screen.preset = "crisp-dev".to_string();
+            project.color_correction.screen.intensity = 1.0;
+            project.color_correction.screen.contrast = 0.22;
+            project.color_correction.screen.exposure = -0.02;
+            project.color_correction.screen.saturation = 0.14;
+
+            let mut kb_settings = crate::editor_tabs::keyboard_settings(project);
+            kb_settings.enabled = true;
+            kb_settings.show_modifiers = true;
+            let mut enable_kb = false;
+
+            if let Some(timeline) = project.timeline.as_mut() {
+                if !clicks.is_empty() && timeline.zoom_segments.is_empty() {
+                    let zooms =
+                        crate::editor_edits::generate_zoom_segments_for_timeline(&clicks, timeline, 1.40);
+                    if !zooms.is_empty() {
+                        timeline.zoom_segments = zooms;
+                    }
+                }
+                if timeline.keyboard_segments.is_empty()
+                    && let Some(meta) = meta.as_ref()
+                    && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
+                        meta,
+                        timeline,
+                        &kb_settings,
+                    )
+                    && !kb_segs.is_empty()
+                {
+                    timeline.keyboard_segments = kb_segs;
+                    enable_kb = true;
+                }
+            }
+            if enable_kb {
+                let kb = project.keyboard.get_or_insert_with(KeyboardData::default);
+                kb.settings = kb_settings;
+            }
+            true
+        });
+        if self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.keyboard_segments.is_empty())
+        {
+            self.tracks.keyboard = true;
+        }
+        self.show_notice(
+            "Applied YouTube 4K DevOps/Coding Preset (98% Max Screen + Crisp Text + Smart Zoom)!",
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn save_as_default_brand_kit(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let kit_path = crate::store::app_data_dir().join("sricap-brand-kit.json");
+        let mut kit_proj = self.project.clone();
+        kit_proj.timeline = None;
+        kit_proj.captions = None;
+        kit_proj.clips = Vec::new();
+        if let Ok(json) = serde_json::to_string_pretty(&kit_proj)
+            && std::fs::write(&kit_path, json).is_ok()
+        {
+            self.show_notice("Saved current style as Default Brand Kit!", window, cx);
+        }
+    }
+
+    pub(crate) fn apply_saved_brand_kit(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let kit_path = crate::store::app_data_dir().join("sricap-brand-kit.json");
+        let Ok(raw) = std::fs::read_to_string(&kit_path) else {
+            self.show_notice(
+                "No saved Brand Kit yet — click 'Save Brand' first.",
+                window,
+                cx,
+            );
+            return;
+        };
+        let Ok(kit) = serde_json::from_str::<ProjectConfiguration>(&raw) else {
+            return;
+        };
+        self.edit_project("apply-saved-brand-kit", window, cx, move |project| {
+            project.aspect_ratio = kit.aspect_ratio;
+            project.background = kit.background.clone();
+            project.camera = kit.camera.clone();
+            project.cursor = kit.cursor.clone();
+            project.color_correction = kit.color_correction.clone();
+            true
+        });
+        self.show_notice("Applied Saved Brand Kit!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn generate_viral_hook_from_transcript(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(3.0);
+        let end = total.min(4.5);
+        let hook_text = self
+            .project
+            .captions
+            .as_ref()
+            .and_then(|c| c.segments.first())
+            .map(|s| {
+                let words: Vec<&str> = s.text.split_whitespace().take(6).collect();
+                format!("🔥 {}", words.join(" ").to_uppercase())
+            })
+            .filter(|s| s.len() > 5)
+            .unwrap_or_else(|| {
+                let fallback = self
+                    .summary()
+                    .map(|s| s.pretty_name.to_uppercase())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "WATCH HOW THIS WORKS".to_string());
+                format!("🔥 {fallback}")
+            });
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("generate-viral-hook", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut banner = crate::editor_edits::default_text_segment(0.0, end, 0);
+                banner.content = hook_text.clone();
+                banner.center = cap_project::XY::new(0.5, 0.08);
+                banner.size = cap_project::XY::new(0.86, 0.08);
+                banner.font_size = 50.0;
+                banner.font_weight = 800.0;
+                banner.color = "#FFE600".to_string();
+                banner.background_color = Some("#1E1B4B".to_string());
+                banner.stroke_width = 2.0;
+                banner.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, banner);
+            }
+            true
+        });
+        self.show_notice("Generated Viral Hook Banner from transcript!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn insert_chapter_title_cards_at_splits(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("insert-chapter-cards-at-splits", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut starts = Vec::new();
+            let mut cursor = 0.0_f64;
+            for (i, seg) in tl.segments.iter().enumerate() {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.1);
+                starts.push((i + 1, cursor, (cursor + 1.8).min(total)));
+                cursor += dur;
+            }
+            for (part_num, s, e) in starts {
+                let mut card = crate::editor_edits::default_text_segment(s, e, 0);
+                card.content = format!("PART {part_num} · CHAPTER {part_num}");
+                card.center = cap_project::XY::new(0.5, 0.14);
+                card.size = cap_project::XY::new(0.62, 0.08);
+                card.font_size = 44.0;
+                card.font_weight = 800.0;
+                card.color = "#FFFFFF".to_string();
+                card.background_color = Some("#4F46E5".to_string());
+                card.stroke_width = 2.0;
+                card.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, card);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn speed_up_silences_3x(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        let silences =
+            crate::transcription::plan_silence_cuts(&self.project, &recording_durations, 0.9);
+        if silences.is_empty() {
+            self.show_notice("No long silences (>0.9s) found to speed up.", window, cx);
+            return;
+        }
+        self.edit_project("speed-up-silences-3x", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            for &(s, e) in silences.iter().rev() {
+                if e - s < 0.6 {
+                    continue;
+                }
+                let _ = crate::editor_edits::split_clip_segment(tl, s, None);
+                let _ = crate::editor_edits::split_clip_segment(tl, e, None);
+                let mut acc = 0.0_f64;
+                for seg in &mut tl.segments {
+                    let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.01);
+                    if (acc - s).abs() < 0.25 {
+                        seg.timescale = 3.0;
+                        break;
+                    }
+                    acc += dur;
+                }
+            }
+            true
+        });
+        self.show_notice("Sped up silent pauses to 3x time-lapse!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn add_sfx_cue_at_playhead(
+        &mut self,
+        is_whoosh: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let start_playhead = self.playhead.max(0.0);
+        let audio_dir = self.project_path.join("assets").join("audio");
+        if std::fs::create_dir_all(&audio_dir).is_err() {
+            return;
+        }
+        let file_name = if is_whoosh {
+            "sfx-whoosh.wav"
+        } else {
+            "sfx-ding.wav"
+        };
+        let wav_path = audio_dir.join(file_name);
+        let relative_path = format!("assets/audio/{file_name}");
+        let sample_rate = 48_000_u32;
+        let dur = if is_whoosh { 0.38_f64 } else { 0.55_f64 };
+        let count = (dur * f64::from(sample_rate)) as usize;
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+            for i in 0..count {
+                let t = i as f32 / sample_rate as f32;
+                let s = if is_whoosh {
+                    let env = (std::f32::consts::PI * (t / dur as f32)).sin();
+                    let freq = 180.0 + 920.0 * (t / dur as f32);
+                    (2.0 * std::f32::consts::PI * freq * t).sin() * env * 0.32
+                } else {
+                    let env = (-t * 7.5).exp();
+                    ((2.0 * std::f32::consts::PI * 1046.5 * t).sin() * 0.28
+                        + (2.0 * std::f32::consts::PI * 1567.98 * t).sin() * 0.18)
+                        * env
+                };
+                let _ = writer.write_sample(s.clamp(-0.9, 0.9));
+            }
+            let _ = writer.finalize();
+            self.playhead = start_playhead;
+            self.commit_audio_import(
+                0,
+                ImportedAudio {
+                    path: relative_path,
+                    name: if is_whoosh {
+                        "SFX Whoosh".to_string()
+                    } else {
+                        "SFX Ding".to_string()
+                    },
+                    duration: dur,
+                },
+                window,
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn distribute_images_across_timeline(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        self.edit_project("distribute-images-evenly", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let len = tl.image_segments.len();
+            if len == 0 {
+                return false;
+            }
+            let slot = (total / len as f64).max(1.0);
+            for (i, img) in tl.image_segments.iter_mut().enumerate() {
+                let s = (i as f64 * slot).min((total - 0.5).max(0.0));
+                let e = (s + slot.min(3.5)).min(total);
+                img.start = s;
+                img.end = e.max(s + 0.5);
+                img.track = (i as u32) % 2;
+            }
+            true
+        });
+        self.show_notice("Distributed all images evenly across timeline!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn apply_webcam_portrait_glow(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("webcam-portrait-glow", window, cx, |project| {
+            project.camera.hide = false;
+            project.camera.shadow = 82.0;
+            project.camera.border = Some(cap_project::BorderConfiguration {
+                enabled: true,
+                width: 4.0,
+                color: [99, 102, 241],
+                opacity: 95.0,
+            });
+            project.color_correction.camera.preset = "custom".to_string();
+            project.color_correction.camera.intensity = 1.0;
+            project.color_correction.camera.contrast = 0.14;
+            project.color_correction.camera.temperature = 0.16;
+            project.color_correction.camera.saturation = 0.10;
+            project.color_correction.camera.vignette = 0.18;
+            true
+        });
+        self.show_notice("Applied DSLR Webcam Portrait Glow!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_social_safe_zone_guides(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("toggle-safe-zone-guides", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let before = tl.text_segments.len();
+            tl.text_segments
+                .retain(|t| !t.content.contains("SAFE ZONE GUIDE"));
+            if tl.text_segments.len() == before {
+                let mut guide = crate::editor_edits::default_text_segment(0.0, total, 0);
+                guide.content = "── 9:16 REELS/SHORTS SAFE ZONE GUIDE ──".to_string();
+                guide.center = cap_project::XY::new(0.5, 0.87);
+                guide.size = cap_project::XY::new(0.92, 0.04);
+                guide.font_size = 24.0;
+                guide.font_weight = 700.0;
+                guide.color = "#38BDF8".to_string();
+                guide.opacity = 0.65;
+                crate::editor_edits::insert_text_segment(tl, guide);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn make_seamless_reel_loop(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(2.0);
+        let start = (total - 1.5).max(0.0);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("make-seamless-reel-loop", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                for idx in 0..tl.segments.len().saturating_sub(1) {
+                    tl.transitions.push(cap_project::ClipTransition {
+                        segment_index: idx as u32,
+                        kind: cap_project::ClipTransitionType::CrossFade,
+                        duration: 0.35,
+                    });
+                }
+                let mut bridge = crate::editor_edits::default_text_segment(start, total, 0);
+                bridge.content = "↺ REWATCH FROM STEP 1".to_string();
+                bridge.center = cap_project::XY::new(0.5, 0.12);
+                bridge.size = cap_project::XY::new(0.68, 0.07);
+                bridge.font_size = 38.0;
+                bridge.font_weight = 800.0;
+                bridge.color = "#FFFFFF".to_string();
+                bridge.background_color = Some("#4F46E5".to_string());
+                crate::editor_edits::insert_text_segment(tl, bridge);
+            }
+            true
+        });
+        self.show_notice("Configured Seamless Reel Loop bridge & transitions!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn export_keystroke_cheatsheet_md(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "sricap-rec".to_string());
+        let safe_title: String = title
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let mut md = format!(
+            "# {title} — CLI Commands, Shortcuts & Key Steps Cheat-Sheet\n\n| Timestamp | Type | Command / Shortcut / Step |\n| :--- | :--- | :--- |\n"
+        );
+        if let Some(tl) = self.project.timeline.as_ref() {
+            for kb in &tl.keyboard_segments {
+                md.push_str(&format!(
+                    "| `{:.1}s` | Shortcut | `{}` |\n",
+                    kb.start, kb.display_text
+                ));
+            }
+            for txt in &tl.text_segments {
+                md.push_str(&format!(
+                    "| `{:.1}s` | Callout | **{}** |\n",
+                    txt.start,
+                    txt.content.replace('\n', " ")
+                ));
+            }
+        }
+        let out_path = exports_dir.join(format!("{safe_title}-cheatsheet.md"));
+        if std::fs::write(&out_path, &md).is_ok() {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(md));
+            self.show_notice(
+                "Exported CLI & Shortcut Cheat-Sheet (.md) to Exports/ & Clipboard!",
+                window,
+                cx,
+            );
+        }
+    }
+
     pub(crate) fn save_project_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Err(err) = self.project.write(&self.project_path) {
             self.show_notice(format!("Failed to save project: {err}"), window, cx);
