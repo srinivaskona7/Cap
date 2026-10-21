@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release-macos:
     name: Build & Release sricap-rec (macOS Apple Silicon)
@@ -23,6 +27,8 @@ jobs:
     env:
       RUST_TARGET_TRIPLE: aarch64-apple-darwin
       MACOSX_DEPLOYMENT_TARGET: "12.3"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_BUILD_JOBS: "4"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,6 +54,7 @@ jobs:
       - name: Cache Rust workspaces
         uses: Swatinem/rust-cache@v2
         with:
+          shared-key: "sricap-rec-cache"
           workspaces: |
             . -> target
             apps/desktop-gpui -> apps/desktop-gpui/target
