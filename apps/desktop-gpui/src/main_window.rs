@@ -3467,10 +3467,11 @@ impl MainWindow {
                 "help" => "Help & Tour",
                 "settings" => "Settings",
                 "screenshots" => "Screenshots",
+                "import-video-studio" => "Import Video (.mp4)",
                 "recordings" => "Recordings",
                 "teleprompter" => "Teleprompter",
                 "changelog" => "Changelog",
-                _ => unreachable!(),
+                other => other,
             };
             div()
                 .id(id)
