@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (e.g. v0.6.1)"
+        description: "Release tag to publish (e.g. v0.6.2)"
         required: false
-        default: "v0.6.1"
+        default: "v0.6.2"
 
 permissions:
   contents: write
@@ -105,7 +105,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.1' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.2' }}
           draft: false
           prerelease: false
           generate_release_notes: true
