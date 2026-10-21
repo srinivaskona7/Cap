@@ -3565,6 +3565,121 @@ impl EditorWindow {
                 ),
             );
 
+        let interactive_cards_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-quiz-card",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Quiz Card")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_quiz_challenge_card(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-shortcut-pill",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Key ⌘K")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_custom_shortcut_pill(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-before-after",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Before/After")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_before_after_comparison_cards(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-arrow-pointer",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Arrow ➔")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_arrow_pointer_callout(window, cx);
+                    })),
+                ),
+            );
+
+        let condense_and_pacing_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-condense-60s-reel",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("60s Reel Cut")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.auto_condense_to_60s_reel(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-jumpcut-zooms",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Jump-Cut Zoom")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_alternating_jumpcut_zooms(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-creator-pace-115x",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Pace 1.15x All")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_creator_pacing_all_clips(1.15, window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3575,12 +3690,14 @@ impl EditorWindow {
             .child(clips_row)
             .child(trim_and_dup_row)
             .child(speed_row)
+            .child(condense_and_pacing_row)
             .child(transitions_row)
             .child(scene_and_3d_row)
             .child(dual_scene_and_actions_row)
             .child(studio_overlays_row)
             .child(focus_and_steps_row)
             .child(code_and_retention_row)
+            .child(interactive_cards_row)
             .child(color_looks_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))

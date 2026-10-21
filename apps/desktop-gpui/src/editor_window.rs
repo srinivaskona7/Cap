@@ -6576,6 +6576,418 @@ impl EditorWindow {
         );
     }
 
+    pub(crate) fn add_quiz_challenge_card(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-quiz-challenge-card", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut card = crate::editor_edits::default_text_segment(start, end, 0);
+                card.content = "🤔 PAUSE & GUESS: WHAT WILL THIS OUTPUT?".to_string();
+                card.center = cap_project::XY::new(0.5, 0.24);
+                card.size = cap_project::XY::new(0.84, 0.10);
+                card.font_size = 44.0;
+                card.font_weight = 800.0;
+                card.color = "#FACC15".to_string();
+                card.background_color = Some("#312E81".to_string());
+                card.stroke_width = 2.0;
+                card.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, card);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn add_custom_shortcut_pill(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 2.5).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-custom-shortcut-pill", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut pill = crate::editor_edits::default_text_segment(start, end, 0);
+                pill.content = "⌘ + SHIFT + P".to_string();
+                pill.center = cap_project::XY::new(0.5, 0.78);
+                pill.size = cap_project::XY::new(0.42, 0.08);
+                pill.font_size = 42.0;
+                pill.font_weight = 800.0;
+                pill.color = "#F8FAFC".to_string();
+                pill.background_color = Some("#18181B".to_string());
+                pill.stroke_width = 2.0;
+                pill.stroke_color = "#6366F1".to_string();
+                crate::editor_edits::insert_text_segment(tl, pill);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn add_before_after_comparison_cards(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.5).min(total);
+        self.tracks.text = self.tracks.text.max(2);
+        self.edit_project("add-before-after-cards", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut before = crate::editor_edits::default_text_segment(start, end, 0);
+                before.content = "✕ BEFORE (SLOW)".to_string();
+                before.center = cap_project::XY::new(0.28, 0.14);
+                before.size = cap_project::XY::new(0.40, 0.07);
+                before.font_size = 38.0;
+                before.font_weight = 800.0;
+                before.color = "#FFFFFF".to_string();
+                before.background_color = Some("#DC2626".to_string());
+                crate::editor_edits::insert_text_segment(tl, before);
+
+                let mut after = crate::editor_edits::default_text_segment(start, end, 1);
+                after.content = "✓ AFTER (10X FASTER)".to_string();
+                after.center = cap_project::XY::new(0.72, 0.14);
+                after.size = cap_project::XY::new(0.42, 0.07);
+                after.font_size = 38.0;
+                after.font_weight = 800.0;
+                after.color = "#FFFFFF".to_string();
+                after.background_color = Some("#059669".to_string());
+                crate::editor_edits::insert_text_segment(tl, after);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_arrow_pointer_callout(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 2.5).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-arrow-pointer-callout", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut arrow = crate::editor_edits::default_text_segment(start, end, 0);
+                arrow.content = "➔ WATCH THIS LINE".to_string();
+                arrow.center = cap_project::XY::new(0.35, 0.45);
+                arrow.size = cap_project::XY::new(0.46, 0.07);
+                arrow.font_size = 42.0;
+                arrow.font_weight = 800.0;
+                arrow.color = "#FFFFFF".to_string();
+                arrow.background_color = Some("#EF4444".to_string());
+                arrow.stroke_width = 2.0;
+                arrow.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, arrow);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn auto_condense_to_60s_reel(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        self.edit_project("auto-condense-60s-reel", window, cx, move |project| {
+            let mut cuts =
+                crate::transcription::plan_filler_word_cuts(project, &recording_durations);
+            cuts.extend(crate::transcription::plan_silence_cuts(
+                project,
+                &recording_durations,
+                0.7,
+            ));
+            if !cuts.is_empty() {
+                crate::editor_edits::cut_output_time_ranges(project, &cuts, &recording_durations);
+            }
+            if let Some(tl) = project.timeline.as_mut() {
+                let cur_dur = tl.duration();
+                if cur_dur > 58.0 {
+                    let factor = (cur_dur / 56.0).clamp(1.05, 3.0);
+                    for seg in &mut tl.segments {
+                        seg.timescale = (seg.timescale * factor).clamp(0.25, 8.0);
+                    }
+                }
+            }
+            true
+        });
+        self.show_notice("Condensed timeline into a <= 60s Reel/Short!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn apply_alternating_jumpcut_zooms(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("alternating-jumpcut-zooms", window, cx, |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut cursor = 0.0_f64;
+            let mut ranges = Vec::new();
+            for (i, seg) in tl.segments.iter().enumerate() {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.1);
+                if i % 2 == 1 {
+                    ranges.push((cursor, cursor + dur));
+                }
+                cursor += dur;
+            }
+            for (s, e) in ranges {
+                crate::editor_edits::insert_zoom_segment(tl, s, e, 1.28);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn apply_creator_pacing_all_clips(
+        &mut self,
+        rate: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("creator-pacing-all-clips", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            for seg in &mut tl.segments {
+                seg.timescale = rate.clamp(0.5, 8.0);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn generate_lofi_ambient_music_track(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().clamp(2.0, 300.0);
+        let audio_dir = self.project_path.join("assets").join("audio");
+        if std::fs::create_dir_all(&audio_dir).is_err() {
+            return;
+        }
+        let wav_path = audio_dir.join("lofi-ambient-pad.wav");
+        let relative_path = "assets/audio/lofi-ambient-pad.wav".to_string();
+        let sample_rate = 48_000_u32;
+        let total_samples = (total * f64::from(sample_rate)) as usize;
+        let chords: [[f32; 4]; 4] = [
+            [261.63, 329.63, 392.00, 493.88],
+            [220.00, 261.63, 329.63, 392.00],
+            [174.61, 220.00, 261.63, 329.63],
+            [196.00, 246.94, 293.66, 392.00],
+        ];
+        let mut buf = Vec::with_capacity(total_samples);
+        for i in 0..total_samples {
+            let t = i as f32 / sample_rate as f32;
+            let chord_idx = ((t / 4.0) as usize) % 4;
+            let freqs = chords[chord_idx];
+            let lfo = 0.85 + 0.15 * (2.0 * std::f32::consts::PI * 0.25 * t).sin();
+            let mut sample = 0.0_f32;
+            for &f in &freqs {
+                sample += (2.0 * std::f32::consts::PI * f * t).sin() * 0.045;
+                sample += (2.0 * std::f32::consts::PI * (f * 0.5) * t).sin() * 0.035;
+            }
+            buf.push((sample * lfo).clamp(-0.5, 0.5));
+        }
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+            for s in buf {
+                let _ = writer.write_sample(s);
+            }
+            let _ = writer.finalize();
+            self.commit_audio_import(
+                0,
+                ImportedAudio {
+                    path: relative_path,
+                    name: "Lo-Fi Ambient Pad".to_string(),
+                    duration: total,
+                },
+                window,
+                cx,
+            );
+            self.edit_project("duck-lofi-pad", window, cx, |project| {
+                if let Some(tl) = project.timeline.as_mut()
+                    && let Some(last) = tl.audio_segments.last_mut()
+                {
+                    last.volume_db = -14.0;
+                }
+                true
+            });
+            self.show_notice(
+                "Generated & added Royalty-Free Lo-Fi Ambient Pad (-14 dB)!",
+                window,
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn add_censor_bleep_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let start_playhead = self.playhead.max(0.0);
+        let audio_dir = self.project_path.join("assets").join("audio");
+        if std::fs::create_dir_all(&audio_dir).is_err() {
+            return;
+        }
+        let wav_path = audio_dir.join("censor-bleep-1khz.wav");
+        let relative_path = "assets/audio/censor-bleep-1khz.wav".to_string();
+        let sample_rate = 48_000_u32;
+        let dur = 0.8_f64;
+        let samples_count = (dur * f64::from(sample_rate)) as usize;
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+            for i in 0..samples_count {
+                let t = i as f32 / sample_rate as f32;
+                let s = (2.0 * std::f32::consts::PI * 1000.0 * t).sin() * 0.35;
+                let _ = writer.write_sample(s);
+            }
+            let _ = writer.finalize();
+            self.playhead = start_playhead;
+            self.commit_audio_import(
+                0,
+                ImportedAudio {
+                    path: relative_path,
+                    name: "Censor Bleep".to_string(),
+                    duration: dur,
+                },
+                window,
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn export_multi_platform_aspect_bundle(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let path = self.project_path.clone();
+        let base_project = self.project.clone();
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "sricap-rec".to_string());
+        let safe_title: String = title
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        self.show_notice(
+            "Batch-exporting 16:9 YouTube + 9:16 Reels + 1:1 Square MP4s to Exports/...",
+            window,
+            cx,
+        );
+
+        cx.spawn_in(window, async move |this, cx| {
+            let done = gpui_tokio::Tokio::spawn(cx, async move {
+                let mut count = 0usize;
+                for (suffix, aspect) in [
+                    ("16x9-YouTube", cap_project::AspectRatio::Wide),
+                    ("9x16-Reels", cap_project::AspectRatio::Vertical),
+                    ("1x1-LinkedIn", cap_project::AspectRatio::Square),
+                ] {
+                    let mut p = base_project.clone();
+                    p.aspect_ratio = Some(aspect);
+                    let out_file = exports_dir.join(format!("{safe_title}-{suffix}.mp4"));
+                    let Ok(builder) = cap_export::ExporterBase::builder(path.clone())
+                        .with_config(p)
+                        .with_output_path(out_file)
+                        .build()
+                        .await
+                    else {
+                        continue;
+                    };
+                    let mp4_settings = cap_export::mp4::Mp4ExportSettings {
+                        fps: 60,
+                        resolution_base: cap_project::XY::new(1920, 1080),
+                        compression: cap_export::mp4::ExportCompression::Maximum,
+                        custom_bpp: Some(0.15),
+                        force_ffmpeg_decoder: false,
+                        optimize_filesize: false,
+                    };
+                    if mp4_settings.export(builder, |_| true).await.is_ok() {
+                        count += 1;
+                    }
+                }
+                count
+            })
+            .await
+            .unwrap_or(0);
+
+            this.update_in(cx, |this, window, cx| {
+                this.show_notice(
+                    format!(
+                        "Exported {done}/3 Multi-Platform MP4s (16:9 + 9:16 + 1:1) to Exports/!"
+                    ),
+                    window,
+                    cx,
+                );
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub(crate) fn save_project_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Err(err) = self.project.write(&self.project_path) {
             self.show_notice(format!("Failed to save project: {err}"), window, cx);

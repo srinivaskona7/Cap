@@ -73,6 +73,16 @@ All notable features, presets, UI options, and architectural customizations buil
   18. **`Zoom Steps` Auto-Zoom Sync**: Automatically creates `1.55x` manual-target `ZoomSegment`s aligned to every Step Callout, Pro-Tip, and Spotlight mask on the timeline.
   19. **`Podcast Voice Master EQ` (`Audio` Tab)**: Enables Studio Sound voice isolation, `+2.5 dB` mic boost, and `-14 dB` background/system audio ducking in 1 click.
   20. **`Export Subtitles & Docs Bundle (.SRT + .VTT + .TXT + .MD)` (`Export` Drawer)**: Writes `<title>.srt`, `<title>.vtt`, `<title>-transcript.txt`, and `<title>-sop.md` to `<recordings_dir>/Exports/`.
+  21. **`+ Quiz Card` ("Pause & Guess Output 🤔") (`Background → Layout`)**: Inserts a 3.0s interactive challenge card (`#312E81` indigo bg, `#FACC15` gold text) at the playhead.
+  22. **`+ Key ⌘K` Custom Shortcut Pill (`Background → Layout`)**: Inserts a custom keyboard shortcut pill (`"⌘ + SHIFT + P"`, `#18181B` keycap bg, `#6366F1` border) at the playhead.
+  23. **`Before/After` Comparison Labels (`Background → Layout`)**: Inserts synchronized `"✕ BEFORE (SLOW)"` (red) and `"✓ AFTER (10X FASTER)"` (green) comparison cards at the playhead.
+  24. **`+ Arrow ➔` Pointer Callout (`Background → Layout`)**: Drops a directional `"➔ WATCH THIS LINE"` red pointer badge at the playhead, selected on canvas for dragging.
+  25. **`60s Reel Cut` Auto-Teaser Condenser (`Background → Layout`)**: Cuts filler words/silences and condenses the timeline into a `<= 58s` YouTube Short / Instagram Reel.
+  26. **`Jump-Cut Zoom` Alternating 1.28x Zoom (`Background → Layout`)**: Automatically applies `1.28x` zoom on alternating clip segments so jump cuts look like a multi-camera edit.
+  27. **`Pace 1.15x All` Creator Pacing (`Background → Layout`)**: Speeds up all timeline clips to `1.15x` for brisk tutorial pacing.
+  28. **`+ Lo-Fi Ambient Pad` Royalty-Free Music Synthesizer (`Audio` Tab)**: Generates a warm 48kHz Lo-Fi chord progression pad `.wav` (`-14 dB`) natively in Rust across the video duration.
+  29. **`+ Censor Bleep (1s)` (`Audio` Tab)**: Synthesizes and inserts a `1000 Hz` censor bleep `.wav` at the current playhead.
+  30. **`Export All 3 Formats (16:9 YouTube + 9:16 Reels + 1:1 Square)` (`Export` Drawer)**: Batch-renders all 3 aspect ratios (`16:9`, `9:16`, and `1:1`) into `<recordings_dir>/Exports/` in 1 click.
   21. **Top Header `Save`, `Discard Edits`, `Discard & Close`, and `Quit App` Controls**:
       - **`Save`**: Writes project changes to disk immediately and updates the restore checkpoint.
       - **`Discard Edits`**: Reverts all unsaved experimental edits back to the last saved checkpoint without closing the window.

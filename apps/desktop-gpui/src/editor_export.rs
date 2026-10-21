@@ -1877,6 +1877,21 @@ impl EditorWindow {
                             this.export_subtitle_and_docs_bundle(window, cx);
                         })),
                     )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-multi-platform-pack",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export All 3 Formats (16:9 YouTube + 9:16 Reels + 1:1 Square)")
+                        .icon("icons/layers.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_multi_platform_aspect_bundle(window, cx);
+                        })),
+                    )
                     .child(self.export_cta(ui, cx)),
             )
     }

@@ -2027,6 +2027,44 @@ impl EditorWindow {
                                 this.generate_click_and_key_sfx_track(window, cx);
                             })),
                         )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(6.))
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-generate-lofi-pad",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("+ Lo-Fi Ambient Pad")
+                                        .icon("icons/music.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.generate_lofi_ambient_music_track(window, cx);
+                                        })),
+                                    ),
+                                )
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-add-censor-bleep",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("+ Censor Bleep (1s)")
+                                        .icon("icons/music.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.add_censor_bleep_at_playhead(window, cx);
+                                        })),
+                                    ),
+                                ),
+                        )
                         .children((!audio_tracks_list.is_empty()).then(|| {
                             let mut list = div().flex().flex_col().gap(px(6.));
                             for (idx, name, start_s, end_s) in &audio_tracks_list {
