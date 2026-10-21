@@ -300,12 +300,30 @@ pub static CAPTION_PRESETS: &[CaptionPreset] = &[
         background_opacity: 0,
         outline: true,
         outline_color: "#000000",
-        highlight_color: "#FACC15",
+        highlight_color: "#FFE600",
         active_word_highlight: true,
         highlight_style: "color",
         animation: "pop",
         uppercase: true,
-        fade_duration: 0.18,
+        fade_duration: 0.16,
+    },
+    CaptionPreset {
+        id: "dev-neon",
+        label: "Dev Green",
+        description: "High-contrast terminal green word highlight for tech Reels.",
+        font_weight: 700,
+        size: 56,
+        color: "#FFFFFF",
+        background_color: "#000000",
+        background_opacity: 0,
+        outline: true,
+        outline_color: "#000000",
+        highlight_color: "#00FF66",
+        active_word_highlight: true,
+        highlight_style: "color",
+        animation: "pop",
+        uppercase: true,
+        fade_duration: 0.15,
     },
     CaptionPreset {
         id: "minimal",
@@ -351,6 +369,8 @@ pub enum CameraSlider {
     ShadowSize,
     ShadowOpacity,
     ShadowBlur,
+    BorderWidth,
+    BorderOpacity,
 }
 
 impl CameraSlider {
@@ -360,6 +380,7 @@ impl CameraSlider {
             Self::Size => (20., 80., 0.1),
             // `minValue={10} maxValue={60}` (`:3213-3215`).
             Self::ZoomSize => (10., 60., 0.1),
+            Self::BorderWidth => (1., 24., 0.5),
             _ => (0., 100., 0.1),
         }
     }
@@ -367,6 +388,7 @@ impl CameraSlider {
     pub fn read(self, project: &ProjectConfiguration) -> f32 {
         let camera = &project.camera;
         let shadow = camera.advanced_shadow.as_ref();
+        let border = camera.border.as_ref();
         match self {
             Self::Size => camera.size,
             // `project.camera.zoomSize ?? 60`
@@ -376,6 +398,8 @@ impl CameraSlider {
             Self::ShadowSize => shadow.map_or(UI_SHADOW_FALLBACK.size, |s| s.size),
             Self::ShadowOpacity => shadow.map_or(UI_SHADOW_FALLBACK.opacity, |s| s.opacity),
             Self::ShadowBlur => shadow.map_or(UI_SHADOW_FALLBACK.blur, |s| s.blur),
+            Self::BorderWidth => border.map_or(4., |b| b.width),
+            Self::BorderOpacity => border.map_or(80., |b| b.opacity),
         }
     }
 }
@@ -1020,6 +1044,23 @@ impl EditorWindow {
                     }
                     camera.advanced_shadow = Some(shadow);
                 }
+                CameraSlider::BorderWidth | CameraSlider::BorderOpacity => {
+                    let mut border =
+                        camera
+                            .border
+                            .clone()
+                            .unwrap_or(cap_project::BorderConfiguration {
+                                enabled: true,
+                                width: 4.,
+                                color: [255, 255, 255],
+                                opacity: 80.,
+                            });
+                    match slider {
+                        CameraSlider::BorderWidth => border.width = value,
+                        _ => border.opacity = value,
+                    }
+                    camera.border = Some(border);
+                }
             }
             true
         });
@@ -1275,11 +1316,13 @@ impl EditorWindow {
                                 shape_label,
                                 cx,
                             )),
-                        )),
+                        ))
+                        .child(self.render_camera_shape_presets(cx)),
                 ),
             )
             // `<div class="w-full border-t border-dashed border-gray-5" />`
             .child(dashed_divider(Hsla::from(theme.editor.line)))
+            .child(self.render_camera_size_presets(cx))
             .child(self.slider_field("Size", SliderKey::Camera(CameraSlider::Size), "%", cx))
             .child(self.slider_field(
                 "Size During Zoom",
@@ -1334,6 +1377,8 @@ impl EditorWindow {
                     ))
                     .child(self.render_camera_shadow_settings(cx)),
             )
+            .child(self.render_camera_border_settings(cx))
+            .child(self.render_camera_3d_tilt_presets(cx))
             // `<ColorCorrectionSection target="camera" />` (`:3324`).
             .children(
                 self.sidebar
@@ -1385,6 +1430,204 @@ impl EditorWindow {
                     .child(self.menu_select(kind, id, label, cx)),
             )
             .into_any_element()
+    }
+
+    fn render_camera_shape_presets(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let presets: [(&'static str, &'static str, CameraShape, f32, CornerStyle); 3] = [
+            (
+                "cam-shape-circle",
+                "Circular",
+                CameraShape::Square,
+                100.0,
+                CornerStyle::Rounded,
+            ),
+            (
+                "cam-shape-rect",
+                "Rounded Rect",
+                CameraShape::Source,
+                35.0,
+                CornerStyle::Squircle,
+            ),
+            (
+                "cam-shape-square",
+                "Square",
+                CameraShape::Square,
+                22.0,
+                CornerStyle::Squircle,
+            ),
+        ];
+
+        let mut row = div().flex().flex_row().gap(px(6.));
+        for (id, label, shape, rounding, corner_style) in presets {
+            row = row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(label)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.edit_project("camera-shape-preset", window, cx, move |p| {
+                                p.camera.shape = shape;
+                                p.camera.rounding = rounding;
+                                p.camera.rounding_type = corner_style;
+                                true
+                            });
+                        })),
+                ),
+            );
+        }
+        row.into_any_element()
+    }
+
+    fn render_camera_size_presets(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let sizes: [(&'static str, &'static str, f32); 4] = [
+            ("cam-size-sm", "Small", 22.0),
+            ("cam-size-md", "Medium", 34.0),
+            ("cam-size-lg", "Large", 48.0),
+            ("cam-size-xl", "Full", 76.0),
+        ];
+        let mut row = div().flex().flex_row().gap(px(6.));
+        for (id, label, size_pct) in sizes {
+            row = row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(label)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.edit_project("camera-size-preset", window, cx, move |p| {
+                                p.camera.size = size_pct;
+                                true
+                            });
+                        })),
+                ),
+            );
+        }
+        row.into_any_element()
+    }
+
+    fn render_camera_border_settings(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let enabled = self
+            .project
+            .camera
+            .border
+            .as_ref()
+            .is_some_and(|b| b.enabled);
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(
+                ui::Subfield::plain(&theme, "Camera Border").child(
+                    ui::Toggle::plain(&theme, "camera-border-toggle", enabled).on_click(
+                        cx.listener(|this, _, window, cx| {
+                            let next = !this
+                                .style_control_project()
+                                .camera
+                                .border
+                                .as_ref()
+                                .is_some_and(|b| b.enabled);
+                            this.edit_project("camera-border-toggle", window, cx, move |p| {
+                                let mut border = p.camera.border.clone().unwrap_or(
+                                    cap_project::BorderConfiguration {
+                                        enabled: next,
+                                        width: 4.0,
+                                        color: [255, 255, 255],
+                                        opacity: 80.0,
+                                    },
+                                );
+                                border.enabled = next;
+                                p.camera.border = Some(border);
+                                true
+                            });
+                        }),
+                    ),
+                ),
+            )
+            .children(enabled.then(|| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(self.slider_field(
+                        "Border Width",
+                        SliderKey::Camera(CameraSlider::BorderWidth),
+                        "px",
+                        cx,
+                    ))
+                    .child(self.slider_field(
+                        "Border Opacity",
+                        SliderKey::Camera(CameraSlider::BorderOpacity),
+                        "%",
+                        cx,
+                    ))
+            }))
+            .into_any_element()
+    }
+
+    fn render_camera_3d_tilt_presets(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let tilts: [(&'static str, &'static str, f64, f64); 4] = [
+            ("cam-tilt-flat", "Flat", 0.0, 0.0),
+            ("cam-tilt-left", "Tilt Left", 4.0, -14.0),
+            ("cam-tilt-right", "Tilt Right", 4.0, 14.0),
+            ("cam-tilt-iso", "Isometric", 12.0, -18.0),
+        ];
+
+        let mut row = div().flex().flex_row().gap(px(6.));
+        for (id, label, rot_x, rot_y) in tilts {
+            row = row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(label)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.apply_camera_3d_tilt_preset(rot_x, rot_y, window, cx);
+                        })),
+                ),
+            );
+        }
+
+        ui::Field::section(&theme, "3D Perspective Tilt")
+            .child(row)
+            .into_any_element()
+    }
+
+    fn apply_camera_3d_tilt_preset(
+        &mut self,
+        rotate_x: f64,
+        rotate_y: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("camera-3d-tilt-preset", window, cx, move |project| {
+            let Some(timeline) = project.timeline.as_mut() else {
+                return false;
+            };
+            if rotate_x.abs() < f64::EPSILON && rotate_y.abs() < f64::EPSILON {
+                timeline.camera3d_segments.clear();
+                return true;
+            }
+            let total = timeline.duration().max(1.0);
+            if let Some(first) = timeline.camera3d_segments.first_mut() {
+                first.properties.rotate_x = rotate_x;
+                first.properties.rotate_y = rotate_y;
+            } else {
+                let mut seg = crate::editor_edits::default_camera3d_segment(0.0, total);
+                seg.properties.rotate_x = rotate_x;
+                seg.properties.rotate_y = rotate_y;
+                crate::editor_edits::insert_camera3d_segment(timeline, seg);
+            }
+            true
+        });
+        self.tracks.three_d = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.camera3d_segments.is_empty());
+        cx.notify();
     }
 
     /// The six-dot position grid (`:2996-3053`): a `h-30` card with a dot
@@ -1545,6 +1788,14 @@ impl EditorWindow {
             .find(|(mode, _)| *mode == audio.mic_stereo_mode)
             .map_or("Stereo", |(_, label)| *label);
 
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        let silence_cuts =
+            transcription::plan_silence_cuts(&self.project, &recording_durations, 1.0);
+        let auto_ducked = audio.system_volume_db <= -10.0 && !audio.mute;
+
         div()
             .flex()
             .flex_col()
@@ -1566,6 +1817,54 @@ impl EditorWindow {
                                 }),
                             ),
                         ))
+                        .children((has_microphone && has_system_audio).then(|| {
+                            ui::Subfield::plain(&theme, "Auto-Duck System Audio")
+                                .child(
+                                    ui::Toggle::plain(&theme, "audio-auto-duck", auto_ducked)
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            let next_db = if auto_ducked { 0.0 } else { -12.0 };
+                                            this.edit_project("audio-auto-duck", window, cx, move |p| {
+                                                p.audio.system_volume_db = next_db;
+                                                true
+                                            });
+                                        })),
+                                )
+                                .into_any_element()
+                        }))
+                        .child(
+                            ui::Button::plain(
+                                &theme,
+                                "audio-remove-all-pauses",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .label(if silence_cuts.is_empty() {
+                                "Remove All Pauses (>1.0s)".to_string()
+                            } else {
+                                format!("Remove All Pauses ({})", silence_cuts.len())
+                            })
+                            .icon("icons/scissors.svg")
+                            .full_width()
+                            .disabled(silence_cuts.is_empty())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.remove_silences_clicked(window, cx);
+                            })),
+                        )
+                        .children((has_microphone || has_system_audio).then(|| {
+                            ui::Button::plain(
+                                &theme,
+                                "audio-export-wav",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .label("Export Audio (.wav)")
+                            .icon("icons/folder.svg")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.export_audio_only_clicked(window, cx);
+                            }))
+                            .into_any_element()
+                        }))
                         // Only a two-channel microphone gets the stereo row
                         // (`:709-711`).
                         .children(stereo_mic.then(|| {
@@ -2889,12 +3188,225 @@ impl EditorWindow {
                 )),
             );
 
+        let smart_tools = self.render_caption_smart_tools(cx);
+
         // An extra flex ancestor here repeats intrinsic layout while scrolling.
         ui::Field::section(&theme, "Captions")
             .badge("Beta")
             .child(transcription)
+            .children(smart_tools)
             .child(style.mt(px(8.)))
             .into_any_element()
+    }
+
+    fn render_caption_smart_tools(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let captions = self.project.captions.as_ref()?;
+        if captions.segments.is_empty() {
+            return None;
+        }
+        let theme = self.theme;
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        let filler_cuts =
+            transcription::plan_filler_word_cuts(&self.project, &recording_durations);
+        let silence_cuts =
+            transcription::plan_silence_cuts(&self.project, &recording_durations, 1.0);
+        let pii_count = transcription::count_pii_tokens_in_captions(&self.project);
+        let track_segments = self
+            .project
+            .timeline
+            .as_ref()
+            .map_or(&[][..], |t| t.caption_segments.as_slice());
+
+        let mut transcript_rows = div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .max_h(px(220.))
+            .id("caption-transcript-editor-list")
+            .overflow_y_scroll();
+
+        for (seg_idx, seg) in track_segments.iter().enumerate() {
+            let cut_start = seg.start;
+            let cut_end = seg.end;
+            let mins = (cut_start.max(0.0) as u64) / 60;
+            let secs = (cut_start.max(0.0) as u64) % 60;
+            let ts_label = format!("{mins}:{secs:02}");
+            let text_label = seg.text.clone();
+            transcript_rows = transcript_rows.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "transcript-cut-row-{seg_idx}"
+                    )))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(8.))
+                    .bg(theme.gray_2)
+                    .border_1()
+                    .border_color(theme.gray_4)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .min_w(px(0.))
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(Hsla::from(theme.gray_10))
+                                    .child(ts_label),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(Hsla::from(theme.gray_12))
+                                    .truncate()
+                                    .flex_1()
+                                    .child(text_label),
+                            ),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            SharedString::from(format!("cut-transcript-seg-{seg_idx}")),
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Xs,
+                        )
+                        .label("Cut")
+                        .icon("icons/scissors.svg")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.cut_transcript_range_clicked(cut_start, cut_end, window, cx);
+                        })),
+                    ),
+            );
+        }
+
+        Some(
+            div()
+                .mt(px(8.))
+                .child(
+                    ui::Field::section(&theme, "Smart Edit, Redact & SOP").child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap(px(8.))
+                                    .child(
+                                        div().flex_1().child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                "caption-remove-fillers",
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Sm,
+                                            )
+                                            .label(format!("Remove Fillers ({})", filler_cuts.len()))
+                                            .full_width()
+                                            .disabled(filler_cuts.is_empty())
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.remove_filler_words_clicked(window, cx);
+                                            })),
+                                        ),
+                                    )
+                                    .child(
+                                        div().flex_1().child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                "caption-remove-silences",
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Sm,
+                                            )
+                                            .label(format!(
+                                                "Remove Silences ({})",
+                                                silence_cuts.len()
+                                            ))
+                                            .full_width()
+                                            .disabled(silence_cuts.is_empty())
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.remove_silences_clicked(window, cx);
+                                            })),
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap(px(8.))
+                                    .child(
+                                        div().flex_1().child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                "caption-redact-pii",
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Sm,
+                                            )
+                                            .label(if pii_count > 0 {
+                                                format!("Auto-Redact PII ({pii_count})")
+                                            } else {
+                                                "Auto-Redact PII (Blur)".to_string()
+                                            })
+                                            .full_width()
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.auto_redact_pii_clicked(window, cx);
+                                            })),
+                                        ),
+                                    )
+                                    .child(
+                                        div().flex_1().child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                "caption-copy-sop",
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Sm,
+                                            )
+                                            .label("Copy SOP Guide")
+                                            .full_width()
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.copy_studio_sop_clicked(window, cx);
+                                            })),
+                                        ),
+                                    ),
+                                    )
+                                    .child(
+                                    ui::Button::plain(
+                                    &theme,
+                                    "caption-copy-yt-social",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                    )
+                                    .label("Copy YouTube Chapters & Social Post")
+                                    .full_width()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                    this.copy_youtube_chapters_clicked(window, cx);
+                                    })),
+                                    )
+                                    .children((!track_segments.is_empty()).then(|| {
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.))
+                                    .mt(px(4.))
+                                    .child(
+                                        div()
+                                            .text_size(px(11.))
+                                            .text_color(Hsla::from(theme.gray_10))
+                                            .child("Delete text below to cut video segments:"),
+                                    )
+                                    .child(transcript_rows)
+                            })),
+                    ),
+                )
+                .into_any_element(),
+        )
     }
 
     /// The five style presets (`CaptionsTab.tsx:1041-1075`), each previewing
@@ -3251,6 +3763,217 @@ impl EditorWindow {
         });
         // `setEditorState("timeline", "tracks", "caption", true)`.
         self.tracks.caption = true;
+        cx.notify();
+    }
+
+    fn export_audio_only_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let project_path = self.project_path.clone();
+        let default_dir = dirs::download_dir()
+            .or_else(dirs::desktop_dir)
+            .unwrap_or_else(|| project_path.clone());
+        let stem = self.summary().map_or_else(
+            || "cap-audio".to_string(),
+            |s| s.pretty_name.replace(['/', '\\', ':'], "-"),
+        );
+        let receiver = cx.prompt_for_new_path(&default_dir, Some(&format!("{stem}.wav")));
+        cx.spawn_in(window, async move |_, cx| {
+            let Ok(Ok(Some(dest))) = receiver.await else {
+                return;
+            };
+            let _ = cx
+                .background_executor()
+                .spawn(async move {
+                    let mut final_dest = dest;
+                    if final_dest.extension().is_none() {
+                        final_dest.set_extension("wav");
+                    }
+                    let _ = transcription::export_project_audio_wav(&project_path, &final_dest);
+                })
+                .await;
+        })
+        .detach();
+    }
+
+    fn remove_filler_words_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(summary) = self.summary() else {
+            return;
+        };
+        let recording_durations = summary.clip_display_durations.clone();
+        let cuts = transcription::plan_filler_word_cuts(&self.project, &recording_durations);
+        if cuts.is_empty() {
+            return;
+        }
+        self.edit_project("remove-filler-words", window, cx, move |project| {
+            crate::editor_edits::cut_output_time_ranges(project, &cuts, &recording_durations) > 0
+        });
+    }
+
+    fn remove_silences_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(summary) = self.summary() else {
+            return;
+        };
+        let recording_durations = summary.clip_display_durations.clone();
+        let cuts = transcription::plan_silence_cuts(&self.project, &recording_durations, 1.0);
+        if cuts.is_empty() {
+            return;
+        }
+        self.edit_project("remove-silences", window, cx, move |project| {
+            crate::editor_edits::cut_output_time_ranges(project, &cuts, &recording_durations) > 0
+        });
+    }
+
+    fn cut_transcript_range_clicked(
+        &mut self,
+        start: f64,
+        end: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(summary) = self.summary() else {
+            return;
+        };
+        let recording_durations = summary.clip_display_durations.clone();
+        let cuts = vec![(start, end)];
+        self.edit_project("cut-transcript-segment", window, cx, move |project| {
+            crate::editor_edits::cut_output_time_ranges(project, &cuts, &recording_durations) > 0
+        });
+    }
+
+    fn auto_redact_pii_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
+        self.edit_project("auto-redact-pii", window, cx, move |project| {
+            let pii_ranges = transcription::redact_pii_in_captions_and_plan_masks(
+                project,
+                &recording_durations,
+            );
+            let Some(timeline) = project.timeline.as_mut() else {
+                return false;
+            };
+            crate::editor_edits::insert_auto_pii_masks(timeline, &pii_ranges, &clicks) > 0
+        });
+        let mask_lanes = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|t| t.mask_segments.iter().map(|m| m.track + 1).max())
+            .unwrap_or(1);
+        self.tracks.mask = self.tracks.mask.max(mask_lanes);
+        cx.notify();
+    }
+
+    fn copy_studio_sop_clicked(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
+        let (title, recording_durations) = self.summary().map_or_else(
+            || ("Cap Recording".to_string(), Vec::new()),
+            |s| (s.pretty_name.clone(), s.clip_display_durations.clone()),
+        );
+        let markdown = transcription::generate_studio_sop_markdown(
+            &self.project,
+            &clicks,
+            &recording_durations,
+            &title,
+        );
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(markdown));
+    }
+
+    fn copy_youtube_chapters_clicked(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
+        let (title, recording_durations) = self.summary().map_or_else(
+            || ("Cap Recording".to_string(), Vec::new()),
+            |s| (s.pretty_name.clone(), s.clip_display_durations.clone()),
+        );
+        let text = transcription::generate_youtube_chapters_and_social_post(
+            &self.project,
+            &clicks,
+            &recording_durations,
+            &title,
+        );
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+    }
+
+    pub(crate) fn magic_polish_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
+        let meta = RecordingMeta::load_for_project(&self.project_path).ok();
+        let (recording_durations, has_mic, has_sys) = self.summary().map_or_else(
+            || (Vec::new(), false, false),
+            |s| {
+                (
+                    s.clip_display_durations.clone(),
+                    s.has_microphone,
+                    s.has_system_audio,
+                )
+            },
+        );
+
+        self.edit_project("magic-polish", window, cx, move |project| {
+            project.background.padding = project.background.padding.max(8.0);
+            project.background.rounding = project.background.rounding.max(18.0);
+            project.background.shadow = project.background.shadow.max(58.0);
+            project.cursor.raw = false;
+            if has_mic {
+                project.audio.improve = true;
+            }
+            if has_mic && has_sys && project.audio.system_volume_db > -10.0 {
+                project.audio.system_volume_db = -12.0;
+            }
+
+            let mut cuts = transcription::plan_filler_word_cuts(project, &recording_durations);
+            cuts.extend(transcription::plan_silence_cuts(
+                project,
+                &recording_durations,
+                1.0,
+            ));
+            if !cuts.is_empty() {
+                crate::editor_edits::cut_output_time_ranges(project, &cuts, &recording_durations);
+            }
+
+            let mut kb_settings = keyboard_settings(project);
+            kb_settings.enabled = true;
+            kb_settings.show_modifiers = true;
+            let mut enable_kb = false;
+
+            if let Some(timeline) = project.timeline.as_mut() {
+                if timeline.zoom_segments.is_empty() && !clicks.is_empty() {
+                    let generated = crate::editor_edits::generate_zoom_segments_for_timeline(
+                        &clicks, timeline, 1.5,
+                    );
+                    if !generated.is_empty() {
+                        timeline.zoom_segments = generated;
+                    }
+                }
+
+                if timeline.keyboard_segments.is_empty()
+                    && let Some(meta) = meta.as_ref()
+                    && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
+                        meta,
+                        timeline,
+                        &kb_settings,
+                    )
+                    && !kb_segs.is_empty()
+                {
+                    timeline.keyboard_segments = kb_segs;
+                    enable_kb = true;
+                }
+            }
+            if enable_kb {
+                let kb = project.keyboard.get_or_insert_with(KeyboardData::default);
+                kb.settings = kb_settings;
+            }
+            true
+        });
+
+        if self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.keyboard_segments.is_empty())
+        {
+            self.tracks.keyboard = true;
+        }
         cx.notify();
     }
 

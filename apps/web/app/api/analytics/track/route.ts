@@ -13,6 +13,11 @@ import {
 	sendFirstViewEmail,
 } from "@/lib/Notification";
 import { runPromise } from "@/lib/server";
+import {
+	mergeViewerRetentionSession,
+	sanitizeBucketIndices,
+} from "@/lib/viewer-retention";
+import type { VideoMetadata } from "@cap/database/types";
 
 interface TrackPayload {
 	videoId: string;
@@ -23,6 +28,9 @@ interface TrackPayload {
 	hostname?: string | null;
 	userAgent?: string;
 	occurredAt?: string;
+	watchedBuckets?: number[];
+	rewatchedBuckets?: number[];
+	prospectEmail?: string | null;
 }
 
 const VIEW_TRACKING_DELAY_MS = 2 * 60 * 1000;
@@ -110,6 +118,7 @@ export async function POST(request: NextRequest) {
 						ownerId: videos.ownerId,
 						firstViewEmailSentAt: videos.firstViewEmailSentAt,
 						videoName: videos.name,
+						metadata: videos.metadata,
 						createdAt: videos.createdAt,
 						updatedAt: videos.updatedAt,
 						activeUploadVideoId: videoUploads.videoId,
@@ -125,6 +134,7 @@ export async function POST(request: NextRequest) {
 							ownerId: string;
 							firstViewEmailSentAt: Date | null;
 							videoName: string;
+							metadata: VideoMetadata | null;
 							createdAt: Date;
 							updatedAt: Date;
 							activeUploadVideoId: string | null;
@@ -134,6 +144,39 @@ export async function POST(request: NextRequest) {
 
 			if (videoRecord && userId === videoRecord.ownerId) {
 				return;
+			}
+
+			if (videoRecord) {
+				const viewerEmail =
+					sanitizeString(body.prospectEmail) ??
+					Option.match(maybeUser, {
+						onNone: () => null,
+						onSome: (u) => (u as { email?: string }).email ?? null,
+					});
+				const effSessionId = sessionId ?? userId ?? "anon";
+				const viewerName = viewerEmail
+					? viewerEmail
+					: getAnonymousName(effSessionId);
+				const location =
+					city && country ? `${city}, ${country}` : city || country || null;
+				const watched = sanitizeBucketIndices(body.watchedBuckets ?? [0]);
+				const rewatched = sanitizeBucketIndices(body.rewatchedBuckets ?? []);
+				const { updatedMetadata } = mergeViewerRetentionSession({
+					metadata: videoRecord.metadata,
+					sessionId: effSessionId,
+					viewerEmail,
+					viewerName,
+					location,
+					watchedBuckets: watched.length > 0 ? watched : [0],
+					rewatchedBuckets: rewatched,
+					nowIso: timestamp.toISOString(),
+				});
+				yield* Effect.tryPromise(() =>
+					db()
+						.update(videos)
+						.set({ metadata: updatedMetadata })
+						.where(eq(videos.id, Video.VideoId.make(body.videoId))),
+				).pipe(Effect.catchAll(() => Effect.void));
 			}
 
 			if (

@@ -1199,7 +1199,7 @@ pub fn open_settings(page: Page, cx: &mut App) {
             // repositions them. (The main window returns `None` there and
             // hand-draws its own.)
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Cap Settings".into()),
+                title: Some("sricap-rec Settings".into()),
                 appears_transparent: true,
                 traffic_light_position: Some(settings_window::TRAFFIC_LIGHTS),
             }),
@@ -1528,7 +1528,7 @@ pub fn open_mode_select(cx: &mut App) -> bool {
             // puts them and only the title is hidden (`hidden_title(true)` +
             // `TitleBarStyle::Overlay`).
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Cap Mode Selection".into()),
+                title: Some("sricap-rec Mode Selection".into()),
                 appears_transparent: true,
                 traffic_light_position: mode_select_window::TRAFFIC_LIGHTS,
             }),
@@ -1647,7 +1647,7 @@ pub fn open_teleprompter(cx: &mut App) {
             // true`, `trafficLightPosition: (14, 14)` -- the real AppKit
             // buttons, moved, as on the settings window.
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Cap Teleprompter".into()),
+                title: Some("sricap-rec Teleprompter".into()),
                 appears_transparent: true,
                 traffic_light_position: Some(teleprompter_window::TRAFFIC_LIGHTS),
             }),
@@ -1791,6 +1791,22 @@ pub fn play_teleprompter(cx: &mut App) {
 /// Settings this window never hid the main one.
 pub fn teleprompter_closed(cx: &mut App) {
     cx.global_mut::<AppWindows>().teleprompter.take();
+}
+
+pub fn close_teleprompter(cx: &mut App) {
+    if let Some(handle) = cx.global_mut::<AppWindows>().teleprompter.take() {
+        handle
+            .update(cx, |view, window, _| view.close(window))
+            .ok();
+    }
+}
+
+pub fn toggle_teleprompter(cx: &mut App) {
+    if cx.global::<AppWindows>().teleprompter.is_some() {
+        close_teleprompter(cx);
+    } else {
+        open_teleprompter(cx);
+    }
 }
 
 /// `apply_content_protection`: `setSharingType: None` while a capture is
@@ -4738,7 +4754,7 @@ fn open_editor_window(
             // `Some(Some(LogicalPosition::new(20.0, 32.0)))`, and the header's
             // left group reserves an `h-full w-16` spacer for them.
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Cap Editor".into()),
+                title: Some("sricap-rec Editor".into()),
                 appears_transparent: true,
                 traffic_light_position: editor_window::TRAFFIC_LIGHTS,
             }),
@@ -6631,7 +6647,7 @@ pub fn open_screenshot_editor(path: PathBuf, cx: &mut App) {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id,
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Cap Screenshot Editor".into()),
+                title: Some("sricap-rec Screenshot Editor".into()),
                 appears_transparent: true,
                 traffic_light_position: None,
             }),

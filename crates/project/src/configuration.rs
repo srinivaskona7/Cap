@@ -13,7 +13,7 @@ use specta::Type;
 
 use crate::DisplayNotch;
 
-#[derive(Type, Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AspectRatio {
     #[default]
@@ -554,6 +554,8 @@ pub struct Camera {
     pub shadow: f32,
     #[serde(alias = "advanced_shadow")]
     pub advanced_shadow: Option<ShadowConfiguration>,
+    #[serde(default)]
+    pub border: Option<BorderConfiguration>,
     pub shape: CameraShape,
     #[serde(alias = "rounding_type")]
     pub rounding_type: CornerStyle,
@@ -601,6 +603,7 @@ impl Default for Camera {
                 opacity: 44.2,
                 blur: 10.5,
             }),
+            border: None,
             shape: CameraShape::Square,
             rounding_type: CornerStyle::default(),
             scale_during_zoom: Self::default_scale_during_zoom(),

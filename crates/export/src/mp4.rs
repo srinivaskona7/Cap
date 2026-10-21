@@ -149,19 +149,19 @@ pub enum ExportCompression {
 impl ExportCompression {
     pub fn bits_per_pixel(&self) -> f32 {
         match self {
-            Self::Maximum => 0.3,
-            Self::Social => 0.15,
-            Self::Web => 0.08,
-            Self::Potato => 0.04,
+            Self::Maximum => 0.45,
+            Self::Social => 0.22,
+            Self::Web => 0.12,
+            Self::Potato => 0.05,
         }
     }
 
     pub fn crf_value(&self) -> u8 {
         match self {
-            Self::Maximum => 24,
-            Self::Social => 28,
-            Self::Web => 32,
-            Self::Potato => 36,
+            Self::Maximum => 16,
+            Self::Social => 20,
+            Self::Web => 24,
+            Self::Potato => 30,
         }
     }
 }

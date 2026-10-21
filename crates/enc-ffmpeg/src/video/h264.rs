@@ -1231,7 +1231,7 @@ fn get_codec_and_options(
             "h264_videotoolbox" => {
                 if is_export {
                     options.set("realtime", "false");
-                    options.set("profile", "main");
+                    options.set("profile", "high");
                     options.set("allow_sw", "0");
                     options.set("g", &keyframe_interval_str);
                 } else {

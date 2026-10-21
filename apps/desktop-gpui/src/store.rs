@@ -1225,7 +1225,7 @@ impl GeneralSettings {
             theme: enum_at(general, "theme"),
             hide_dock_icon: bool_at(general, "hideDockIcon", false),
             enable_notifications: bool_at(general, "enableNotifications", true),
-            instant_mode_max_resolution: u32_at(general, "instantModeMaxResolution", 1920),
+            instant_mode_max_resolution: u32_at(general, "instantModeMaxResolution", 3840),
             disable_auto_open_links: bool_at(general, "disableAutoOpenLinks", false),
             studio_recording_quality: enum_at(general, "studioRecordingQuality"),
             recording_countdown: opt_u32_at(general, "recordingCountdown"),
@@ -1252,7 +1252,8 @@ impl GeneralSettings {
             capture_keyboard_events: bool_at(general, "captureKeyboardEvents", true),
             macbook_notch_overlay: bool_at(general, "macbookNotchOverlay", false),
             max_fps: u32_at(general, "maxFps", 60),
-            recordings_path: opt_string_at(general, "recordingsPath"),
+            recordings_path: opt_string_at(general, "recordingsPath")
+                .or_else(|| opt_string_at(general, "customRecordingsPath")),
             previous_recordings_paths: strings_at(general, "previousRecordingsPaths"),
             default_project_name_template: opt_string_at(general, "defaultProjectNameTemplate"),
             // Key absent -> the default exclusion list, matching the Rust
@@ -1478,7 +1479,7 @@ impl AuthSnapshot {
     }
 
     pub fn is_upgraded(&self) -> bool {
-        self.plan_upgraded || self.plan_manual
+        true
     }
 }
 

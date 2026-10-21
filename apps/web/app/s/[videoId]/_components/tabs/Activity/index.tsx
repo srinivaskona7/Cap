@@ -57,6 +57,7 @@ export const Activity = Object.assign(
 								comments={comments}
 								isLoadingAnalytics={false}
 								isOwner={isOwner}
+								onSeek={props.onSeek}
 							/>
 						</Suspense>
 					}
@@ -95,7 +96,7 @@ export const Activity = Object.assign(
 			return (
 				<div className="flex flex-col h-full">
 					{user && props.isOwnerOrMember && (
-						<div className="flex flex-row items-center p-4 h-12 border-b border-gray-200">
+						<div className="flex flex-col p-4 border-b border-gray-200">
 							{props.analytics}
 						</div>
 					)}

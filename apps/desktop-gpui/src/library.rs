@@ -252,6 +252,7 @@ pub struct RecordingItem {
     /// left to an `<img onError>`.
     pub thumbnail: Option<PathBuf>,
     pub thumbnail_version: Option<u128>,
+    pub file_size_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -327,6 +328,7 @@ fn recording_item(path: PathBuf, meta: RecordingMeta, sort_time_millis: f64) -> 
         bundle_thumbnail_path(&path)
     };
     let upload = crate::upload::queue::status(&path, &meta);
+    let file_size_bytes = compute_directory_size_bytes(&path);
     RecordingItem {
         upload,
         mode,
@@ -337,8 +339,61 @@ fn recording_item(path: PathBuf, meta: RecordingMeta, sort_time_millis: f64) -> 
         sort_time_millis,
         thumbnail_version: source_mtime_nanos(&thumbnail),
         thumbnail: thumbnail.is_file().then_some(thumbnail),
+        file_size_bytes,
         path,
     }
+}
+
+pub fn compute_directory_size_bytes(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    let mut total = 0u64;
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            total = total.saturating_add(compute_directory_size_bytes(&entry.path()));
+        } else if let Ok(meta) = entry.metadata() {
+            total = total.saturating_add(meta.len());
+        }
+    }
+    total
+}
+
+pub fn format_file_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    const GB: f64 = 1024.0 * 1024.0 * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else if b >= KB {
+        format!("{:.0} KB", b / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+pub fn delete_all_recordings() -> Result<usize, String> {
+    let items = list_recordings();
+    let dirs = known_recordings_dirs();
+    let mut deleted = 0usize;
+    for item in items {
+        if item.is_active() {
+            continue;
+        }
+        if delete_recording_directory_in(&dirs, &item.path).is_ok() {
+            deleted += 1;
+        }
+    }
+    Ok(deleted)
 }
 
 /// `list_recordings` (`lib.rs:3971-3999`), against explicit directories.

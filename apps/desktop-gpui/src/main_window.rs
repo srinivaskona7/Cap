@@ -804,6 +804,7 @@ pub struct MainWindow {
     /// Which display/window is selected for each split target.
     selected_display: Option<DisplayOption>,
     selected_window: Option<WindowOption>,
+    browser_tabs_mode: bool,
     panel: Option<Panel>,
     /// Live filter text for the device and target panels -- a mirror of
     /// `search_input`'s value, kept as a plain `String` because every list in
@@ -1086,6 +1087,7 @@ impl MainWindow {
             system_audio: crate::store::recording_system_audio(),
             selected_display: None,
             selected_window: None,
+            browser_tabs_mode: false,
             panel: None,
             search: String::new(),
             search_input,
@@ -1255,6 +1257,7 @@ impl MainWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.devices.browser_tabs = targets.browser_tabs;
         self.install_displays(targets.displays, window, cx);
         self.install_windows(targets.windows, window, cx);
     }
@@ -5547,50 +5550,196 @@ impl MainWindow {
                 }
             }
             TargetType::Window => {
-                for window in self
-                    .devices
-                    .windows
-                    .iter()
-                    .filter(|w| self.matches_search(&w.label) || self.matches_search(&w.app))
-                {
-                    let selected = self
-                        .selected_window
-                        .as_ref()
-                        .is_some_and(|current| current.id == window.id);
-                    let chosen = window.clone();
+                if self.browser_tabs_mode {
+                    for (idx, tab) in self
+                        .devices
+                        .browser_tabs
+                        .iter()
+                        .filter(|t| {
+                            self.matches_search(&t.title)
+                                || self.matches_search(&t.browser)
+                                || self.matches_search(&t.url)
+                        })
+                        .enumerate()
+                    {
+                        let chosen_tab = tab.clone();
+                        let tab_thumb = self
+                            .devices
+                            .windows
+                            .iter()
+                            .find(|w| w.app == tab.browser)
+                            .map(|w| target_thumbnails::TargetThumb {
+                                image: None,
+                                app_icon: self.thumbnails.window(&w.id).app_icon,
+                            })
+                            .unwrap_or_default();
+                        cards.push(
+                            self.render_target_card(
+                                SharedString::from(format!(
+                                    "browser-tab-{}-{}-{idx}",
+                                    tab.browser, tab.tab_index
+                                )),
+                                tab_thumb,
+                                "icons/globe.svg",
+                                tab.title.clone(),
+                                Some(tab.browser.clone()),
+                                Some(tab.describe_host()),
+                                false,
+                                cx.listener(move |_this, _, window, cx| {
+                                    let tab_to_activate = chosen_tab.clone();
+                                    cx.spawn_in(window, async move |this, cx| {
+                                        let activated = cx
+                                            .background_executor()
+                                            .spawn(async move {
+                                                devices::activate_browser_tab(&tab_to_activate)
+                                            })
+                                            .await;
+                                        if let Some(win_opt) = activated {
+                                            this.update_in(cx, |this, _window, cx| {
+                                                this.selected_window = Some(win_opt);
+                                                this.target = Some(TargetType::Window);
+                                                this.close_panel(cx);
+                                                this.sync_overlays(cx);
+                                                this.focus_selected_window(cx);
+                                            })
+                                            .ok();
+                                        }
+                                    })
+                                    .detach();
+                                }),
+                            )
+                            .into_any_element(),
+                        );
+                    }
+                } else {
+                    for window in self
+                        .devices
+                        .windows
+                        .iter()
+                        .filter(|w| self.matches_search(&w.label) || self.matches_search(&w.app))
+                    {
+                        let selected = self
+                            .selected_window
+                            .as_ref()
+                            .is_some_and(|current| current.id == window.id);
+                        let chosen = window.clone();
 
-                    cards.push(
-                        self.render_target_card(
-                            SharedString::from(format!("window-{}", window.id)),
-                            self.thumbnails.window(&window.id),
-                            "icons/window.svg",
-                            window.label.clone(),
-                            Some(window.app.clone()),
-                            window.describe_metadata(),
-                            selected,
-                            cx.listener(move |this, _, _window, cx| {
-                                this.selected_window = Some(chosen.clone());
-                                this.target = Some(TargetType::Window);
-                                this.close_panel(cx);
-                                this.sync_overlays(cx);
-                                this.focus_selected_window(cx);
-                            }),
-                        )
-                        .into_any_element(),
-                    );
+                        cards.push(
+                            self.render_target_card(
+                                SharedString::from(format!("window-{}", window.id)),
+                                self.thumbnails.window(&window.id),
+                                "icons/window.svg",
+                                window.label.clone(),
+                                Some(window.app.clone()),
+                                window.describe_metadata(),
+                                selected,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.selected_window = Some(chosen.clone());
+                                    this.target = Some(TargetType::Window);
+                                    this.close_panel(cx);
+                                    this.sync_overlays(cx);
+                                    this.focus_selected_window(cx);
+                                }),
+                            )
+                            .into_any_element(),
+                        );
+                    }
                 }
             }
             // Area and Camera Only have nothing to pick between.
             TargetType::Area | TargetType::CameraOnly => {}
         }
 
+        let grid = if target == TargetType::Window {
+            let win_count = self.devices.windows.len();
+            let tab_count = self.devices.browser_tabs.len();
+            let tabs_mode = self.browser_tabs_mode;
+            grid.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .w_full()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(6.))
+                            .w_full()
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "window-picker-all-windows",
+                                        if !tabs_mode {
+                                            ui::ButtonVariant::Primary
+                                        } else {
+                                            ui::ButtonVariant::Gray
+                                        },
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label(format!("All Windows ({win_count})"))
+                                    .icon("icons/window.svg")
+                                    .full_width()
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        this.browser_tabs_mode = false;
+                                        cx.notify();
+                                    })),
+                                ),
+                            )
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "window-picker-browser-tabs",
+                                        if tabs_mode {
+                                            ui::ButtonVariant::Primary
+                                        } else {
+                                            ui::ButtonVariant::Gray
+                                        },
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label(format!("Browser Tabs ({tab_count})"))
+                                    .icon("icons/globe.svg")
+                                    .full_width()
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        this.browser_tabs_mode = true;
+                                        cx.notify();
+                                    })),
+                                ),
+                            ),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "window-picker-hover-screen",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Xs,
+                        )
+                        .label("Or Hover on Screen to Select Window")
+                        .icon("icons/cursor.svg")
+                        .full_width()
+                        .on_click(cx.listener(|this, _, _window, cx| {
+                            this.selected_window = None;
+                            this.target = Some(TargetType::Window);
+                            this.close_panel(cx);
+                            this.sync_overlays(cx);
+                        })),
+                    ),
+            )
+        } else {
+            grid
+        };
+
         if cards.is_empty() {
             return grid.child(
-                self.render_empty_state(match (target, self.search.is_empty()) {
-                    (TargetType::Display, true) => "No displays found",
-                    (TargetType::Display, false) => "No matching displays",
-                    (_, true) => "No windows found",
-                    (_, false) => "No matching windows",
+                self.render_empty_state(match (target, self.browser_tabs_mode, self.search.is_empty()) {
+                    (TargetType::Display, _, true) => "No displays found",
+                    (TargetType::Display, _, false) => "No matching displays",
+                    (TargetType::Window, true, true) => "No open Chrome / Safari / Arc tabs found",
+                    (TargetType::Window, true, false) => "No matching browser tabs",
+                    (_, _, true) => "No windows found",
+                    (_, _, false) => "No matching windows",
                 }),
             );
         }
@@ -6401,7 +6550,11 @@ impl MainWindow {
             .when(!split, |this| this.rounded(px(9.)))
             .hover(move |style| style.bg(capture_hover_fill(theme, selected)))
             .active(move |style| style.bg(capture_press_fill(theme, selected)))
-            .on_click(cx.listener(move |this, _, _window, cx| {
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if target == TargetType::Window && this.target != Some(TargetType::Window) {
+                    this.open_panel(Panel::Target(TargetType::Window), window, cx);
+                    return;
+                }
                 // `toggleTargetMode`: clicking the armed tile again is a
                 // cancel, which takes the overlays down with it.
                 this.target = if this.target == Some(target) {

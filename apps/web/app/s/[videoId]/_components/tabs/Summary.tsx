@@ -7,9 +7,11 @@ import {
 	faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Edit3 } from "lucide-react";
+import { Bug, Check, Copy, Edit3, ExternalLink, FileText } from "lucide-react";
 import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
+import { generateVideoSopAndBugReport } from "@/actions/videos/generate-sop-and-bug-report";
 import { type SummaryEditingState, SummaryEditor } from "./SummaryEditor";
 
 type AiGenerationStatus =
@@ -95,6 +97,37 @@ export const Summary: React.FC<SummaryProps> = ({
 	const editButtonRef = useRef<HTMLButtonElement>(null);
 	const [isRetrying, setIsRetrying] = useState(false);
 	const [retryError, setRetryError] = useState<string | null>(null);
+	const [sopAndBugData, setSopAndBugData] = useState<Awaited<
+		ReturnType<typeof generateVideoSopAndBugReport>
+	> | null>(null);
+	const [isGeneratingSop, setIsGeneratingSop] = useState(false);
+	const [copiedTarget, setCopiedTarget] = useState<"sop" | "bug" | null>(null);
+
+	const handleGenerateSopAndBug = async () => {
+		setIsGeneratingSop(true);
+		try {
+			const data = await generateVideoSopAndBugReport(videoId);
+			setSopAndBugData(data);
+			toast.success("Step-by-Step SOP & Bug Report Bundle generated.");
+		} catch (err) {
+			toast.error(
+				err instanceof Error ? err.message : "Failed to generate SOP & Bug Report",
+			);
+		} finally {
+			setIsGeneratingSop(false);
+		}
+	};
+
+	const copyMarkdown = async (type: "sop" | "bug", content: string) => {
+		await navigator.clipboard.writeText(content);
+		setCopiedTarget(type);
+		toast.success(
+			type === "sop"
+				? "SOP Guide copied for Notion / Confluence / Markdown"
+				: "Developer Bug Report copied to clipboard",
+		);
+		window.setTimeout(() => setCopiedTarget(null), 2000);
+	};
 
 	const aiData = initialAiData || null;
 	const aiGenerationStatus = aiData?.aiGenerationStatus;
@@ -326,6 +359,149 @@ export const Summary: React.FC<SummaryProps> = ({
 							</div>
 						</div>
 					)}
+
+					<div className="pt-4 border-t border-gray-4 space-y-4">
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<div>
+								<h3 className="text-sm font-semibold text-gray-12">
+									Step-by-Step SOP & Dev Bug Bundle
+								</h3>
+								<p className="text-xs text-gray-10">
+									Turn this recording into a Notion/Markdown SOP or a 1-click
+									Linear/GitHub/Jira bug report.
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="gray"
+								size="sm"
+								disabled={isGeneratingSop}
+								onClick={() => void handleGenerateSopAndBug()}
+							>
+								<FileText className="mr-1.5 size-3.5" />
+								{isGeneratingSop
+									? "Generating..."
+									: sopAndBugData
+										? "Refresh SOP & Bug Bundle"
+										: "Generate SOP & Bug Bundle"}
+							</Button>
+						</div>
+
+						{sopAndBugData && (
+							<div className="space-y-4">
+								<div className="rounded-xl border border-gray-4 bg-gray-2 p-3.5 space-y-3">
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-xs font-semibold text-gray-12">
+											Step-by-Step Guide ({sopAndBugData.sop.steps.length} steps)
+										</span>
+										<button
+											type="button"
+											onClick={() =>
+												void copyMarkdown("sop", sopAndBugData.sop.markdown)
+											}
+											className="inline-flex items-center gap-1 rounded-md border border-gray-5 bg-gray-1 px-2.5 py-1 text-xs font-medium text-gray-12 transition hover:bg-gray-3"
+										>
+											{copiedTarget === "sop" ? (
+												<Check className="size-3 text-green-600" />
+											) : (
+												<Copy className="size-3" />
+											)}
+											Copy Markdown / Notion
+										</button>
+									</div>
+									<div className="space-y-2">
+										{sopAndBugData.sop.steps.map((step) => (
+											<button
+												type="button"
+												key={step.stepNumber}
+												onClick={() => handleSeek(step.timestampSeconds)}
+												className="flex w-full items-start gap-2.5 rounded-lg bg-gray-1 p-2.5 text-left border border-gray-3 transition hover:border-gray-5"
+											>
+												<span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-[11px] font-semibold text-blue-600">
+													{step.stepNumber}
+												</span>
+												<div className="min-w-0 flex-1">
+													<div className="flex items-center justify-between gap-2">
+														<span className="text-xs font-semibold text-gray-12 truncate">
+															{step.title}
+														</span>
+														<span className="font-mono text-[10px] text-gray-9 shrink-0">
+															{step.formattedTimestamp}
+														</span>
+													</div>
+													<p className="mt-0.5 text-xs text-gray-11 line-clamp-2">
+														{step.instruction}
+													</p>
+												</div>
+											</button>
+										))}
+									</div>
+								</div>
+
+								<div className="rounded-xl border border-gray-4 bg-gray-2 p-3.5 space-y-3">
+									<div className="flex items-center justify-between gap-2">
+										<div className="flex items-center gap-1.5">
+											<Bug className="size-3.5 text-gray-11" />
+											<span className="text-xs font-semibold text-gray-12">
+												1-Click Issue Export (Linear / GitHub / Jira)
+											</span>
+										</div>
+										<button
+											type="button"
+											onClick={() =>
+												void copyMarkdown(
+													"bug",
+													sopAndBugData.bugReport.markdown,
+												)
+											}
+											className="inline-flex items-center gap-1 rounded-md border border-gray-5 bg-gray-1 px-2.5 py-1 text-xs font-medium text-gray-12 transition hover:bg-gray-3"
+										>
+											{copiedTarget === "bug" ? (
+												<Check className="size-3 text-green-600" />
+											) : (
+												<Copy className="size-3" />
+											)}
+											Copy Bug Bundle
+										</button>
+									</div>
+									<div className="flex flex-wrap items-center gap-2">
+										<a
+											href={sopAndBugData.bugReport.linearUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="inline-flex items-center gap-1.5 rounded-lg border border-gray-4 bg-gray-1 px-3 py-1.5 text-xs font-medium text-gray-12 transition hover:bg-gray-3"
+										>
+											Create Linear Issue
+											<ExternalLink className="size-3 text-gray-9" />
+										</a>
+										<a
+											href={sopAndBugData.bugReport.githubUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="inline-flex items-center gap-1.5 rounded-lg border border-gray-4 bg-gray-1 px-3 py-1.5 text-xs font-medium text-gray-12 transition hover:bg-gray-3"
+										>
+											Create GitHub Issue
+											<ExternalLink className="size-3 text-gray-9" />
+										</a>
+										<a
+											href={sopAndBugData.bugReport.jiraUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											onClick={() => {
+												void navigator.clipboard.writeText(
+													sopAndBugData.bugReport.markdown,
+												);
+											}}
+											className="inline-flex items-center gap-1.5 rounded-lg border border-gray-4 bg-gray-1 px-3 py-1.5 text-xs font-medium text-gray-12 transition hover:bg-gray-3"
+										>
+											Create Jira Issue
+											<ExternalLink className="size-3 text-gray-9" />
+										</a>
+									</div>
+								</div>
+							</div>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>

@@ -3,10 +3,12 @@ import "server-only";
 import { db } from "@cap/database";
 import {
 	organizations,
+	organizationMembers,
 	spaces,
 	spaceVideos,
 	videos,
 } from "@cap/database/schema";
+import type { VideoMetadata } from "@cap/database/types";
 import {
 	resolveEffectiveVideoRules,
 	Storage,
@@ -14,7 +16,7 @@ import {
 } from "@cap/web-backend";
 import type { User } from "@cap/web-domain";
 import { Video } from "@cap/web-domain";
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import {
 	decodeAgentCursor,
@@ -25,6 +27,10 @@ import {
 } from "./agent-api";
 import { mcpIssuer } from "./mcp-auth";
 import { runPromise } from "./server";
+import {
+	runWorkspaceSemanticSearch,
+	type SearchableWorkspaceVideo,
+} from "./workspace-semantic-search";
 
 const maxList = 20;
 const maxCues = 30;
@@ -201,4 +207,91 @@ export const getMcpCapContext = async (
 		})),
 		hasMoreCues: matching.length > maxCues,
 	};
+};
+
+export const searchWorkspaceMcpCaps = async (
+	userId: User.UserId,
+	input: { query: string; spaceId?: string; limit?: number },
+) => {
+	const query = input.query.trim();
+	if (!query || query.length > 160) {
+		throw new Error("Query must be between 1 and 160 characters");
+	}
+	const limit = Math.min(20, Math.max(1, input.limit ?? 8));
+
+	const memberOrgs = await db()
+		.select({ organizationId: organizationMembers.organizationId })
+		.from(organizationMembers)
+		.where(eq(organizationMembers.userId, userId));
+	const orgIds = memberOrgs.map((m) => m.organizationId);
+
+	const candidateRows = await db()
+		.select({
+			id: videos.id,
+			ownerId: videos.ownerId,
+			orgId: videos.orgId,
+			name: videos.name,
+			duration: videos.duration,
+			createdAt: videos.createdAt,
+			metadata: videos.metadata,
+			transcriptionStatus: videos.transcriptionStatus,
+		})
+		.from(videos)
+		.innerJoin(organizations, eq(videos.orgId, organizations.id))
+		.where(
+			and(
+				isNull(organizations.tombstoneAt),
+				orgIds.length > 0
+					? or(
+							eq(videos.ownerId, userId),
+							inArray(videos.orgId, orgIds),
+						)
+					: eq(videos.ownerId, userId),
+			),
+		)
+		.orderBy(desc(videos.updatedAt))
+		.limit(30);
+
+	const docs: SearchableWorkspaceVideo[] = await Promise.all(
+		candidateRows.map(async (row) => {
+			let cues: ReturnType<typeof parseAgentVtt> = [];
+			if (row.transcriptionStatus === "COMPLETE") {
+				try {
+					const vtt = await runPromise(
+						Effect.gen(function* () {
+							const repo = yield* VideosRepo;
+							const loaded = yield* repo.getById(row.id);
+							if (Option.isNone(loaded)) return null;
+							const storage = yield* Storage;
+							const [bucket] = yield* storage.getAccessForVideo(
+								loaded.value[0],
+							);
+							const object = yield* bucket.getObject(
+								`${row.ownerId}/${row.id}/transcription.vtt`,
+							);
+							return Option.getOrNull(object);
+						}),
+					);
+					if (vtt && vtt.length <= 2_000_000) {
+						cues = parseAgentVtt(vtt);
+					}
+				} catch {
+					cues = [];
+				}
+			}
+			return {
+				id: row.id,
+				name: row.name,
+				ownerId: row.ownerId,
+				orgId: row.orgId,
+				duration: row.duration,
+				createdAt: row.createdAt.toISOString(),
+				shareUrl: `${mcpIssuer()}/s/${row.id}`,
+				metadata: (row.metadata ?? null) as VideoMetadata | null,
+				cues,
+			};
+		}),
+	);
+
+	return runWorkspaceSemanticSearch(docs, query, limit);
 };

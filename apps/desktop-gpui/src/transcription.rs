@@ -1118,6 +1118,10 @@ fn normalize_audio_for_transcription(samples: &mut [f32]) -> f32 {
 /// (`captions.rs:250-517`): per segment, decode system audio then mic
 /// (`captions.rs:281-283`), downmix each to mono, average them together,
 /// concatenate the segments, normalize, and write a 16kHz mono s16le WAV.
+pub fn export_project_audio_wav(project_path: &Path, output_path: &Path) -> Result<(), String> {
+    extract_project_audio(project_path, output_path)
+}
+
 fn extract_project_audio(project_path: &Path, output_path: &Path) -> Result<(), String> {
     ffmpeg::init().map_err(|e| format!("Failed to initialise ffmpeg: {e}"))?;
 
@@ -2258,6 +2262,575 @@ pub fn caption_generation_error_message(message: &str) -> String {
     message.to_string()
 }
 
+fn normalize_word_token(text: &str) -> String {
+    text.trim()
+        .trim_matches(|ch: char| ch.is_ascii_punctuation() || (!ch.is_alphanumeric() && ch != '-'))
+        .to_ascii_lowercase()
+}
+
+pub fn is_filler_word(text: &str) -> bool {
+    let token = normalize_word_token(text);
+    if token.is_empty() {
+        return false;
+    }
+    if matches!(token.as_str(), "er" | "uhm" | "erm") {
+        return true;
+    }
+    let bytes = token.as_bytes();
+    let all_u_then_m = bytes.first() == Some(&b'u')
+        && bytes.last() == Some(&b'm')
+        && bytes.iter().all(|b| *b == b'u' || *b == b'h' || *b == b'm');
+    let all_u_then_h = bytes.first() == Some(&b'u')
+        && bytes.last() == Some(&b'h')
+        && bytes.iter().all(|b| *b == b'u' || *b == b'h');
+    let all_a_then_h = bytes.first() == Some(&b'a')
+        && bytes.last() == Some(&b'h')
+        && bytes.iter().all(|b| *b == b'a' || *b == b'h');
+    let all_h_then_m = bytes.first() == Some(&b'h')
+        && bytes.last() == Some(&b'm')
+        && bytes.iter().all(|b| *b == b'h' || *b == b'm');
+    all_u_then_m || all_u_then_h || all_a_then_h || all_h_then_m
+}
+
+pub fn is_pii_or_secret_token(text: &str) -> bool {
+    let cleaned = text.trim().trim_matches(|ch: char| {
+        matches!(
+            ch,
+            ',' | '.' | ';' | ':' | '!' | '?' | '(' | ')' | '"' | '\'' | '`' | '[' | ']' | '{' | '}'
+        )
+    });
+    if cleaned.len() < 5 {
+        return false;
+    }
+    if let Some((local, domain)) = cleaned.split_once('@')
+        && !local.is_empty()
+        && domain.contains('.')
+        && domain.len() >= 4
+    {
+        return true;
+    }
+    let lower = cleaned.to_ascii_lowercase();
+    for prefix in [
+        "sk-",
+        "pk_live_",
+        "pk_test_",
+        "ghp_",
+        "gho_",
+        "ghs_",
+        "github_pat_",
+        "xoxb-",
+        "xoxp-",
+        "akia",
+        "aiza",
+        "eyjhbg",
+    ] {
+        if lower.starts_with(prefix) && cleaned.len() >= 12 {
+            return true;
+        }
+    }
+    if let Some((key, val)) = lower.split_once('=')
+        && !val.is_empty()
+        && (key.ends_with("_secret")
+            || key.ends_with("_key")
+            || key.ends_with("_token")
+            || key.ends_with("_password")
+            || key == "database_url")
+    {
+        return true;
+    }
+    let digits_only: String = cleaned.chars().filter(char::is_ascii_digit).collect();
+    if digits_only.len() == 9 && cleaned.matches('-').count() == 2 {
+        return true;
+    }
+    digits_only.len() >= 13
+        && digits_only.len() <= 19
+        && cleaned.chars().all(|c| c.is_ascii_digit() || c == '-')
+}
+
+pub fn map_source_range_to_edited(
+    source_start: f64,
+    source_end: f64,
+    timeline: &TimelineConfiguration,
+    recording_durations: &[f64],
+) -> Vec<(f64, f64)> {
+    if source_end <= source_start {
+        return Vec::new();
+    }
+    let holds = timeline.hold_windows();
+    let mut out = Vec::new();
+    for mapping in build_source_to_edited_mappings(timeline, recording_durations) {
+        if mapping.timescale <= 0.0 {
+            continue;
+        }
+        let overlap_start = source_start.max(mapping.source_start);
+        let overlap_end = source_end.min(mapping.source_end);
+        if overlap_end <= overlap_start {
+            continue;
+        }
+        let eff_start =
+            mapping.edited_start + (overlap_start - mapping.source_start) / mapping.timescale;
+        let eff_end =
+            mapping.edited_start + (overlap_end - mapping.source_start) / mapping.timescale;
+        let out_start = crate::editor_edits::effective_to_output(&holds, eff_start);
+        let out_end = crate::editor_edits::effective_to_output(&holds, eff_end);
+        if out_end - out_start >= 0.04 {
+            out.push((out_start, out_end));
+        }
+    }
+    merge_time_ranges(out)
+}
+
+fn merge_time_ranges(mut ranges: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    ranges.retain(|(s, e)| s.is_finite() && e.is_finite() && *e > *s);
+    ranges.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut merged: Vec<(f64, f64)> = Vec::with_capacity(ranges.len());
+    for (start, end) in ranges {
+        if let Some(last) = merged.last_mut()
+            && start <= last.1 + 0.04
+        {
+            last.1 = last.1.max(end);
+        } else {
+            merged.push((start, end));
+        }
+    }
+    merged
+}
+
+pub fn collect_source_words(project: &ProjectConfiguration) -> Vec<CaptionWord> {
+    let Some(captions) = project.captions.as_ref() else {
+        return Vec::new();
+    };
+    let mut words: Vec<CaptionWord> = captions
+        .segments
+        .iter()
+        .flat_map(|segment| {
+            if segment.words.is_empty() {
+                sync_caption_words_with_text(
+                    &segment.text,
+                    &[],
+                    f64::from(segment.start),
+                    f64::from(segment.end),
+                )
+            } else {
+                segment.words.clone()
+            }
+        })
+        .collect();
+    words.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.end.total_cmp(&b.end)));
+    words
+}
+
+pub fn regroup_captions_for_social_reels(
+    project: &mut ProjectConfiguration,
+    recording_durations: &[f64],
+    max_words_per_line: usize,
+) {
+    let words = collect_source_words(project);
+    if words.is_empty() {
+        return;
+    }
+    let chunk_size = max_words_per_line.clamp(2, 4);
+    let mut new_segments = Vec::new();
+    for (idx, chunk) in words.chunks(chunk_size).enumerate() {
+        let Some(first) = chunk.first() else {
+            continue;
+        };
+        let Some(last) = chunk.last() else {
+            continue;
+        };
+        let text = chunk
+            .iter()
+            .map(|w| w.text.trim())
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if text.is_empty() {
+            continue;
+        }
+        new_segments.push(CaptionSegment {
+            id: format!("reel-seg-{idx}"),
+            start: first.start,
+            end: last.end.max(first.start + 0.12),
+            text,
+            words: chunk.to_vec(),
+        });
+    }
+    if let Some(captions) = project.captions.as_mut() {
+        captions.segments = new_segments;
+        if let Some(timeline) = project.timeline.as_mut() {
+            timeline.caption_segments =
+                derive_caption_track_segments(&captions.segments, timeline, recording_durations);
+        }
+    }
+}
+
+pub fn plan_filler_word_cuts(
+    project: &ProjectConfiguration,
+    recording_durations: &[f64],
+) -> Vec<(f64, f64)> {
+    let Some(timeline) = project.timeline.as_ref() else {
+        return Vec::new();
+    };
+    let words = collect_source_words(project);
+    let mut source_ranges = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        if !is_filler_word(&word.text) {
+            continue;
+        }
+        let prev_end = index
+            .checked_sub(1)
+            .and_then(|i| words.get(i))
+            .map_or(0.0, |w| f64::from(w.end));
+        let next_start = words
+            .get(index + 1)
+            .map_or(f64::INFINITY, |w| f64::from(w.start));
+        let start = f64::from(word.start);
+        let end = f64::from(word.end);
+        if end <= start || prev_end > start || next_start < end {
+            continue;
+        }
+        let pad_before = ((start - prev_end) * 0.5).clamp(0.0, 0.04);
+        let pad_after = ((next_start - end) * 0.5).clamp(0.0, 0.04);
+        source_ranges.push(((start - pad_before).max(0.0), end + pad_after));
+    }
+    let mut edited = Vec::new();
+    for (s, e) in merge_time_ranges(source_ranges) {
+        edited.extend(map_source_range_to_edited(
+            s,
+            e,
+            timeline,
+            recording_durations,
+        ));
+    }
+    merge_time_ranges(edited)
+}
+
+pub fn plan_silence_cuts(
+    project: &ProjectConfiguration,
+    recording_durations: &[f64],
+    min_silence_secs: f64,
+) -> Vec<(f64, f64)> {
+    let Some(timeline) = project.timeline.as_ref() else {
+        return Vec::new();
+    };
+    let words = collect_source_words(project);
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let min_gap = min_silence_secs.max(0.4);
+    let breath_pad = 0.15;
+    let total_source: f64 = recording_durations.iter().sum();
+    let mut source_ranges = Vec::new();
+
+    if let Some(first) = words.first() {
+        let first_start = f64::from(first.start);
+        if first_start >= min_gap {
+            let cut_end = (first_start - breath_pad).max(0.0);
+            if cut_end >= 0.2 {
+                source_ranges.push((0.0, cut_end));
+            }
+        }
+    }
+
+    let mut prev_max_end = f64::from(words[0].end);
+    for word in words.iter().skip(1) {
+        let start = f64::from(word.start);
+        let end = f64::from(word.end);
+        if start - prev_max_end >= min_gap {
+            let cut_start = prev_max_end + breath_pad;
+            let cut_end = start - breath_pad;
+            if cut_end - cut_start >= 0.2 {
+                source_ranges.push((cut_start, cut_end));
+            }
+        }
+        prev_max_end = prev_max_end.max(end);
+    }
+
+    if total_source - prev_max_end >= min_gap {
+        let cut_start = (prev_max_end + breath_pad).min(total_source);
+        if total_source - cut_start >= 0.2 {
+            source_ranges.push((cut_start, total_source));
+        }
+    }
+
+    let mut edited = Vec::new();
+    for (s, e) in merge_time_ranges(source_ranges) {
+        edited.extend(map_source_range_to_edited(
+            s,
+            e,
+            timeline,
+            recording_durations,
+        ));
+    }
+    merge_time_ranges(edited)
+}
+
+pub fn count_pii_tokens_in_captions(project: &ProjectConfiguration) -> usize {
+    let words = collect_source_words(project);
+    let mut count = 0;
+    for (index, word) in words.iter().enumerate() {
+        if is_pii_or_secret_token(&word.text) {
+            count += 1;
+            continue;
+        }
+        let token = normalize_word_token(&word.text);
+        if matches!(token.as_str(), "password" | "passcode" | "secret" | "ssn")
+            && words
+                .get(index + 1)
+                .is_some_and(|next| normalize_word_token(&next.text) == "is")
+            && words.get(index + 2).is_some()
+        {
+            count += 1;
+        }
+    }
+    count
+}
+
+pub fn redact_pii_in_captions_and_plan_masks(
+    project: &mut ProjectConfiguration,
+    recording_durations: &[f64],
+) -> Vec<(f64, f64)> {
+    let mut source_ranges = Vec::new();
+    if let Some(captions) = project.captions.as_mut() {
+        for segment in &mut captions.segments {
+            if segment.words.is_empty() {
+                segment.words = sync_caption_words_with_text(
+                    &segment.text,
+                    &[],
+                    f64::from(segment.start),
+                    f64::from(segment.end),
+                );
+            }
+            let mut redact_indices = Vec::new();
+            for (idx, word) in segment.words.iter().enumerate() {
+                if is_pii_or_secret_token(&word.text) {
+                    redact_indices.push(idx);
+                } else if matches!(
+                    normalize_word_token(&word.text).as_str(),
+                    "password" | "passcode" | "secret" | "ssn"
+                ) && segment
+                    .words
+                    .get(idx + 1)
+                    .is_some_and(|next| normalize_word_token(&next.text) == "is")
+                    && segment.words.get(idx + 2).is_some()
+                {
+                    redact_indices.push(idx + 2);
+                }
+            }
+            if !redact_indices.is_empty() {
+                for idx in redact_indices {
+                    if let Some(word) = segment.words.get_mut(idx) {
+                        source_ranges.push((
+                            (f64::from(word.start) - 0.25).max(0.0),
+                            f64::from(word.end) + 0.5,
+                        ));
+                        word.text = "[REDACTED]".to_string();
+                    }
+                }
+                segment.text = segment
+                    .words
+                    .iter()
+                    .map(|w| w.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+            }
+        }
+    }
+    let Some(timeline) = project.timeline.as_mut() else {
+        return Vec::new();
+    };
+    if let Some(captions) = project.captions.as_ref() {
+        timeline.caption_segments =
+            derive_caption_track_segments(&captions.segments, timeline, recording_durations);
+    }
+    let mut edited = Vec::new();
+    for (s, e) in merge_time_ranges(source_ranges) {
+        edited.extend(map_source_range_to_edited(
+            s,
+            e,
+            timeline,
+            recording_durations,
+        ));
+    }
+    merge_time_ranges(edited)
+}
+
+fn format_sop_timestamp(seconds: f64) -> String {
+    let total = seconds.max(0.0).floor() as u64;
+    let mins = total / 60;
+    let secs = total % 60;
+    format!("{mins:02}:{secs:02}")
+}
+
+pub fn generate_studio_sop_markdown(
+    project: &ProjectConfiguration,
+    clicks_by_clip: &[Vec<cap_project::CursorClickEvent>],
+    recording_durations: &[f64],
+    title: &str,
+) -> String {
+    let Some(timeline) = project.timeline.as_ref() else {
+        return format!("# {title} — Step-by-Step Guide\n\nNo timeline segments available.\n");
+    };
+    let holds = timeline.hold_windows();
+    let offsets = clip_timeline_offsets(timeline);
+    let mut edited_clicks: Vec<f64> = Vec::new();
+
+    for (segment, offset) in timeline.segments.iter().zip(offsets) {
+        if segment.timescale <= 0.0 || segment.end <= segment.start {
+            continue;
+        }
+        let Some(clicks) = clicks_by_clip.get(segment.recording_clip as usize) else {
+            continue;
+        };
+        for click in clicks {
+            if !click.down {
+                continue;
+            }
+            let src_sec = click.time_ms / 1000.0;
+            if src_sec < segment.start || src_sec > segment.end {
+                continue;
+            }
+            let eff = offset + (src_sec - segment.start) / segment.timescale;
+            let out_sec = crate::editor_edits::effective_to_output(&holds, eff);
+            if edited_clicks
+                .last()
+                .is_some_and(|prev_sec| (out_sec - *prev_sec).abs() < 1.2)
+            {
+                continue;
+            }
+            edited_clicks.push(out_sec);
+        }
+    }
+
+    let captions = if !timeline.caption_segments.is_empty() {
+        timeline.caption_segments.clone()
+    } else if let Some(c) = project.captions.as_ref() {
+        derive_caption_track_segments(&c.segments, timeline, recording_durations)
+    } else {
+        Vec::new()
+    };
+
+    let mut md = format!(
+        "# {title} — Step-by-Step SOP Guide\n\n_Generated automatically from Cap Studio cursor clicks and transcript._\n\n"
+    );
+
+    if !edited_clicks.is_empty() {
+        for (idx, click_sec) in edited_clicks.iter().enumerate() {
+            let step_num = idx + 1;
+            let ts = format_sop_timestamp(*click_sec);
+            let spoken = captions
+                .iter()
+                .filter(|seg| seg.end >= *click_sec - 1.5 && seg.start <= *click_sec + 3.0)
+                .map(|seg| seg.text.trim())
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let instruction = if spoken.is_empty() {
+                format!("Perform click action at {ts}.")
+            } else {
+                spoken
+            };
+            md.push_str(&format!(
+                "### Step {step_num} (`{ts}`)\n- **Action**: {instruction}\n- **Keyframe**: Snapshot at `{ts}`\n\n"
+            ));
+        }
+    } else if !captions.is_empty() {
+        for (idx, seg) in captions.iter().enumerate() {
+            let step_num = idx + 1;
+            let ts = format_sop_timestamp(seg.start);
+            md.push_str(&format!(
+                "### Step {step_num} (`{ts}`)\n- {}\n\n",
+                seg.text.trim()
+            ));
+        }
+    } else {
+        md.push_str("1. Record or generate captions to populate step-by-step instructions.\n");
+    }
+
+    md
+}
+
+pub fn generate_youtube_chapters_and_social_post(
+    project: &ProjectConfiguration,
+    clicks_by_clip: &[Vec<cap_project::CursorClickEvent>],
+    recording_durations: &[f64],
+    title: &str,
+) -> String {
+    let Some(timeline) = project.timeline.as_ref() else {
+        return format!("00:00 {title}\n");
+    };
+    let captions = if !timeline.caption_segments.is_empty() {
+        timeline.caption_segments.clone()
+    } else if let Some(c) = project.captions.as_ref() {
+        derive_caption_track_segments(&c.segments, timeline, recording_durations)
+    } else {
+        Vec::new()
+    };
+
+    let mut chapters: Vec<(u64, String)> = vec![(0, "Introduction & Overview".to_string())];
+    let mut last_chapter_sec = 0u64;
+
+    if !captions.is_empty() {
+        for seg in &captions {
+            let sec = seg.start.max(0.0).floor() as u64;
+            if sec >= last_chapter_sec + 12 {
+                let words: Vec<&str> = seg.text.split_whitespace().take(6).collect();
+                if !words.is_empty() {
+                    let heading = words
+                        .join(" ")
+                        .trim_matches(|c: char| c.is_ascii_punctuation())
+                        .to_string();
+                    if !heading.is_empty() {
+                        chapters.push((sec, heading));
+                        last_chapter_sec = sec;
+                    }
+                }
+            }
+        }
+    } else {
+        let holds = timeline.hold_windows();
+        let offsets = clip_timeline_offsets(timeline);
+        for (segment, offset) in timeline.segments.iter().zip(offsets) {
+            if segment.timescale <= 0.0 || segment.end <= segment.start {
+                continue;
+            }
+            if let Some(clicks) = clicks_by_clip.get(segment.recording_clip as usize) {
+                for click in clicks {
+                    if !click.down {
+                        continue;
+                    }
+                    let src_sec = click.time_ms / 1000.0;
+                    if src_sec >= segment.start && src_sec <= segment.end {
+                        let eff = offset + (src_sec - segment.start) / segment.timescale;
+                        let out_sec = crate::editor_edits::effective_to_output(&holds, eff)
+                            .max(0.0)
+                            .floor() as u64;
+                        if out_sec >= last_chapter_sec + 10 {
+                            chapters.push((out_sec, format!("Walkthrough Step {}", chapters.len())));
+                            last_chapter_sec = out_sec;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut out = format!("=== YouTube Chapters: {title} ===\n");
+    for (sec, label) in &chapters {
+        let ts = format_sop_timestamp(*sec as f64);
+        out.push_str(&format!("{ts} {label}\n"));
+    }
+
+    out.push_str(&format!(
+        "\n=== Social Post (LinkedIn / X): {title} ===\nHere is a quick walkthrough of {title}:\n"
+    ));
+    for (sec, label) in chapters.iter().take(6) {
+        let ts = format_sop_timestamp(*sec as f64);
+        out.push_str(&format!("• [{ts}] {label}\n"));
+    }
+    out
+}
+
 #[cfg(test)]
 mod verify_tests;
 
@@ -2744,5 +3317,75 @@ mod tests {
             "Caption model not found. Please download it first"
         );
         assert_eq!(caption_generation_error_message("boom"), "boom");
+    }
+
+    #[test]
+    fn studio_plans_filler_and_silence_cuts_and_redacts_pii_and_builds_sop() {
+        let mut project: ProjectConfiguration = serde_json::from_value(serde_json::json!({
+            "timeline": {
+                "segments": [
+                    { "recordingSegment": 0, "timescale": 1.0, "start": 0.0, "end": 12.0 }
+                ],
+                "zoomSegments": []
+            }
+        }))
+        .unwrap();
+
+        apply_caption_result(
+            &mut project,
+            vec![caption(
+                "seg-1",
+                0.5,
+                9.5,
+                &[
+                    ("Um,", 0.5, 0.9),
+                    ("click", 1.0, 1.4),
+                    ("login", 1.5, 2.0),
+                    ("admin@cap.so", 5.0, 6.0),
+                    ("uh", 8.5, 9.0),
+                ],
+            )],
+            &[12.0],
+            12.0,
+        );
+
+        let filler_cuts = plan_filler_word_cuts(&project, &[12.0]);
+        assert_eq!(filler_cuts.len(), 2);
+
+        let silence_cuts = plan_silence_cuts(&project, &[12.0], 1.0);
+        assert!(!silence_cuts.is_empty());
+
+        assert_eq!(count_pii_tokens_in_captions(&project), 1);
+        let pii_masks = redact_pii_in_captions_and_plan_masks(&mut project, &[12.0]);
+        assert_eq!(pii_masks.len(), 1);
+        assert!(
+            project
+                .captions
+                .as_ref()
+                .unwrap()
+                .segments[0]
+                .text
+                .contains("[REDACTED]")
+        );
+
+        let sop = generate_studio_sop_markdown(
+            &project,
+            &[vec![cap_project::CursorClickEvent {
+                active_modifiers: Vec::new(),
+                cursor_num: 0,
+                cursor_id: "0".to_string(),
+                time_ms: 1200.0,
+                down: true,
+            }]],
+            &[12.0],
+            "Login Flow",
+        );
+        assert!(sop.contains("Login Flow — Step-by-Step SOP Guide"));
+        assert!(sop.contains("Step 1"));
+
+        let applied =
+            crate::editor_edits::cut_output_time_ranges(&mut project, &[(8.4, 9.1)], &[12.0]);
+        assert_eq!(applied, 1);
+        assert!((project.timeline.as_ref().unwrap().duration() - 11.3).abs() < 0.05);
     }
 }

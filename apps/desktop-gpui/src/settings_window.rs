@@ -267,9 +267,6 @@ const INSTANT_RESOLUTION_TIERS: &[(u32, &str, &str)] = &[
     (3840, "4K", "The most detail. Best on a fast connection."),
 ];
 
-/// `FREE_INSTANT_MODE_MAX_RESOLUTION`.
-const FREE_INSTANT_MODE_MAX_RESOLUTION: u32 = 1280;
-
 #[derive(Clone, Copy)]
 enum InstantQualityNotice {
     SaveFailed,
@@ -2141,24 +2138,110 @@ impl SettingsWindow {
     /// (three tab pills and the search field) and the bordered list, which is
     /// replaced wholesale by "No recordings found" when the library is empty.
     fn render_recordings(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
-        // `variant="gray" size="sm" class="h-[36px] px-3 gap-1.5"` --
-        // `importVideoFromPicker` (`recordings.tsx:192-215`), through this
-        // build's own remux pipeline.
-        let import = self
-            .button(
-                "recordings-import",
-                (ui::ButtonVariant::Gray, Some("icons/import.svg")),
-                "Import",
-                false,
-                cx,
-                |_, _, cx| crate::import::pick_and_import_video(cx),
+        let theme = self.theme;
+        let total_recordings = self.recordings.items.as_ref().map_or(0, Vec::len);
+        let total_bytes: u64 = self
+            .recordings
+            .items
+            .iter()
+            .flatten()
+            .map(|r| r.item.file_size_bytes)
+            .sum();
+        let active_dir = crate::recording::recordings_dir()
+            .to_string_lossy()
+            .to_string();
+
+        let header_actions = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(8.))
+            .child(
+                self.button(
+                    "recordings-open-active-folder",
+                    (ui::ButtonVariant::Gray, Some("icons/folder.svg")),
+                    "Open Folder",
+                    false,
+                    cx,
+                    |_, _, _| library::open_path(&crate::recording::recordings_dir()),
+                )
+                .height(px(36.)),
             )
-            .height(px(36.))
+            .child(
+                self.button(
+                    "recordings-import",
+                    (ui::ButtonVariant::Gray, Some("icons/import.svg")),
+                    "Import",
+                    false,
+                    cx,
+                    |_, _, cx| crate::import::pick_and_import_video(cx),
+                )
+                .height(px(36.)),
+            )
+            .when(total_recordings > 0, |this| {
+                this.child(
+                    self.button(
+                        "recordings-delete-all",
+                        (ui::ButtonVariant::Destructive, Some("icons/trash.svg")),
+                        "Delete All",
+                        false,
+                        cx,
+                        |this, window, cx| this.delete_all_recordings_clicked(window, cx),
+                    )
+                    .height(px(36.)),
+                )
+            })
             .into_any_element();
 
-        // `when={recordings.data && recordings.data.length > 0}`: an empty
-        // library and a scan still in flight take the same branch, because the
-        // route has no loading state of its own.
+        let storage_summary_banner = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(12.))
+            .px(px(12.))
+            .py(px(10.))
+            .rounded(px(8.))
+            .bg(theme.settings_card_bg())
+            .border_1()
+            .border_color(theme.settings_border())
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .min_w_0()
+                    .flex_1()
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(theme.settings_text())
+                            .child(format!(
+                                "Storage Used: {} across {} recording{}",
+                                library::format_file_size(total_bytes),
+                                total_recordings,
+                                if total_recordings == 1 { "" } else { "s" }
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(theme.settings_muted())
+                            .truncate()
+                            .child(format!("Location: {active_dir}")),
+                    ),
+            )
+            .child(self.button(
+                "recordings-choose-location",
+                (ui::ButtonVariant::Gray, None),
+                "Choose Folder…",
+                false,
+                cx,
+                |this, window, cx| this.choose_recordings_folder(window, cx),
+            ))
+            .into_any_element();
+
         let empty_library = self
             .recordings
             .items
@@ -2167,11 +2250,13 @@ impl SettingsWindow {
 
         let children = if empty_library {
             vec![
+                storage_summary_banner,
                 self.recordings_message("No recordings found")
                     .into_any_element(),
             ]
         } else {
             vec![
+                storage_summary_banner,
                 self.render_recordings_filters(cx).into_any_element(),
                 self.render_recordings_list(cx).into_any_element(),
             ]
@@ -2180,8 +2265,8 @@ impl SettingsWindow {
         vec![
             self.section(
                 "Recordings",
-                Some("Manage your recordings and perform actions."),
-                Some(import),
+                Some("Manage your recordings, storage location, and disk space."),
+                Some(header_actions),
                 children,
             )
             .into_any_element(),
@@ -2766,6 +2851,12 @@ impl SettingsWindow {
             .when(item.clip_count > 1, |this| {
                 this.child(pill(theme.settings_fill()).child(format!("{} clips", item.clip_count)))
             })
+            .when(item.file_size_bytes > 0, |this| {
+                this.child(
+                    pill(theme.settings_fill())
+                        .child(library::format_file_size(item.file_size_bytes)),
+                )
+            })
             .when(item.status.is_in_progress(), |this| {
                 this.child(
                     pill(Hsla::from(theme.blue_500))
@@ -2878,6 +2969,19 @@ impl SettingsWindow {
             }
         }
 
+        let copy_path = path.clone();
+        actions = actions.child(self.row_button(
+            ("recording-copy-path", index),
+            "icons/copy.svg",
+            "Copy file path",
+            false,
+            cx,
+            move |_this, _window, cx| {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                    copy_path.to_string_lossy().to_string(),
+                ));
+            },
+        ));
         let folder_path = path.clone();
         actions = actions.child(self.row_button(
             ("recording-folder", index),
@@ -3156,15 +3260,11 @@ impl SettingsWindow {
     }
 
     fn effective_instant_resolution(&self) -> u32 {
-        if self.has_cap_pro {
-            self.settings.instant_mode_max_resolution
-        } else {
-            FREE_INSTANT_MODE_MAX_RESOLUTION
-        }
+        self.settings.instant_mode_max_resolution
     }
 
-    fn instant_resolution_locked(&self, resolution: u32) -> bool {
-        !self.has_cap_pro && resolution > FREE_INSTANT_MODE_MAX_RESOLUTION
+    fn instant_resolution_locked(&self, _resolution: u32) -> bool {
+        false
     }
 
     fn render_instant_quality(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3175,21 +3275,11 @@ impl SettingsWindow {
             .find(|(value, _, _)| *value == effective)
             .map(|(_, _, summary)| *summary)
             .unwrap_or_default();
-        let description = if self.has_cap_pro {
-            summary.to_string()
-        } else {
-            "720p on the free plan. Cap Pro records up to 4K.".to_string()
-        };
+        let description = summary.to_string();
 
         let options = INSTANT_RESOLUTION_TIERS
             .iter()
-            .map(|(value, label, _)| {
-                let mut option = ui::SegmentOption::new(*label, *value == effective);
-                if self.instant_resolution_locked(*value) {
-                    option.icon = Some("icons/lock.svg".into());
-                }
-                option
-            })
+            .map(|(value, label, _)| ui::SegmentOption::new(*label, *value == effective))
             .collect();
 
         let resolution = div()
@@ -3627,10 +3717,22 @@ impl SettingsWindow {
         let theme = self.theme;
         let path = self.settings.recordings_path.clone();
         let is_custom = path.is_some();
-        // `Default (Application Support)`
-        let display = path.unwrap_or_else(|| "Default (Application Support)".to_string());
+        let display = path.unwrap_or_else(|| {
+            format!(
+                "Default ({})",
+                crate::recording::recordings_dir().display()
+            )
+        });
 
         let mut actions = div().flex().flex_row().justify_end().gap(px(8.));
+        actions = actions.child(self.button(
+            "recordings-open-finder",
+            (ui::ButtonVariant::Gray, Some("icons/folder.svg")),
+            "Open Folder in Finder",
+            false,
+            cx,
+            |_, _, _| library::open_path(&crate::recording::recordings_dir()),
+        ));
         if is_custom {
             actions = actions.child(self.button(
                 "recordings-reset",
@@ -3641,40 +3743,25 @@ impl SettingsWindow {
                 |this, _window, cx| {
                     this.settings.recordings_path = None;
                     this.write("recordingsPath", Value::Null, cx);
+                    this.write("customRecordingsPath", Value::Null, cx);
                 },
             ));
         }
         actions = actions.child(self.button(
             "recordings-pick",
             (ui::ButtonVariant::Dark, None),
-            "Choose Folder",
+            "Choose Folder…",
             false,
             cx,
-            |_, window, cx| {
-                // `commands.pickRecordingsFolder()` opens an NSOpenPanel in
-                // directory mode; gpui wraps the same panel.
-                let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
-                    files: false,
-                    directories: true,
-                    multiple: false,
-                    prompt: None,
-                });
-                cx.spawn_in(window, async move |this, cx| {
-                    let Ok(Ok(Some(paths))) = paths.await else {
-                        return;
-                    };
-                    let Some(path) = paths.into_iter().next() else {
-                        return;
-                    };
-                    this.update(cx, |this, cx| {
-                        let path = path.to_string_lossy().to_string();
-                        this.settings.recordings_path = Some(path.clone());
-                        this.write("recordingsPath", Value::String(path), cx);
-                    })
-                    .ok();
-                })
-                .detach();
-            },
+            |this, window, cx| this.choose_recordings_folder(window, cx),
+        ));
+        actions = actions.child(self.button(
+            "storage-delete-all-recordings",
+            (ui::ButtonVariant::Destructive, Some("icons/trash.svg")),
+            "Delete All Local Recordings",
+            false,
+            cx,
+            |this, window, cx| this.delete_all_recordings_clicked(window, cx),
         ));
 
         self.section(
@@ -3689,8 +3776,6 @@ impl SettingsWindow {
                             .flex_col()
                             .gap(px(12.))
                             .child(
-                                // `flex items-center gap-2 px-3 py-2 rounded-lg
-                                //  bg-gray-3 border border-gray-4 min-w-0`
                                 div()
                                     .flex()
                                     .flex_row()
@@ -3717,6 +3802,74 @@ impl SettingsWindow {
                     .into_any_element(),
             ],
         )
+    }
+
+    fn choose_recordings_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: None,
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            this.update_in(cx, |this, window, cx| {
+                let next_path = path.to_string_lossy().to_string();
+                if let Some(prev) = this.settings.recordings_path.clone()
+                    && !this.settings.previous_recordings_paths.contains(&prev)
+                {
+                    this.settings.previous_recordings_paths.push(prev);
+                    let arr = Value::Array(
+                        this.settings
+                            .previous_recordings_paths
+                            .iter()
+                            .cloned()
+                            .map(Value::String)
+                            .collect(),
+                    );
+                    this.write("previousRecordingsPaths", arr, cx);
+                }
+                this.settings.recordings_path = Some(next_path.clone());
+                this.write("recordingsPath", Value::String(next_path.clone()), cx);
+                this.write("customRecordingsPath", Value::String(next_path), cx);
+                if this.page == Page::Recordings {
+                    this.refresh_recordings(window, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn delete_all_recordings_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| {
+            let confirmed = crate::platform::confirm_dialog(
+                "Delete All Local Recordings",
+                "Are you sure you want to permanently delete all existing recordings? This action cannot be undone.",
+                "Delete All",
+                "Cancel",
+                true,
+            );
+            if !confirmed {
+                return;
+            }
+            let _ = cx
+                .background_executor()
+                .spawn(async move { library::delete_all_recordings() })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.recordings.items = Some(Vec::new());
+                this.refresh_recordings(window, cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// `DefaultProjectNameCard` -- `defaultProjectNameTemplate`.
@@ -4779,6 +4932,7 @@ mod tests {
             sharing: None,
             sort_time_millis: 0.,
             thumbnail: None,
+            file_size_bytes: 0,
         }
     }
 

@@ -50,11 +50,21 @@ Additionally, `unused_must_use = "deny"` applies to all Rust code: every `Result
 
 ## Project Structure & Modules
 - Turborepo monorepo:
-  - `apps/desktop-gpui` (GPUI, ships as Cap), `apps/desktop` (Tauri v2 + SolidStart; last shipped in 0.6.0, kept for the dev harness), `apps/web` (Next.js), `apps/cli` (Rust CLI).
-  - `packages/*` shared libs (e.g., `database`, `ui`, `ui-solid`, `utils`, `web-*`).
-  - `crates/*` Rust media/recording/rendering/camera crates.
+  - `apps/desktop-gpui` (GPUI, ships as Cap; standalone Cargo workspace), `apps/desktop` (Tauri v2 + SolidStart; last shipped in 0.6.0, kept for the dev harness), `apps/web` (Next.js 16 + Effect-TS), `apps/media-server` (Bun + Hono + `capcodec`), `apps/render-farm` (cloud renderer), `apps/cli` (Rust CLI), `apps/mobile` (Expo), `apps/chrome-extension`.
+  - `packages/*` shared libs (e.g., `database`, `ui`, `ui-solid`, `utils`, `s3`, `env`, `recorder-core`, `sdk-*`, `web-*`).
+  - `crates/*` Rust media/recording/rendering/camera/audio/encoding/muxing/verification crates.
+  - `capcodec/` custom Tov H.264 screen encoder snapshot & bundle; `vendor/` patched Rust dependencies (`wgpu-hal`, `tao`, `tauri-nspanel`).
   - `scripts/*`, `infra/`, and `packages/local-docker/` for tooling and local services.
 - Marketing and lifecycle emails (copy, Loops journeys and campaigns, the email catalogue and voice guide) and their Loops tooling live in the private repo [CapSoftware/cap-marketing](https://github.com/CapSoftware/cap-marketing). View and edit them there. This repo keeps only the runtime profile sync in `packages/database/loops/` (with its tests and runners in `scripts/loops/`) and the transactional emails in `packages/database/emails/`.
+
+## Repository Memory & Deep Architectural Guides (`memory/`)
+Persistent architectural memory for **Codex**, **Claude Code**, and **Gemini CLI** lives in [`memory/MEMORY.md`](./memory/MEMORY.md). Always consult these files first before running broad file/grep searches so zero tokens or turns are wasted on redundant discovery:
+- [`memory/MEMORY.md`](./memory/MEMORY.md) — Master memory index, fast file-lookup cheat sheet, and cross-agent compatibility map.
+- [`memory/architecture.md`](./memory/architecture.md) — Complete monorepo map (`apps/*`, `packages/*`, `crates/*`, `capcodec/`, `vendor/`, `infra/`), directory tree, and licensing boundaries (MIT for `cap-camera*`/`scap-*`, AGPLv3 for the rest).
+- [`memory/rust-media-engine.md`](./memory/rust-media-engine.md) — `crates/*` deep dive: `cap-recording` actors, Instant vs Studio modes, `scap-*` capture, `cap-rendering` (`wgpu` shader layers), hardware encoders, `cap-muxer` crash resilience, and `cap-verify` deterministic testing.
+- [`memory/desktop-apps.md`](./memory/desktop-apps.md) — `apps/desktop-gpui` (shipping native GPUI client, standalone Cargo workspace, `kernels/` opt-level split, complete module map) vs `apps/desktop` (Tauri v2 + SolidStart dev harness).
+- [`memory/web-and-backend.md`](./memory/web-and-backend.md) — `apps/web` (Next.js 16), Effect-TS (`@effect/platform`, `@effect/rpc`, `packages/web-backend` Layers), `@cap/database` (all 47 Drizzle/MySQL tables), `apps/media-server`, and Tinybird analytics.
+- [`memory/workflows-and-invariants.md`](./memory/workflows-and-invariants.md) — Pre-generation invariants, Clippy/Biome rules, scoped post-edit verification gates, unrestricted web search/allowlist policy, and universal multi-agent memory bootstrap standards.
 
 ## Build, Test, Develop
 - Install: `bun install`; setup: `bun run env-setup` then `bun run cap-setup`.
@@ -115,3 +125,19 @@ Before declaring any task complete, the agent should run the fastest useful chec
 - **Rust**: `cargo fmt --all` and `cargo check -p <crate>` for the touched crate. Add `--all-targets`, `--workspace`, or `cargo clippy -p <crate> --all-targets -- -D warnings` only for explicit requests, CI/PR final validation, or changes that need broader coverage.
 - **TS / JS / JSON / CSS / MD**: prefer scoped checks such as `bun run biome check --write <files>`. Use full `bun run format`, `bun run lint`, and `bun run typecheck` only when explicitly requested or when the change is broad enough to justify it.
 - If a scoped check fails, fix the violation in the source (do NOT suppress with `#[allow(...)]`, `// biome-ignore`, or `any` unless explicitly approved). The Pre-Generation Invariants show the correct form for every denied lint.
+
+## Mandatory Git Push & GitHub Actions / Pages Engineering Rules
+
+### 1. Git Push & SSH Remote Invariant (Mandatory)
+- **Always push with standard git over SSH**: Always execute `git push origin <branch>` (e.g. `git push origin main`).
+- **Zero `gh auth` Friction**: Authentication on this machine is pre-configured via SSH (`git@github.com:...`). Never run `gh auth login`, `gh auth status`, or rely on GitHub CLI tokens to push code. Directly commit and push. Only investigate auth if `git push` returns an actual SSH permission error.
+- **Ensure SSH Remote**: If any repo remote URL starts with HTTPS (`https://github.com/...`), immediately convert it to SSH: `git remote set-url origin git@github.com:<org-or-user>/<repo>.git`.
+
+### 2. GitHub Actions & GitHub Pages Deployment Standards
+- **Pages Source Setting**: In repo Settings → Pages, ensure Source is set to "GitHub Actions" when using `.github/workflows/pages.yml`.
+- **LTS Runner & Modern Actions**: Pin `runs-on: ubuntu-24.04` and use `actions/configure-pages@v6`, `actions/upload-pages-artifact@v5`, `actions/deploy-pages@v5`.
+- **Include `.nojekyll`**: Always add `run: touch <dist-dir>/.nojekyll` before artifact upload to prevent Jekyll from omitting assets or dotfolders.
+- **Fast Deploy Pipeline (< 1 min)**: Separate deployment from heavy testing. Never install full browser packages (`npx playwright install --with-deps`) or run large E2E smoke suites in `pages.yml`. Keep heavy test suites in PR CI (`ci.yml`).
+- **Clean CI Runner Test Readiness**: When tests depend on generated manifests or catalogs, configure `npm test` to emit them first so a freshly cloned CI runner never crashes with `ERR_MODULE_NOT_FOUND`.
+- **Root-Anchored `.gitignore`**: Always use leading slashes for test and build artifact ignore rules (e.g. `/coverage/`, not `coverage/`) so valid source directories (such as `src/features/coverage/`) are never ignored by Git.
+

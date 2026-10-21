@@ -14,6 +14,51 @@ type BlurOverlayProps = {
 
 const OVERLAY_ROOT_ID = "cap-extension-recorder-overlay";
 
+const SENSITIVE_INPUT_SELECTOR = [
+	'input[type="password"]',
+	'input[type="email"]',
+	'input[name*="secret" i]',
+	'input[name*="token" i]',
+	'input[name*="api_key" i]',
+	'input[name*="apikey" i]',
+	'input[autocomplete*="cc-"]',
+	"[data-sensitive]",
+].join(",");
+
+const SENSITIVE_TEXT_REGEX =
+	/\b([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|sk-[a-z0-9_-]{12,}|pk_(?:live|test)_[a-z0-9]{12,}|gh[pousr]_[a-z0-9]{12,}|akia[0-9a-z]{12,})\b/i;
+
+export function autoBlurSensitiveDomElements(root: ParentNode = document) {
+	let count = 0;
+	const applyBlur = (el: HTMLElement) => {
+		if (el.dataset.capBlurred === "true" || el.closest(`#${OVERLAY_ROOT_ID}`)) {
+			return;
+		}
+		el.dataset.capOrigFilter = el.style.filter || "";
+		el.style.setProperty("filter", "blur(12px)", "important");
+		el.style.setProperty("user-select", "none", "important");
+		el.dataset.capBlurred = "true";
+		count++;
+	};
+
+	for (const el of Array.from(
+		root.querySelectorAll<HTMLElement>(SENSITIVE_INPUT_SELECTOR),
+	)) {
+		applyBlur(el);
+	}
+
+	for (const el of Array.from(
+		root.querySelectorAll<HTMLElement>("code, pre, span, td, p"),
+	)) {
+		if (el.children.length === 0 && el.textContent) {
+			if (SENSITIVE_TEXT_REGEX.test(el.textContent)) {
+				applyBlur(el);
+			}
+		}
+	}
+	return count;
+}
+
 export function BlurOverlay({ active, onDone }: BlurOverlayProps) {
 	const [highlightRect, setHighlightRect] = useState<HighlightRect | null>(
 		null,
@@ -25,6 +70,7 @@ export function BlurOverlay({ active, onDone }: BlurOverlayProps) {
 			setHighlightRect(null);
 			return;
 		}
+		autoBlurSensitiveDomElements(document);
 
 		const handlePointerMove = (event: PointerEvent) => {
 			if (rafRef.current !== null) return;

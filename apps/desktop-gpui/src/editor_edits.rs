@@ -2753,6 +2753,120 @@ pub fn merge_clip_segments(
     Some(kept)
 }
 
+pub fn cut_output_time_ranges(
+    project: &mut ProjectConfiguration,
+    ranges: &[(f64, f64)],
+    recording_durations: &[f64],
+) -> usize {
+    let Some(timeline) = project.timeline.as_mut() else {
+        return 0;
+    };
+    let mut merged: Vec<(f64, f64)> = ranges
+        .iter()
+        .copied()
+        .filter(|(s, e)| s.is_finite() && e.is_finite() && *e - *s >= 0.04)
+        .collect();
+    merged.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut coalesced: Vec<(f64, f64)> = Vec::with_capacity(merged.len());
+    for (s, e) in merged {
+        if let Some(last) = coalesced.last_mut()
+            && s <= last.1 + 0.04
+        {
+            last.1 = last.1.max(e);
+        } else {
+            coalesced.push((s, e));
+        }
+    }
+
+    let mut applied = 0;
+    for &(raw_start, raw_end) in coalesced.iter().rev() {
+        let total = timeline.duration();
+        let cut_start = raw_start.clamp(0.0, total);
+        let cut_end = raw_end.clamp(0.0, total);
+        if cut_end - cut_start < 0.04 || total - (cut_end - cut_start) < 0.2 {
+            continue;
+        }
+        if cut_end < total - 0.02 {
+            split_clip_segment(timeline, cut_end, None);
+        }
+        if cut_start > 0.02 {
+            split_clip_segment(timeline, cut_start, None);
+        }
+
+        let holds = timeline.hold_windows();
+        let offsets = editor_timeline::clip_timeline_offsets(timeline);
+        let mut to_delete = Vec::new();
+        for (idx, seg) in timeline.segments.iter().enumerate() {
+            let eff_start = offsets.get(idx).copied().unwrap_or(0.0);
+            let eff_end = eff_start + seg.duration();
+            let out_start = effective_to_output(&holds, eff_start);
+            let out_end = effective_to_output(&holds, eff_end);
+            let mid = (out_start + out_end) * 0.5;
+            if mid >= cut_start - 0.02 && mid <= cut_end + 0.02 {
+                to_delete.push(idx);
+            }
+        }
+        if !to_delete.is_empty()
+            && to_delete.len() < timeline.segments.len()
+            && delete_clip_segments(timeline, &to_delete)
+        {
+            applied += 1;
+        }
+    }
+
+    if applied > 0
+        && let (Some(timeline), Some(captions)) =
+            (project.timeline.as_mut(), project.captions.as_ref())
+    {
+        timeline.caption_segments = crate::transcription::derive_caption_track_segments(
+            &captions.segments,
+            timeline,
+            recording_durations,
+        );
+    }
+    applied
+}
+
+pub fn insert_auto_pii_masks(
+    timeline: &mut TimelineConfiguration,
+    ranges: &[(f64, f64)],
+    _clicks_by_clip: &[Vec<cap_project::CursorClickEvent>],
+) -> usize {
+    let total = timeline.duration();
+    if total <= 0.0 {
+        return 0;
+    }
+
+    let target_ranges: Vec<(f64, f64)> = if ranges.is_empty() {
+        vec![(0.0, total.min(5.0).max(1.0))]
+    } else {
+        ranges.to_vec()
+    };
+
+    let next_track = timeline
+        .mask_segments
+        .iter()
+        .map(|m| m.track)
+        .max()
+        .map_or(0, |t| t + 1);
+
+    let mut count = 0;
+    for (start, end) in target_ranges {
+        let clamped_start = start.clamp(0.0, total);
+        let clamped_end = end.clamp(clamped_start + 0.5, total);
+        if clamped_end <= clamped_start {
+            continue;
+        }
+        let mut mask = default_mask_segment(clamped_start, clamped_end, next_track);
+        mask.center = cap_project::XY::new(0.5, 0.35);
+        mask.size = cap_project::XY::new(0.42, 0.16);
+        mask.feather = 0.15;
+        insert_mask_segment(timeline, mask);
+        count += 1;
+    }
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

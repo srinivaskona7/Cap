@@ -23,6 +23,7 @@ import {
 	UploadPlaceholderCard,
 	WebRecorderDialog,
 } from "./components";
+import { AskWorkspaceBar } from "./components/AskWorkspaceBar";
 import { CapCard } from "./components/CapCard/CapCard";
 import { CapPagination } from "./components/CapPagination";
 import { EmptyCapState } from "./components/EmptyCapState";
@@ -271,6 +272,7 @@ export const Caps = ({
 					className={`${CHROME_EXTENSION_BUTTON_CLASS} font-medium`}
 				/>
 			</div>
+			<AskWorkspaceBar />
 			<FoldersSection
 				title="Folders"
 				scope="personal"

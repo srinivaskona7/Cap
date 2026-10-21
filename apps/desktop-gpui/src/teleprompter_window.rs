@@ -319,6 +319,11 @@ impl TeleprompterWindow {
         window.focus(&focus, cx);
     }
 
+    pub fn close(&mut self, window: &mut Window) {
+        self.save.borrow_mut().flush();
+        window.remove_window();
+    }
+
     /// `clamp(state().windowOpacityPercent, 45, 100) / 100`, for the initial
     /// `setTeleprompterWindowOpacity` the load effect fires.
     pub fn window_alpha(&self) -> f64 {

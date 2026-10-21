@@ -2749,6 +2749,18 @@ impl ScreenshotEditorWindow {
                     }),
                 )
             }))
+            .child(tool_button(
+                &theme,
+                "screenshot-auto-redact-pii",
+                "icons/eye-off.svg",
+                "Auto-Redact PII",
+                "B",
+                false,
+                cx.listener(|this, _, window, cx| {
+                    cx.stop_propagation();
+                    this.auto_redact_screenshot_pii(window, cx);
+                }),
+            ))
     }
 
     /// `Header.tsx:109-216`.

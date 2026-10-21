@@ -66,6 +66,18 @@ export type FillerCutPlan = {
 	skippedCount: number;
 };
 
+export type SilenceCutPlan = {
+	ranges: TranscriptCutPlan[];
+	silenceCount: number;
+	totalSavedMs: number;
+};
+
+export type PiiCutPlan = {
+	ranges: TranscriptCutPlan[];
+	piiCount: number;
+	wordIds: Set<string>;
+};
+
 export type AssemblyAIEditWord = {
 	text?: unknown;
 	start?: unknown;
@@ -113,7 +125,7 @@ function normalizeToken(text: string) {
 
 function isExactFillerToken(token: string) {
 	return (
-		/^u+m+$/.test(token) ||
+		/^u+h*m+$/.test(token) ||
 		/^u+h+$/.test(token) ||
 		/^e+rm+$/.test(token) ||
 		token === "er" ||
@@ -645,6 +657,180 @@ export function planFillerCuts(
 		ranges: mergedRanges,
 		fillerCount: ranges.length + skippedCount,
 		skippedCount,
+	};
+}
+
+const DEFAULT_MIN_SILENCE_MS = 1200;
+const DEFAULT_SILENCE_PADDING_MS = 200;
+
+export function planSilenceCuts(
+	words: readonly EditTranscriptWord[],
+	durationMs: number,
+	options?: { minSilenceMs?: number; breathPaddingMs?: number },
+): SilenceCutPlan {
+	const minSilenceMs = options?.minSilenceMs ?? DEFAULT_MIN_SILENCE_MS;
+	const breathPaddingMs = options?.breathPaddingMs ?? DEFAULT_SILENCE_PADDING_MS;
+	if (!Number.isFinite(durationMs) || durationMs <= 0 || words.length === 0) {
+		return { ranges: [], silenceCount: 0, totalSavedMs: 0 };
+	}
+
+	const rawRanges: TranscriptCutPlan[] = [];
+	const firstWord = words[0];
+	if (firstWord && firstWord.startMs >= minSilenceMs) {
+		const cutEnd = Math.max(0, firstWord.startMs - breathPaddingMs);
+		if (cutEnd >= MIN_PLAYABLE_DURATION_MS) {
+			rawRanges.push({
+				startMs: 0,
+				endMs: cutEnd,
+				safe: true,
+				reason: null,
+			});
+		}
+	}
+
+	let previousMaxEnd = firstWord?.endMs ?? 0;
+	for (let index = 1; index < words.length; index++) {
+		const currentWord = words[index];
+		if (!currentWord) continue;
+		const gapMs = currentWord.startMs - previousMaxEnd;
+		if (gapMs >= minSilenceMs) {
+			const cutStart = previousMaxEnd + breathPaddingMs;
+			const cutEnd = currentWord.startMs - breathPaddingMs;
+			if (cutEnd - cutStart >= MIN_PLAYABLE_DURATION_MS) {
+				rawRanges.push({
+					startMs: clampMilliseconds(cutStart, durationMs),
+					endMs: clampMilliseconds(cutEnd, durationMs),
+					safe: true,
+					reason: null,
+				});
+			}
+		}
+		previousMaxEnd = Math.max(previousMaxEnd, currentWord.endMs);
+	}
+
+	if (durationMs - previousMaxEnd >= minSilenceMs) {
+		const cutStart = Math.min(durationMs, previousMaxEnd + breathPaddingMs);
+		if (durationMs - cutStart >= MIN_PLAYABLE_DURATION_MS) {
+			rawRanges.push({
+				startMs: cutStart,
+				endMs: durationMs,
+				safe: true,
+				reason: null,
+			});
+		}
+	}
+
+	const mergedRanges: TranscriptCutPlan[] = [];
+	for (const range of rawRanges) {
+		const previous = mergedRanges.at(-1);
+		if (previous && range.startMs <= previous.endMs) {
+			previous.endMs = Math.max(previous.endMs, range.endMs);
+		} else {
+			mergedRanges.push({ ...range });
+		}
+	}
+
+	const totalSavedMs = mergedRanges.reduce(
+		(total, range) => total + (range.endMs - range.startMs),
+		0,
+	);
+	if (durationMs - totalSavedMs < MIN_PLAYABLE_DURATION_MS) {
+		return { ranges: [], silenceCount: 0, totalSavedMs: 0 };
+	}
+
+	return {
+		ranges: mergedRanges,
+		silenceCount: mergedRanges.length,
+		totalSavedMs,
+	};
+}
+
+const EMAIL_TOKEN_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+const SECRET_PREFIX_PATTERN =
+	/^(sk-[a-z0-9_-]{8,}|pk_(live|test)_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|github_pat_[a-z0-9_]{8,}|xox[baprs]-[a-z0-9-]{8,}|akia[0-9a-z]{12,}|aiza[0-9a-z_-]{16,}|eyj[a-z0-9_-]{10,}\.[a-z0-9_-]{10,})/i;
+const SSN_OR_CARD_PATTERN = /^(?:\d{3}-\d{2}-\d{4}|(?:\d[ -]?){13,19})$/;
+const SENSITIVE_CONTEXT_TRIGGERS = new Set([
+	"password",
+	"passcode",
+	"secret",
+	"ssn",
+	"pin",
+]);
+
+export function isPiiToken(rawText: string) {
+	const cleaned = rawText
+		.trim()
+		.replace(/^[,.;:!?()"'`[\]{}]+|[,.;:!?()"'`[\]{}]+$/g, "");
+	if (!cleaned) return false;
+	return (
+		EMAIL_TOKEN_PATTERN.test(cleaned) ||
+		SECRET_PREFIX_PATTERN.test(cleaned) ||
+		SSN_OR_CARD_PATTERN.test(cleaned)
+	);
+}
+
+export function detectPiiWordIndices(words: readonly EditTranscriptWord[]) {
+	const indices = new Set<number>();
+	for (let index = 0; index < words.length; index++) {
+		const word = words[index];
+		if (!word) continue;
+		if (isPiiToken(word.text)) {
+			indices.add(index);
+			continue;
+		}
+		const token = normalizeToken(word.text);
+		if (SENSITIVE_CONTEXT_TRIGGERS.has(token)) {
+			const nextOne = words[index + 1];
+			const nextTwo = words[index + 2];
+			const nextOneToken = nextOne ? normalizeToken(nextOne.text) : "";
+			if (nextOneToken === "is" && nextTwo) {
+				indices.add(index + 2);
+			}
+		}
+	}
+	return indices;
+}
+
+export function planPiiCuts(
+	words: readonly EditTranscriptWord[],
+	durationMs: number,
+): PiiCutPlan {
+	const piiIndices = detectPiiWordIndices(words);
+	const wordIds = new Set<string>();
+	const ranges: TranscriptCutPlan[] = [];
+
+	for (const index of piiIndices) {
+		const word = words[index];
+		if (!word) continue;
+		wordIds.add(word.id);
+		const plan = planTranscriptCut(words, index, index, durationMs);
+		if (plan?.safe) {
+			ranges.push(plan);
+		}
+	}
+
+	const mergedRanges: TranscriptCutPlan[] = [];
+	for (const range of ranges) {
+		const previous = mergedRanges.at(-1);
+		if (previous && range.startMs <= previous.endMs) {
+			previous.endMs = Math.max(previous.endMs, range.endMs);
+		} else {
+			mergedRanges.push({ ...range });
+		}
+	}
+
+	const totalDeletedMs = mergedRanges.reduce(
+		(total, range) => total + (range.endMs - range.startMs),
+		0,
+	);
+	if (durationMs - totalDeletedMs < MIN_PLAYABLE_DURATION_MS) {
+		return { ranges: [], piiCount: wordIds.size, wordIds };
+	}
+
+	return {
+		ranges: mergedRanges,
+		piiCount: mergedRanges.length,
+		wordIds,
 	};
 }
 

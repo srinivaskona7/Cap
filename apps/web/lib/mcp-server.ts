@@ -119,6 +119,40 @@ export const createCapMcpServer = (userId: User.UserId) => {
 			}
 		},
 	);
+	server.registerTool(
+		"caps_ask_workspace",
+		{
+			title: "Ask My Team's Videos (Cross-Workspace Semantic Search)",
+			description:
+				"Search across all owned and shared workspace Cap recordings by spoken transcript words, summaries, chapters, SOP steps, and on-screen OCR. Returns ranked video hits with timestamped deep-links and a synthesized answer.",
+			inputSchema: fromJsonSchema<{
+				query: string;
+				spaceId?: string;
+				limit?: number;
+			}>({
+				type: "object",
+				properties: {
+					query: { type: "string", minLength: 1, maxLength: 160 },
+					spaceId: { type: "string", maxLength: 128 },
+					limit: { type: "number", minimum: 1, maximum: 20 },
+				},
+				required: ["query"],
+				additionalProperties: false,
+			}),
+			annotations: {
+				...readOnly,
+				title: "Ask My Team's Videos (Cross-Workspace Semantic Search)",
+			},
+		},
+		async (input) => {
+			try {
+				const { searchWorkspaceMcpCaps } = await import("./mcp-data");
+				return result(await searchWorkspaceMcpCaps(userId, input));
+			} catch (error) {
+				return failure(error);
+			}
+		},
+	);
 	registerAppResource(server, "Cap recording card", cardUri, {}, async () => {
 		const { default: card } = await import("./mcp-card-html.json");
 		return {

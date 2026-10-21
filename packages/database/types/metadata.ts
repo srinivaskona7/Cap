@@ -103,6 +103,84 @@ export interface VideoMetadata {
 		state: "pending" | "accepted" | "rejected";
 		rawFileKey?: string;
 	};
+	sop?: VideoSopGuide;
+	bugReport?: VideoBugReportBundle;
+	retentionBuckets?: number[];
+	viewerSessions?: VideoViewerSession[];
+	watchAlertSettings?: VideoWatchAlertSettings;
+	ocrText?: string;
+}
+
+export interface VideoSopStep {
+	stepNumber: number;
+	title: string;
+	instruction: string;
+	timestampSeconds: number;
+	formattedTimestamp: string;
+	screenshotUrl: string;
+	clickTarget?: {
+		x: number;
+		y: number;
+	};
+}
+
+export interface VideoSopGuide {
+	title: string;
+	overview: string;
+	steps: VideoSopStep[];
+	markdown: string;
+	generatedAt: string;
+}
+
+export interface CapturedConsoleEntry {
+	timestampMs: number;
+	level: "log" | "warn" | "error";
+	message: string;
+	sourceUrl?: string;
+}
+
+export interface CapturedNetworkEntry {
+	timestampMs: number;
+	method: string;
+	url: string;
+	status: number;
+	durationMs: number;
+	failed: boolean;
+}
+
+export interface VideoBugReportBundle {
+	consoleLogs?: CapturedConsoleEntry[];
+	networkLogs?: CapturedNetworkEntry[];
+	environment?: {
+		userAgent?: string;
+		url?: string;
+		viewport?: string;
+		platform?: string;
+		recordedAt?: string;
+	};
+	cursorClicks?: {
+		timeMs: number;
+		x: number;
+		y: number;
+		label?: string;
+	}[];
+}
+
+export interface VideoViewerSession {
+	sessionId: string;
+	viewerEmail?: string | null;
+	viewerName?: string | null;
+	location?: string | null;
+	watchedBuckets: number[];
+	rewatchedBuckets: number[];
+	completionPercent: number;
+	lastWatchedAt: string;
+}
+
+export interface VideoWatchAlertSettings {
+	enabled: boolean;
+	notifyOnEachProspectView: boolean;
+	notifyOnHighCompletion?: boolean;
 }
 
 export interface VideoCallToAction {

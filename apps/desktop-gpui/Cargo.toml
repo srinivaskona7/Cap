@@ -10,13 +10,13 @@ members = [".", "kernels"]
 [package]
 name = "cap-desktop-gpui"
 version = "0.6.1"
-description = "Beautiful screen recordings, owned by you."
+description = "sricap-rec - High-definition screen & studio recording for macOS."
 edition = "2024"
 license = "AGPL-3.0"
 publish = false
 
 [[bin]]
-name = "cap-gpui"
+name = "sricap-rec"
 path = "src/main.rs"
 
 [[example]]
@@ -261,6 +261,7 @@ gpui_tokio = { path = "../../../zed-cap/crates/gpui_tokio" }
 # gpui is unusably slow when its dependencies are unoptimized; zed/comet both
 # build deps at opt-level 2 and keep the app crate itself at 0.
 opt-level = 0
+split-debuginfo = "unpacked"
 # Incremental caches for this dep tree run to gigabytes on a disk that has
 # already been filled to zero once; only the app crate, the one that changes
 # on every edit, opts back in below.
@@ -283,9 +284,12 @@ opt-level = 3
 # cut its codegen and link time; breakpoints and backtraces keep their lines.
 [profile.dev.package.cap-desktop-gpui]
 incremental = true
+codegen-units = 256
 debug = "line-tables-only"
 
 [profile.release]
-codegen-units = 1
+opt-level = 3
 lto = "thin"
-strip = "symbols"
+codegen-units = 1
+panic = "abort"
+strip = true

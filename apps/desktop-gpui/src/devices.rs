@@ -126,12 +126,247 @@ impl WindowOption {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct BrowserTabOption {
+    pub browser: String,
+    pub window_index: u32,
+    pub tab_index: u32,
+    pub title: String,
+    pub url: String,
+    pub fallback_window_id: Option<WindowId>,
+}
+
+impl BrowserTabOption {
+    pub fn describe_host(&self) -> String {
+        if self.url.is_empty() {
+            return "Active Browser Window".to_string();
+        }
+        let trimmed = self
+            .url
+            .strip_prefix("https://")
+            .or_else(|| self.url.strip_prefix("http://"))
+            .unwrap_or(&self.url);
+        trimmed.split('/').next().unwrap_or(trimmed).to_string()
+    }
+}
+
+fn is_browser_app(app: &str) -> bool {
+    matches!(
+        app,
+        "Google Chrome"
+            | "Google Chrome Canary"
+            | "Arc"
+            | "Brave Browser"
+            | "Microsoft Edge"
+            | "Safari"
+            | "Firefox"
+            | "Zen"
+            | "Vivaldi"
+            | "Opera"
+    )
+}
+
+pub fn list_browser_tabs_for_windows(windows: &[WindowOption]) -> Vec<BrowserTabOption> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        windows
+            .iter()
+            .filter(|w| is_browser_app(&w.app))
+            .map(|w| BrowserTabOption {
+                browser: w.app.clone(),
+                window_index: 0,
+                tab_index: 0,
+                title: w.label.clone(),
+                url: String::new(),
+                fallback_window_id: Some(w.id.clone()),
+            })
+            .collect()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut out = Vec::new();
+        for (app_name, is_safari) in [
+            ("Google Chrome", false),
+            ("Arc", false),
+            ("Brave Browser", false),
+            ("Microsoft Edge", false),
+            ("Safari", true),
+        ] {
+            let script = if is_safari {
+                format!(
+                    r#"if application "{app_name}" is running then
+                        tell application "{app_name}"
+                            set output to ""
+                            set wIdx to 1
+                            repeat with w in windows
+                                try
+                                    set tIdx to 1
+                                    repeat with t in tabs of w
+                                        try
+                                            set tName to name of t
+                                            set tUrl to URL of t
+                                            set output to output & wIdx & "|||" & tIdx & "|||" & tName & "|||" & tUrl & linefeed
+                                        end try
+                                        set tIdx to tIdx + 1
+                                    end repeat
+                                end try
+                                set wIdx to wIdx + 1
+                            end repeat
+                            return output
+                        end tell
+                    end if"#
+                )
+            } else {
+                format!(
+                    r#"if application "{app_name}" is running then
+                        tell application "{app_name}"
+                            set output to ""
+                            set wIdx to 1
+                            repeat with w in windows
+                                try
+                                    set tIdx to 1
+                                    repeat with t in tabs of w
+                                        try
+                                            set tName to title of t
+                                            set tUrl to URL of t
+                                            set output to output & wIdx & "|||" & tIdx & "|||" & tName & "|||" & tUrl & linefeed
+                                        end try
+                                        set tIdx to tIdx + 1
+                                    end repeat
+                                end try
+                                set wIdx to wIdx + 1
+                            end repeat
+                            return output
+                        end tell
+                    end if"#
+                )
+            };
+            let Ok(output) = std::process::Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .output()
+            else {
+                continue;
+            };
+            if !output.status.success() {
+                continue;
+            }
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let mut parts = line.splitn(4, "|||");
+                let Some(w_idx) = parts.next().and_then(|s| s.trim().parse::<u32>().ok()) else {
+                    continue;
+                };
+                let Some(t_idx) = parts.next().and_then(|s| s.trim().parse::<u32>().ok()) else {
+                    continue;
+                };
+                let title = parts.next().unwrap_or("").trim().to_string();
+                let url = parts.next().unwrap_or("").trim().to_string();
+                if title.is_empty() && url.is_empty() {
+                    continue;
+                }
+                let fallback_id = windows
+                    .iter()
+                    .find(|w| w.app == app_name && !title.is_empty() && w.label.contains(&title))
+                    .or_else(|| windows.iter().find(|w| w.app == app_name))
+                    .map(|w| w.id.clone());
+                out.push(BrowserTabOption {
+                    browser: app_name.to_string(),
+                    window_index: w_idx,
+                    tab_index: t_idx,
+                    title: if title.is_empty() { url.clone() } else { title },
+                    url,
+                    fallback_window_id: fallback_id,
+                });
+            }
+        }
+
+        for win in windows.iter().filter(|w| is_browser_app(&w.app)) {
+            let already_listed = out
+                .iter()
+                .any(|t| t.browser == win.app && win.label.contains(&t.title));
+            if !already_listed {
+                out.push(BrowserTabOption {
+                    browser: win.app.clone(),
+                    window_index: 0,
+                    tab_index: 0,
+                    title: win.label.clone(),
+                    url: String::new(),
+                    fallback_window_id: Some(win.id.clone()),
+                });
+            }
+        }
+        out
+    }
+}
+
+pub fn activate_browser_tab(tab: &BrowserTabOption) -> Option<WindowOption> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let windows = list_windows();
+        tab.fallback_window_id
+            .as_ref()
+            .and_then(|id| windows.iter().find(|w| &w.id == id).cloned())
+            .or_else(|| windows.into_iter().find(|w| w.app == tab.browser))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let app_name = &tab.browser;
+        if tab.window_index > 0 && tab.tab_index > 0 {
+            let w_idx = tab.window_index;
+            let t_idx = tab.tab_index;
+            let script = if app_name == "Safari" {
+                format!(
+                    r#"tell application "Safari"
+                        activate
+                        try
+                            set current tab of window {w_idx} to tab {t_idx} of window {w_idx}
+                            set index of window {w_idx} to 1
+                        end try
+                    end tell"#
+                )
+            } else {
+                format!(
+                    r#"tell application "{app_name}"
+                        activate
+                        try
+                            set active tab index of window {w_idx} to {t_idx}
+                            set index of window {w_idx} to 1
+                        end try
+                    end tell"#
+                )
+            };
+            let _ = std::process::Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .output();
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        } else if let Some(id) = tab.fallback_window_id.as_ref() {
+            let _ = crate::platform::focus_capture_target_window(id);
+            std::thread::sleep(std::time::Duration::from_millis(80));
+        }
+
+        let windows = list_windows();
+        windows
+            .iter()
+            .find(|w| w.app == *app_name && w.label.contains(&tab.title))
+            .cloned()
+            .or_else(|| {
+                tab.fallback_window_id
+                    .as_ref()
+                    .and_then(|id| windows.iter().find(|w| &w.id == id).cloned())
+            })
+            .or_else(|| windows.into_iter().find(|w| w.app == *app_name))
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DeviceSnapshot {
     pub cameras: Vec<CameraOption>,
     pub microphones: Vec<MicrophoneOption>,
     pub displays: Vec<DisplayOption>,
     pub windows: Vec<WindowOption>,
+    pub browser_tabs: Vec<BrowserTabOption>,
 }
 
 impl DeviceSnapshot {
@@ -156,11 +391,14 @@ impl DeviceSnapshot {
     /// window-server queries are both slow enough to drop frames — so callers
     /// should run it on the background executor, never inside `render`.
     pub fn enumerate() -> Self {
+        let windows = list_windows();
+        let browser_tabs = list_browser_tabs_for_windows(&windows);
         Self {
             cameras: list_cameras(),
             microphones: list_microphone_names(),
             displays: list_displays(),
-            windows: list_windows(),
+            windows,
+            browser_tabs,
         }
     }
 }
@@ -438,15 +676,19 @@ mod input_enumeration_tests {
 pub struct TargetSnapshot {
     pub displays: Vec<DisplayOption>,
     pub windows: Vec<WindowOption>,
+    pub browser_tabs: Vec<BrowserTabOption>,
 }
 
 impl TargetSnapshot {
     /// Blocking window-server queries, same rule as `DeviceSnapshot::enumerate`:
     /// background executor or a tokio worker, never `render`.
     pub fn enumerate() -> Self {
+        let windows = list_windows();
+        let browser_tabs = list_browser_tabs_for_windows(&windows);
         Self {
             displays: list_displays(),
-            windows: list_windows(),
+            windows,
+            browser_tabs,
         }
     }
 }

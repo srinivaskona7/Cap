@@ -1,0 +1,57 @@
+name: Release sricap-rec macOS
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-macos:
+    name: Build & Release sricap-rec (macOS Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Setup Rust Toolchain
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add aarch64-apple-darwin --toolchain 1.95.0
+
+      - name: Install dependencies & native libraries
+        run: |
+          bun install
+          bun run cap-setup
+
+      - name: Build sricap-rec macOS App & DMG
+        run: |
+          bun run gpui:build aarch64-apple-darwin
+
+      - name: Package release artifacts & SHA256 checksums
+        run: |
+          mkdir -p dist-release
+          BUNDLE_DIR="apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle"
+          DMG_FILE="$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -n 1)"
+          cp "$DMG_FILE" dist-release/sricap-rec-arm64.dmg
+          ditto -c -k --sequesterRsrc --keepParent "$BUNDLE_DIR/macos/sricap-rec.app" dist-release/sricap-rec-arm64.zip
+          cd dist-release
+          shasum -a 256 sricap-rec-arm64.dmg sricap-rec-arm64.zip > SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-release/sricap-rec-arm64.dmg
+            dist-release/sricap-rec-arm64.zip
+            dist-release/SHA256SUMS.txt
+          generate_release_notes: true

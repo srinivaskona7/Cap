@@ -72,7 +72,9 @@ pub const CAMERA_MIN_SIZE: f32 = 150.;
 pub const CAMERA_MAX_SIZE: f32 = 600.;
 pub const CAMERA_DEFAULT_SIZE: f32 = 230.;
 pub const CAMERA_PRESET_SMALL: f32 = 230.;
+pub const CAMERA_PRESET_MEDIUM: f32 = 315.;
 pub const CAMERA_PRESET_LARGE: f32 = 400.;
+pub const CAMERA_PRESET_FULLSCREEN: f32 = 600.;
 pub const CAMERA_TOOLBAR_HEIGHT: f32 = 56.;
 /// `CAMERA_WIDE_ASPECT_RATIO`.
 const WIDE_ASPECT: f32 = 16. / 9.;
@@ -81,6 +83,32 @@ const CUTOUT_REVEAL_SECONDS: f32 = 0.45;
 
 pub fn clamp_size(scale: f32) -> f32 {
     scale.clamp(CAMERA_MIN_SIZE, CAMERA_MAX_SIZE)
+}
+
+pub fn next_camera_size_preset(size: f32) -> f32 {
+    let clamped = clamp_size(size);
+    if clamped < CAMERA_PRESET_MEDIUM - 10. {
+        CAMERA_PRESET_MEDIUM
+    } else if clamped < CAMERA_PRESET_LARGE - 10. {
+        CAMERA_PRESET_LARGE
+    } else if clamped < CAMERA_PRESET_FULLSCREEN - 10. {
+        CAMERA_PRESET_FULLSCREEN
+    } else {
+        CAMERA_PRESET_SMALL
+    }
+}
+
+pub fn camera_size_preset_label(size: f32) -> Option<&'static str> {
+    let clamped = clamp_size(size);
+    if clamped >= CAMERA_PRESET_FULLSCREEN - 10. {
+        Some("XL")
+    } else if clamped >= CAMERA_PRESET_LARGE - 10. {
+        Some("L")
+    } else if clamped >= CAMERA_PRESET_MEDIUM - 10. {
+        Some("M")
+    } else {
+        None
+    }
 }
 
 /// `cameraPreviewDimensions`: height is the size; width follows the aspect
@@ -210,6 +238,23 @@ mod preview_radius_tests {
             assert_eq!(picker_preview_radius(&state, Some((136., 192.))), 24.);
             assert_eq!(picker_preview_radius(&state, None), 24.);
         }
+    }
+
+    #[test]
+    fn size_presets_cycle_small_medium_large_fullscreen() {
+        let s0 = CAMERA_PRESET_SMALL;
+        assert_eq!(camera_size_preset_label(s0), None);
+        let s1 = next_camera_size_preset(s0);
+        assert_eq!(s1, CAMERA_PRESET_MEDIUM);
+        assert_eq!(camera_size_preset_label(s1), Some("M"));
+        let s2 = next_camera_size_preset(s1);
+        assert_eq!(s2, CAMERA_PRESET_LARGE);
+        assert_eq!(camera_size_preset_label(s2), Some("L"));
+        let s3 = next_camera_size_preset(s2);
+        assert_eq!(s3, CAMERA_PRESET_FULLSCREEN);
+        assert_eq!(camera_size_preset_label(s3), Some("XL"));
+        let s4 = next_camera_size_preset(s3);
+        assert_eq!(s4, CAMERA_PRESET_SMALL);
     }
 }
 
@@ -2292,17 +2337,13 @@ impl CameraWindow {
                     .child(self.toolbar_button(
                         "size",
                         "icons/enlarge.svg",
-                        self.state.size >= CAMERA_PRESET_LARGE,
+                        self.state.size >= CAMERA_PRESET_MEDIUM - 10.,
                         scale,
-                        None,
+                        camera_size_preset_label(self.state.size),
                         cx,
                         |this, window, cx| {
                             this.mutate_state(window, cx, |state| {
-                                state.size = if state.size < CAMERA_PRESET_LARGE {
-                                    CAMERA_PRESET_LARGE
-                                } else {
-                                    CAMERA_PRESET_SMALL
-                                };
+                                state.size = next_camera_size_preset(state.size);
                             })
                         },
                     ))

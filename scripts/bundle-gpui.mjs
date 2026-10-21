@@ -27,7 +27,7 @@ export function targetPlatform(target) {
 }
 
 export function mainBinaryName(target) {
-	return targetPlatform(target) === "win32" ? "Cap.exe" : "Cap";
+	return targetPlatform(target) === "win32" ? "sricap-rec.exe" : "sricap-rec";
 }
 
 export function gpuiBinaryPath(target, profile = "release") {
@@ -171,6 +171,44 @@ export async function bundleGpui(target, args, { env = process.env } = {}) {
 			throw new Error(
 				`macOS GPUI bundling failed with ${result.signal ?? result.code}`,
 			);
+		}
+		const gpuiBundleRoot = path.join(
+			gpuiDirectory,
+			"target",
+			target,
+			"release",
+			"bundle",
+		);
+		const legacyMacosOut = path.join(
+			desktopDirectory,
+			"src-tauri",
+			"target",
+			"release",
+			"bundle",
+			"macos",
+		);
+		await fs.mkdir(legacyMacosOut, { recursive: true }).catch(() => {});
+		const appSrc = path.join(gpuiBundleRoot, "macos", "sricap-rec.app");
+		const appDest = path.join(legacyMacosOut, "sricap-rec.app");
+		if (
+			await fs
+				.stat(appSrc)
+				.then(() => true)
+				.catch(() => false)
+		) {
+			await fs.rm(appDest, { recursive: true, force: true }).catch(() => {});
+			await fs.cp(appSrc, appDest, { recursive: true }).catch(() => {});
+		}
+		const dmgDir = path.join(gpuiBundleRoot, "dmg");
+		const dmgFiles = await fs.readdir(dmgDir).catch(() => []);
+		const firstDmg = dmgFiles.find((f) => f.endsWith(".dmg"));
+		if (firstDmg) {
+			await fs
+				.copyFile(
+					path.join(dmgDir, firstDmg),
+					path.join(legacyMacosOut, "sricap-rec.dmg"),
+				)
+				.catch(() => {});
 		}
 		return;
 	}

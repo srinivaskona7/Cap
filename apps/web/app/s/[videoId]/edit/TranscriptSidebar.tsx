@@ -36,6 +36,8 @@ import {
 	isFillerWord,
 	normalizeTranscriptSelection,
 	planFillerCuts,
+	planPiiCuts,
+	planSilenceCuts,
 	planTranscriptCut,
 } from "@/lib/edit-transcript";
 import { useActiveTranscriptWordIndex } from "./use-active-transcript-word-index";
@@ -118,10 +120,13 @@ const TranscriptGroupRow = memo(function TranscriptGroupRow({
 	selectionStartIndex,
 	selectionEndIndex,
 	deletedWordIds,
+	piiWordIds,
 	searchMatchSet,
 	previewFillers,
+	previewPii,
 	wordElementsRef,
 	onSeek,
+	onCutGroup,
 	onWordPointerDown,
 	onWordPointerEnter,
 }: {
@@ -131,10 +136,13 @@ const TranscriptGroupRow = memo(function TranscriptGroupRow({
 	selectionStartIndex: number;
 	selectionEndIndex: number;
 	deletedWordIds: ReadonlySet<string>;
+	piiWordIds: ReadonlySet<string>;
 	searchMatchSet: ReadonlySet<number>;
 	previewFillers: boolean;
+	previewPii: boolean;
 	wordElementsRef: RefObject<Map<number, HTMLButtonElement>>;
 	onSeek: (index: number) => void;
+	onCutGroup: (startIndex: number, endIndex: number) => void;
 	onWordPointerDown: (
 		index: number,
 		event: ReactPointerEvent<HTMLButtonElement>,
@@ -144,84 +152,103 @@ const TranscriptGroupRow = memo(function TranscriptGroupRow({
 		event: ReactPointerEvent<HTMLButtonElement>,
 	) => void;
 }) {
+	const groupWords = words.slice(group.startIndex, group.endIndex + 1);
+	const allDeleted = groupWords.every((word) => deletedWordIds.has(word.id));
+
 	return (
 		<div
-			className="flex items-baseline gap-2.5"
+			className="group/row flex items-baseline gap-2.5"
 			style={{
 				contentVisibility: "auto",
 				containIntrinsicSize: "0 96px",
 			}}
 		>
-			<button
-				type="button"
-				onClick={() => onSeek(group.startIndex)}
-				title={`Play from ${formatTimestamp(group.startMs)}`}
-				className="w-9 shrink-0 text-left font-mono text-[10px] leading-none tabular-nums text-gray-8 transition-colors hover:text-blue-500"
-			>
-				{formatTimestamp(group.startMs)}
-			</button>
+			<div className="flex w-9 shrink-0 flex-col items-start gap-1">
+				<button
+					type="button"
+					onClick={() => onSeek(group.startIndex)}
+					title={`Play from ${formatTimestamp(group.startMs)}`}
+					className="text-left font-mono text-[10px] leading-none tabular-nums text-gray-8 transition-colors hover:text-blue-500"
+				>
+					{formatTimestamp(group.startMs)}
+				</button>
+				{!allDeleted && (
+					<button
+						type="button"
+						onClick={() => onCutGroup(group.startIndex, group.endIndex)}
+						title="Cut this sentence from video"
+						className="hidden items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium text-red-500 transition hover:bg-red-50 group-hover/row:inline-flex"
+					>
+						<Trash2 className="size-2.5" />
+						Cut
+					</button>
+				)}
+			</div>
 			<p className="min-w-0 flex-1 select-none text-[13.5px] leading-[26px] text-gray-11">
-				{words
-					.slice(group.startIndex, group.endIndex + 1)
-					.map((word, groupWordIndex) => {
-						const index = group.startIndex + groupWordIndex;
-						const isSelected =
-							index >= selectionStartIndex && index <= selectionEndIndex;
-						const isSelectionStart =
-							isSelected && index === selectionStartIndex;
-						const isSelectionEnd = isSelected && index === selectionEndIndex;
-						const isActive = activeWordIndex === index;
-						const isDeleted = deletedWordIds.has(word.id);
-						const isFiller = isFillerWord(word.text);
-						const isSearchMatch = searchMatchSet.has(index);
-						const willRemoveAsFiller = previewFillers && isFiller && !isDeleted;
+				{groupWords.map((word, groupWordIndex) => {
+					const index = group.startIndex + groupWordIndex;
+					const isSelected =
+						index >= selectionStartIndex && index <= selectionEndIndex;
+					const isSelectionStart =
+						isSelected && index === selectionStartIndex;
+					const isSelectionEnd = isSelected && index === selectionEndIndex;
+					const isActive = activeWordIndex === index;
+					const isDeleted = deletedWordIds.has(word.id);
+					const isFiller = isFillerWord(word.text);
+					const isPii = piiWordIds.has(word.id);
+					const isSearchMatch = searchMatchSet.has(index);
+					const willRemoveAsFiller = previewFillers && isFiller && !isDeleted;
+					const willRemoveAsPii = previewPii && isPii && !isDeleted;
 
-						let stateClassName: string;
-						if (isSelected) {
-							stateClassName = [
-								"bg-blue-500 text-white",
-								isSelectionStart ? "rounded-l-[5px]" : "",
-								isSelectionEnd ? "rounded-r-[5px]" : "",
-							].join(" ");
-						} else if (isActive) {
-							stateClassName = "rounded-[5px] bg-blue-500/15";
-						} else if (isSearchMatch) {
-							stateClassName = isDeleted
-								? "rounded-[5px] bg-amber-100/60"
-								: "rounded-[5px] bg-amber-100 text-amber-900";
-						} else if (willRemoveAsFiller) {
-							stateClassName =
-								"rounded-[5px] bg-red-50 text-red-400 line-through decoration-red-300/60";
-						} else {
-							stateClassName = "rounded-[5px] hover:bg-gray-3";
-						}
+					let stateClassName: string;
+					if (isSelected) {
+						stateClassName = [
+							"bg-blue-500 text-white",
+							isSelectionStart ? "rounded-l-[5px]" : "",
+							isSelectionEnd ? "rounded-r-[5px]" : "",
+						].join(" ");
+					} else if (isActive) {
+						stateClassName = "rounded-[5px] bg-blue-500/15";
+					} else if (isSearchMatch) {
+						stateClassName = isDeleted
+							? "rounded-[5px] bg-amber-100/60"
+							: "rounded-[5px] bg-amber-100 text-amber-900";
+					} else if (willRemoveAsFiller || willRemoveAsPii) {
+						stateClassName =
+							"rounded-[5px] bg-red-50 text-red-400 line-through decoration-red-300/60";
+					} else if (isPii && !isDeleted) {
+						stateClassName =
+							"rounded-[5px] bg-amber-50/80 text-amber-900 underline decoration-amber-400/70 decoration-dotted";
+					} else {
+						stateClassName = "rounded-[5px] hover:bg-gray-3";
+					}
 
-						return (
-							<button
-								key={word.id}
-								ref={(element) => {
-									if (element) {
-										wordElementsRef.current.set(index, element);
-									} else {
-										wordElementsRef.current.delete(index);
-									}
-								}}
-								type="button"
-								data-word-index={index}
-								onPointerDown={(event) => onWordPointerDown(index, event)}
-								onPointerEnter={(event) => onWordPointerEnter(index, event)}
-								className={[
-									"inline py-[3px] pr-[5px] text-left leading-5 transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-									stateClassName,
-									isDeleted && !isSelected
-										? "text-gray-7 line-through decoration-gray-6"
-										: "",
-								].join(" ")}
-							>
-								{word.text}
-							</button>
-						);
-					})}
+					return (
+						<button
+							key={word.id}
+							ref={(element) => {
+								if (element) {
+									wordElementsRef.current.set(index, element);
+								} else {
+									wordElementsRef.current.delete(index);
+								}
+							}}
+							type="button"
+							data-word-index={index}
+							onPointerDown={(event) => onWordPointerDown(index, event)}
+							onPointerEnter={(event) => onWordPointerEnter(index, event)}
+							className={[
+								"inline py-[3px] pr-[5px] text-left leading-5 transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+								stateClassName,
+								isDeleted && !isSelected
+									? "text-gray-7 line-through decoration-gray-6"
+									: "",
+							].join(" ")}
+						>
+							{word.text}
+						</button>
+					);
+				})}
 			</p>
 		</div>
 	);
@@ -242,6 +269,7 @@ export function TranscriptSidebar({
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchMatchIndex, setSearchMatchIndex] = useState(0);
 	const [previewFillers, setPreviewFillers] = useState(false);
+	const [previewPii, setPreviewPii] = useState(false);
 	const deferredSearchQuery = useDeferredValue(searchQuery);
 	const dragAnchorRef = useRef<number | null>(null);
 	const selectionRef = useRef(selection);
@@ -316,6 +344,38 @@ export function TranscriptSidebar({
 			).length ?? 0,
 		[deletedWordIds, transcript],
 	);
+	const silencePlan = useMemo(() => {
+		if (!transcript) return { activeRanges: [], totalSavedSeconds: 0 };
+		const plan = planSilenceCuts(transcript.words, transcript.durationMs);
+		const activeRanges = plan.ranges.filter((range) =>
+			isTimeKept((range.startMs + range.endMs) / 2, keepRanges),
+		);
+		const totalSavedMs = activeRanges.reduce(
+			(sum, range) => sum + (range.endMs - range.startMs),
+			0,
+		);
+		return {
+			activeRanges,
+			totalSavedSeconds: Math.max(0.1, Math.round(totalSavedMs / 100) / 10),
+		};
+	}, [keepRanges, transcript]);
+	const piiPlan = useMemo(() => {
+		if (!transcript) {
+			return { activeRanges: [], wordIds: new Set<string>(), activeCount: 0 };
+		}
+		const plan = planPiiCuts(transcript.words, transcript.durationMs);
+		const activeRanges = plan.ranges.filter((range) =>
+			isTimeKept((range.startMs + range.endMs) / 2, keepRanges),
+		);
+		const activeCount = Array.from(plan.wordIds).filter(
+			(id) => !deletedWordIds.has(id),
+		).length;
+		return {
+			activeRanges,
+			wordIds: plan.wordIds,
+			activeCount,
+		};
+	}, [deletedWordIds, keepRanges, transcript]);
 	const searchMatches = useMemo(() => {
 		const query = deferredSearchQuery.trim().toLocaleLowerCase();
 		if (!transcript || !query) return [];
@@ -461,6 +521,50 @@ export function TranscriptSidebar({
 		onDeleteRanges,
 		transcript,
 	]);
+
+	const deleteSilences = useCallback(() => {
+		if (silencePlan.activeRanges.length === 0) {
+			toast.info("No long silences remain.");
+			return;
+		}
+		onDeleteRanges(toVideoRanges(silencePlan.activeRanges));
+		clearSelection();
+		toast.success(
+			`Removed ${silencePlan.activeRanges.length} silence${silencePlan.activeRanges.length === 1 ? "" : "s"} (${silencePlan.totalSavedSeconds}s saved).`,
+		);
+	}, [clearSelection, onDeleteRanges, silencePlan]);
+
+	const deletePii = useCallback(() => {
+		if (piiPlan.activeRanges.length === 0) {
+			toast.info("No spoken PII or secrets remain.");
+			return;
+		}
+		onDeleteRanges(toVideoRanges(piiPlan.activeRanges));
+		clearSelection();
+		toast.success(
+			`Redacted ${piiPlan.activeCount} sensitive item${piiPlan.activeCount === 1 ? "" : "s"} from the video.`,
+		);
+	}, [clearSelection, onDeleteRanges, piiPlan]);
+
+	const handleCutGroup = useCallback(
+		(startIndex: number, endIndex: number) => {
+			if (!transcript) return;
+			const plan = planTranscriptCut(
+				transcript.words,
+				startIndex,
+				endIndex,
+				transcript.durationMs,
+			);
+			if (!plan || !plan.safe) {
+				toast.error("An edit must keep some playable video.");
+				return;
+			}
+			onDeleteRanges(toVideoRanges([plan]));
+			clearSelection();
+			toast.success("Sentence cut from video.");
+		},
+		[clearSelection, onDeleteRanges, transcript],
+	);
 
 	const moveSearchMatch = useCallback(
 		(direction: -1 | 1) => {
@@ -642,23 +746,61 @@ export function TranscriptSidebar({
 							{transcript.words.length} words
 						</p>
 					</div>
-					{availableFillerCount > 0 && (
-						<button
-							type="button"
-							onClick={deleteFillers}
-							onMouseEnter={() => setPreviewFillers(true)}
-							onMouseLeave={() => setPreviewFillers(false)}
-							onFocus={() => setPreviewFillers(true)}
-							onBlur={() => setPreviewFillers(false)}
-							className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-4 bg-gray-1 pl-2.5 pr-1 text-[11px] font-medium text-gray-11 transition hover:border-red-100 hover:bg-red-50 hover:text-red-400"
-						>
-							Remove fillers
-							<span className="rounded-full bg-gray-3 px-1.5 py-px text-[10px] font-semibold tabular-nums text-gray-11 transition group-hover:bg-red-300/15 group-hover:text-red-400">
-								{availableFillerCount}
-							</span>
-						</button>
-					)}
 				</div>
+
+				{(availableFillerCount > 0 ||
+					silencePlan.activeRanges.length > 0 ||
+					piiPlan.activeRanges.length > 0) && (
+					<div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+						{availableFillerCount > 0 && (
+							<button
+								type="button"
+								onClick={deleteFillers}
+								onMouseEnter={() => setPreviewFillers(true)}
+								onMouseLeave={() => setPreviewFillers(false)}
+								onFocus={() => setPreviewFillers(true)}
+								onBlur={() => setPreviewFillers(false)}
+								className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-4 bg-gray-1 pl-2.5 pr-1 text-[11px] font-medium text-gray-11 transition hover:border-red-100 hover:bg-red-50 hover:text-red-400"
+							>
+								Remove fillers
+								<span className="rounded-full bg-gray-3 px-1.5 py-px text-[10px] font-semibold tabular-nums text-gray-11 transition group-hover:bg-red-300/15 group-hover:text-red-400">
+									{availableFillerCount}
+								</span>
+							</button>
+						)}
+						{silencePlan.activeRanges.length > 0 && (
+							<button
+								type="button"
+								onClick={deleteSilences}
+								title={`Cut ${silencePlan.activeRanges.length} pauses (${silencePlan.totalSavedSeconds}s saved)`}
+								className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-gray-4 bg-gray-1 pl-2.5 pr-1 text-[11px] font-medium text-gray-11 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+							>
+								Remove silences
+								<span className="rounded-full bg-gray-3 px-1.5 py-px text-[10px] font-semibold tabular-nums text-gray-11 transition group-hover:bg-blue-500/15 group-hover:text-blue-600">
+									{silencePlan.activeRanges.length} ·{" "}
+									{silencePlan.totalSavedSeconds}s
+								</span>
+							</button>
+						)}
+						{piiPlan.activeRanges.length > 0 && (
+							<button
+								type="button"
+								onClick={deletePii}
+								onMouseEnter={() => setPreviewPii(true)}
+								onMouseLeave={() => setPreviewPii(false)}
+								onFocus={() => setPreviewPii(true)}
+								onBlur={() => setPreviewPii(false)}
+								title="Cut spoken emails, secrets, and sensitive tokens from video"
+								className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-amber-300/80 bg-amber-50/60 pl-2.5 pr-1 text-[11px] font-medium text-amber-900 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+							>
+								Redact PII
+								<span className="rounded-full bg-amber-200/70 px-1.5 py-px text-[10px] font-semibold tabular-nums text-amber-900 transition group-hover:bg-red-300/15 group-hover:text-red-500">
+									{piiPlan.activeCount}
+								</span>
+							</button>
+						)}
+					</div>
+				)}
 
 				<div className="mt-3 flex h-8 items-center gap-2 rounded-lg bg-gray-3 px-2.5 ring-1 ring-transparent transition focus-within:bg-gray-1 focus-within:ring-blue-500/50">
 					<Search className="size-3.5 shrink-0 text-gray-9" />
@@ -762,10 +904,13 @@ export function TranscriptSidebar({
 										selectionStartIndex={groupSelectionStartIndex}
 										selectionEndIndex={groupSelectionEndIndex}
 										deletedWordIds={deletedWordIds}
+										piiWordIds={piiPlan.wordIds}
 										searchMatchSet={searchMatchSet}
 										previewFillers={previewFillers}
+										previewPii={previewPii}
 										wordElementsRef={wordElementsRef}
 										onSeek={seekToWord}
+										onCutGroup={handleCutGroup}
 										onWordPointerDown={handleWordPointerDown}
 										onWordPointerEnter={handleWordPointerEnter}
 									/>

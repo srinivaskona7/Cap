@@ -1,8 +1,8 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Cap - Development",
-	"identifier": "so.cap.desktop.dev",
-	"mainBinaryName": "Cap - Development",
+	"productName": "sricap-rec",
+	"identifier": "com.sri.sricap-rec",
+	"mainBinaryName": "sricap-rec",
 	"build": {
 		"beforeDevCommand": "bun run localdev",
 		"devUrl": "http://localhost:3002",

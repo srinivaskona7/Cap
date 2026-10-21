@@ -574,6 +574,12 @@ impl RecordingSession {
             .is_some_and(|active| active.mic_mute.is_some())
     }
 
+    pub fn has_camera(&self) -> bool {
+        self.last_config
+            .as_ref()
+            .is_some_and(|config| config.camera.is_some())
+    }
+
     /// Flip the recording-scoped mic mute. No-op without a live mic.
     pub fn toggle_mic_mute(&mut self, cx: &mut Context<Self>) {
         let Some(mute) = self

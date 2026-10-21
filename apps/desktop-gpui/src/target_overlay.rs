@@ -1706,7 +1706,7 @@ impl OverlayWindow {
         if crop.is_none() && !interacting {
             root = root.child(self.render_selection_hint());
         }
-        root = root.child(self.render_area_toolbar(crop, valid));
+        root = root.child(self.render_area_toolbar(crop, valid, cx));
         if crop.is_some() {
             root.child(self.render_area_controls(crop, valid, cx))
         } else {
@@ -1951,18 +1951,31 @@ impl OverlayWindow {
     /// liquid-glass surface, `min-w-28 px-2 text-base tabular-nums`. The
     /// aspect-ratio, reset, fill and lock controls that share this bar in the
     /// TSX are deferred (README).
-    fn render_area_toolbar(&self, crop: Option<AreaRect>, valid: bool) -> impl IntoElement {
+    fn render_area_toolbar(
+        &self,
+        crop: Option<AreaRect>,
+        valid: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let label = match crop.filter(|_| valid) {
             Some(crop) => format!("{} × {}", crop.width.round(), crop.height.round()),
             None => "Draw an area".to_string(),
         };
+        let presets: [(&'static str, &'static str, Option<(f32, f32)>); 4] = [
+            ("area-preset-16-9", "16:9", Some((16., 9.))),
+            ("area-preset-9-16", "9:16", Some((9., 16.))),
+            ("area-preset-1-1", "1:1", Some((1., 1.))),
+            ("area-preset-full", "Full", None),
+        ];
+        let theme = self.theme;
+        let toolbar_width = 390.;
 
         div()
             .absolute()
             // `top-12` on macOS, centred by hand: gpui has no translate.
             .top(px(48.))
-            .left(px((self.display_size.0 - 200.) / 2.))
-            .w(px(200.))
+            .left(px(((self.display_size.0 - toolbar_width) / 2.).max(16.)))
+            .w(px(toolbar_width))
             .flex()
             .justify_center()
             .child(
@@ -1977,16 +1990,72 @@ impl OverlayWindow {
                         div()
                             .min_w(px(112.))
                             .px(px(8.))
-                            .text_size(px(16.))
-                            // `text-base font-normal`
-                            // (`target-select-overlay.tsx:1330`): an explicit
-                            // `font-normal` that opts *out* of the `body`
-                            // Medium default, so it must be stated here now
-                            // that the window root carries Medium.
+                            .text_size(px(15.))
                             .font_weight(FontWeight::NORMAL)
                             .child(label),
-                    ),
+                    )
+                    .children(presets.into_iter().map(|(id, text, ratio)| {
+                        div()
+                            .id(id)
+                            .px(px(8.))
+                            .py(px(4.))
+                            .rounded(px(8.))
+                            .cursor_pointer()
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .bg(Theme::with_alpha(theme.gray_12, 0.08))
+                            .hover(|s| s.bg(Theme::with_alpha(theme.gray_12, 0.16)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    cx.stop_propagation();
+                                    this.apply_area_aspect_preset(ratio, cx);
+                                }),
+                            )
+                            .child(text)
+                    })),
             )
+    }
+
+    fn apply_area_aspect_preset(
+        &mut self,
+        ratio: Option<(f32, f32)>,
+        cx: &mut Context<Self>,
+    ) {
+        let (dw, dh) = self.display_size;
+        if dw <= 0. || dh <= 0. {
+            return;
+        }
+        let next_crop = match ratio {
+            None => AreaRect {
+                x: 0.,
+                y: 0.,
+                width: dw,
+                height: dh,
+            },
+            Some((rw, rh)) => {
+                let target_aspect = rw / rh;
+                let max_w = (dw * 0.78).max(AREA_MIN_SIZE);
+                let max_h = (dh * 0.78).max(AREA_MIN_SIZE);
+                let (w, h) = if max_w / max_h > target_aspect {
+                    (max_h * target_aspect, max_h)
+                } else {
+                    (max_w, max_w / target_aspect)
+                };
+                let w = w.round().clamp(AREA_MIN_SIZE, dw);
+                let h = h.round().clamp(AREA_MIN_SIZE, dh);
+                AreaRect {
+                    x: ((dw - w) * 0.5).round(),
+                    y: ((dh - h) * 0.5).round(),
+                    width: w,
+                    height: h,
+                }
+            }
+        };
+        self.crop = Some(next_crop);
+        self.drag = None;
+        self.snap_guides.clear();
+        cx.notify();
     }
 
     /// The controls cluster, placed against the crop the way `controlsStyle`

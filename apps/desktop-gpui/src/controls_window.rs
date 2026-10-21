@@ -300,6 +300,101 @@ impl ControlsWindow {
             })
     }
 
+    fn render_camera_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = self.theme;
+        let session = self.session.read(cx);
+        let has_camera =
+            session.has_camera() || Feeds::global(cx).read(cx).camera.is_some();
+        let camera_open = cx
+            .try_global::<crate::app_windows::AppWindows>()
+            .is_some_and(|windows| windows.camera.is_some());
+        let can_toggle = has_camera && matches!(session.phase, Phase::Recording { .. });
+        let icon = if camera_open {
+            "icons/camera.svg"
+        } else {
+            "icons/eye-off.svg"
+        };
+        let icon_color: gpui::Hsla = if camera_open {
+            theme.gray_12.into()
+        } else {
+            Theme::with_alpha(theme.gray_12, 0.35)
+        };
+        let tooltip = if !has_camera {
+            "No camera selected"
+        } else if camera_open {
+            "Hide camera bubble"
+        } else {
+            "Show camera bubble"
+        };
+
+        div()
+            .id("camera-toggle")
+            .w(px(28.))
+            .h(px(32.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(8.))
+            .tooltip(move |_, cx| ui::Tooltip::new(&theme, tooltip).view(cx))
+            .when(can_toggle, |this| {
+                this.hover(|style| style.bg(Theme::with_alpha(theme.gray_12, 0.06)))
+                    .active(|style| style.bg(Theme::with_alpha(theme.gray_12, 0.10)))
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        let open = cx
+                            .try_global::<crate::app_windows::AppWindows>()
+                            .is_some_and(|windows| windows.camera.is_some());
+                        if open {
+                            crate::app_windows::close_camera_window(cx);
+                        } else {
+                            crate::app_windows::open_camera_window(cx);
+                        }
+                        cx.notify();
+                    }))
+            })
+            .child(svg().path(icon).size(px(18.)).text_color(icon_color))
+    }
+
+    fn render_teleprompter_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = self.theme;
+        let open = cx
+            .try_global::<crate::app_windows::AppWindows>()
+            .is_some_and(|windows| windows.teleprompter.is_some());
+        let icon_color: gpui::Hsla = if open {
+            theme.blue_9.into()
+        } else {
+            theme.gray_12.into()
+        };
+        let tooltip = if open {
+            "Hide teleprompter"
+        } else {
+            "Show teleprompter"
+        };
+
+        div()
+            .id("teleprompter-toggle")
+            .w(px(28.))
+            .h(px(32.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(8.))
+            .tooltip(move |_, cx| ui::Tooltip::new(&theme, tooltip).view(cx))
+            .hover(|style| style.bg(Theme::with_alpha(theme.gray_12, 0.06)))
+            .active(|style| style.bg(Theme::with_alpha(theme.gray_12, 0.10)))
+            .on_click(cx.listener(|_, _, _, cx| {
+                crate::app_windows::toggle_teleprompter(cx);
+                cx.notify();
+            }))
+            .child(
+                svg()
+                    .path("icons/captions.svg")
+                    .size(px(16.))
+                    .text_color(icon_color),
+            )
+    }
+
     fn confirm_action(
         &mut self,
         action: DestructiveAction,
@@ -435,6 +530,8 @@ impl ControlsWindow {
                             .gap(px(2.))
                             .flex_shrink_0()
                             .child(self.render_microphone(scale, cx))
+                            .child(self.render_camera_toggle(cx))
+                            .child(self.render_teleprompter_toggle(cx))
                             .child(
                                 self.action_button(
                                     "pause",

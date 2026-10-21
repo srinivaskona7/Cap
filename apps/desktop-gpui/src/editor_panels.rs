@@ -4026,6 +4026,36 @@ impl EditorWindow {
             .and_then(|timeline| timeline.zoom_segments.get(index))
             .is_some_and(|segment| matches!(segment.mode, ZoomMode::Manual { .. }));
 
+        let zoom_presets: [(&'static str, &'static str, f64); 4] = [
+            ("zoom-preset-1-2x", "1.2x", 1.2),
+            ("zoom-preset-1-5x", "1.5x", 1.5),
+            ("zoom-preset-2-0x", "2.0x", 2.0),
+            ("zoom-preset-2-5x", "2.5x", 2.5),
+        ];
+        let mut preset_row = div().flex().flex_row().gap(px(6.));
+        for (id, label, amount) in zoom_presets {
+            preset_row = preset_row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(label)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.edit_project("zoom-preset", window, cx, move |project| {
+                                let Some(seg) = project
+                                    .timeline
+                                    .as_mut()
+                                    .and_then(|t| t.zoom_segments.get_mut(index))
+                                else {
+                                    return false;
+                                };
+                                seg.amount = amount;
+                                true
+                            });
+                        })),
+                ),
+            );
+        }
+
         div()
             .flex()
             .flex_col()
@@ -4036,6 +4066,7 @@ impl EditorWindow {
                 "x",
                 cx,
             ))
+            .child(preset_row)
             .child(
                 ui::Field::section(&theme, "Zoom Mode").child(
                     div()

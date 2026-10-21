@@ -3591,8 +3591,18 @@ impl ProjectUniforms {
     ) -> (u32, u32) {
         let (base_width, base_height) = Self::get_base_size(options, project);
 
-        let width_scale = resolution_base.x as f32 / base_width as f32;
-        let height_scale = resolution_base.y as f32 / base_height as f32;
+        let long_edge = resolution_base.x.max(resolution_base.y) as f32;
+        let short_edge = resolution_base.x.min(resolution_base.y) as f32;
+        let (target_x, target_y) = if base_height > base_width {
+            (short_edge, long_edge)
+        } else if base_width == base_height {
+            (short_edge, short_edge)
+        } else {
+            (resolution_base.x as f32, resolution_base.y as f32)
+        };
+
+        let width_scale = target_x / base_width as f32;
+        let height_scale = target_y / base_height as f32;
         // Past the device's texture limit every render target fails to
         // allocate (a padded 6K recording exported at its own size), so
         // scale down to fit it instead.
@@ -4993,11 +5003,33 @@ impl ProjectUniforms {
                     // The bubble yields to a text takeover so it can never
                     // collide with the text's half of the frame.
                     opacity: scene.regular_camera_transition_opacity() as f32 * takeover_fade,
-                    border_enabled: 0.0,
-                    border_width: 0.0,
+                    border_enabled: if project
+                        .camera
+                        .border
+                        .as_ref()
+                        .is_some_and(|b| b.enabled)
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    border_width: project.camera.border.as_ref().map_or(4.0, |b| b.width),
                     preserve_source_alpha: 0.0,
                     _padding1: [0.0; 3],
-                    border_color: [0.0, 0.0, 0.0, 0.0],
+                    border_color: project.camera.border.as_ref().map_or(
+                        [0.0, 0.0, 0.0, 0.0],
+                        |b| {
+                            [
+                                b.color[0] as f32 / 255.0,
+                                b.color[1] as f32 / 255.0,
+                                b.color[2] as f32 / 255.0,
+                                (b.opacity / 100.0).clamp(0.0, 1.0)
+                                    * chrome_fade
+                                    * camera3d_shadow_fade
+                                    * takeover_fade,
+                            ]
+                        },
+                    ),
                     corner_radii: [1.0; 4],
                     color_adjust_a: camera_color_grade.color_adjust_a,
                     color_adjust_b: camera_color_grade.color_adjust_b,

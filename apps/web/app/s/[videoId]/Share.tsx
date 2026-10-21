@@ -131,6 +131,12 @@ const trackVideoView = (payload: {
 			: undefined,
 		userAgent:
 			typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+		prospectEmail:
+			typeof window !== "undefined"
+				? new URLSearchParams(window.location.search).get("prospect") ||
+					new URLSearchParams(window.location.search).get("viewer") ||
+					undefined
+				: undefined,
 		occurredAt: new Date().toISOString(),
 	};
 

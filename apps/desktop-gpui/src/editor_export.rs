@@ -143,9 +143,9 @@ impl ExportResolution {
 
     fn from_slug(slug: &str) -> Self {
         match slug {
+            "720p" => Self::P720,
             "1080p" => Self::P1080,
-            "4K" | "4k" => Self::P4k,
-            _ => Self::P720,
+            _ => Self::P4k,
         }
     }
 }
@@ -230,7 +230,7 @@ impl Drop for ExportUi {
 }
 
 const BPP_MIN: f32 = 0.02;
-const BPP_MAX: f32 = 0.5;
+const BPP_MAX: f32 = 0.8;
 const BPP_STEP: f32 = 0.01;
 
 impl ExportUi {
@@ -250,11 +250,11 @@ impl ExportUi {
     }
 
     pub fn load() -> Self {
-        let prefs = store::load().export.unwrap_or(ExportPrefs {
+        let mut prefs = store::load().export.unwrap_or(ExportPrefs {
             format: "Mp4".into(),
-            fps: 30,
+            fps: 60,
             export_to: "file".into(),
-            resolution: "720p".into(),
+            resolution: "4K".into(),
             compression: "Maximum".into(),
             optimize_filesize: false,
             cursor_only: false,
@@ -263,6 +263,15 @@ impl ExportUi {
             advanced_open: false,
             organization_id: None,
         });
+        if prefs.format != "Gif" {
+            if prefs.resolution == "720p" {
+                prefs.resolution = "4K".into();
+            }
+            if prefs.fps < 60 {
+                prefs.fps = 60;
+            }
+            prefs.compression = "Maximum".into();
+        }
         Self::from_preferences(prefs)
     }
 
@@ -458,6 +467,54 @@ fn decode_jpeg_bytes(bytes: &[u8]) -> Option<Arc<RenderImage>> {
 }
 
 impl EditorWindow {
+    pub(crate) fn render_magic_polish_button(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        ui::EditorButton::plain(&self.theme, "editor-magic-polish")
+            .left_icon("icons/sparkles.svg")
+            .label("Magic Polish")
+            .tooltip(
+                &self.theme,
+                "1-click auto-zoom, Studio Sound, audio ducking, shortcut callouts & pause trim",
+            )
+            .disabled(!self.project_ready())
+            .on_click(cx.listener(|this, _, window, cx| {
+                if !this.project_ready() {
+                    return;
+                }
+                this.magic_polish_clicked(window, cx);
+            }))
+    }
+
+    pub(crate) fn render_copy_to_clipboard_button(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        ui::EditorButton::plain(&self.theme, "editor-copy-clipboard")
+            .left_icon("icons/copy.svg")
+            .label("Copy")
+            .tooltip(&self.theme, "Export and copy video to clipboard (Max Clarity)")
+            .disabled(!self.project_ready())
+            .on_click(cx.listener(|this, _, window, cx| {
+                if !this.project_ready() {
+                    return;
+                }
+                this.open_export(window, cx);
+                if let Some(ui) = this.export.as_mut() {
+                    ui.destination = ExportDestination::Clipboard;
+                    if !has_transparent_background(&this.project) && !ui.cursor_only {
+                        ui.format = ExportFormatKind::Mp4;
+                        ui.resolution = ExportResolution::P4k;
+                        ui.fps = 60;
+                        ui.compression = ExportCompression::Maximum;
+                    }
+                    ui.persist();
+                }
+                this.start_export(window, cx);
+            }))
+    }
+
     pub(crate) fn render_reupload_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .rounded(px(8.))
@@ -577,7 +634,7 @@ impl EditorWindow {
             ui.fps = if ui.format == ExportFormatKind::Gif {
                 15
             } else {
-                30
+                60
             };
         }
     }
@@ -593,7 +650,7 @@ impl EditorWindow {
             &[15, 30, 60][..]
         };
         if !allowed.contains(&ui.fps) {
-            ui.fps = if gif { 15 } else { 30 };
+            ui.fps = if gif { 15 } else { 60 };
         }
     }
 
@@ -809,14 +866,14 @@ impl EditorWindow {
         cx.notify();
 
         ui.export_task = Some(cx.spawn_in(window, async move |this, cx| {
+            let ext = if cursor_only {
+                "mov"
+            } else if format == ExportFormatKind::Gif {
+                "gif"
+            } else {
+                "mp4"
+            };
             let save_path = if destination == ExportDestination::File {
-                let ext = if cursor_only {
-                    "mov"
-                } else if format == ExportFormatKind::Gif {
-                    "gif"
-                } else {
-                    "mp4"
-                };
                 let default = format!("{pretty_name}.{ext}");
                 let chosen: Result<Option<PathBuf>, String> = match std::env::var_os("CAP_GPUI_AUTO_EXPORT") {
                     Some(path) => Ok(Some(PathBuf::from(path))),
@@ -852,6 +909,25 @@ impl EditorWindow {
                         None
                     }
                 }
+            } else if destination == ExportDestination::Clipboard {
+                let sanitized: String = pretty_name
+                    .chars()
+                    .map(|c| if matches!(c, '/' | '\\' | ':' | '\0') { '-' } else { c })
+                    .collect();
+                let stem = if sanitized.trim().is_empty() {
+                    "Cap Recording"
+                } else {
+                    sanitized.trim()
+                };
+                let exports_dir = crate::recording::recordings_dir().join("Exports");
+                let dir = if std::fs::create_dir_all(&exports_dir).is_ok() {
+                    exports_dir
+                } else {
+                    let fallback = std::env::temp_dir().join("cap-clipboard-exports");
+                    let _ = std::fs::create_dir_all(&fallback);
+                    fallback
+                };
+                Some(dir.join(format!("{stem}.{ext}")))
             } else {
                 None
             };
@@ -1669,8 +1745,93 @@ impl EditorWindow {
                     .px(px(16.))
                     .pt(px(12.))
                     .pb(px(16.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
                     .border_t_1()
                     .border_color(Hsla::from(editor.line))
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-preset-reels-shorts",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export for Reels & Shorts (1080×1920 · 60fps)")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.project.aspect_ratio != Some(cap_project::AspectRatio::Vertical)
+                            {
+                                this.apply_tech_reel_preset(false, window, cx);
+                            }
+                            if let Some(ui) = this.export.as_mut() {
+                                ui.destination = ExportDestination::File;
+                                ui.format = ExportFormatKind::Mp4;
+                                ui.resolution = ExportResolution::P1080;
+                                ui.fps = 60;
+                                ui.compression = ExportCompression::Maximum;
+                                ui.custom_bpp = Some(0.12);
+                                ui.cursor_only = false;
+                                ui.persist();
+                            }
+                            this.refresh_export_preview(window, cx);
+                            this.start_export(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-copy-reels-clipboard",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Copy Reels & Shorts MP4 to Clipboard")
+                        .icon("icons/copy.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.project.aspect_ratio != Some(cap_project::AspectRatio::Vertical)
+                            {
+                                this.apply_tech_reel_preset(false, window, cx);
+                            }
+                            if let Some(ui) = this.export.as_mut() {
+                                ui.destination = ExportDestination::Clipboard;
+                                ui.format = ExportFormatKind::Mp4;
+                                ui.resolution = ExportResolution::P1080;
+                                ui.fps = 60;
+                                ui.compression = ExportCompression::Maximum;
+                                ui.custom_bpp = Some(0.12);
+                                ui.cursor_only = false;
+                                ui.persist();
+                            }
+                            this.refresh_export_preview(window, cx);
+                            this.start_export(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-preset-pr-gif",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Copy PR / Slack GIF (1080p · 20fps)")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if let Some(ui) = this.export.as_mut() {
+                                ui.destination = ExportDestination::Clipboard;
+                                ui.format = ExportFormatKind::Gif;
+                                ui.resolution = ExportResolution::P1080;
+                                ui.fps = 20;
+                                ui.cursor_only = false;
+                                ui.persist();
+                            }
+                            this.refresh_export_preview(window, cx);
+                            this.start_export(window, cx);
+                        })),
+                    )
                     .child(self.export_cta(ui, cx)),
             )
     }
@@ -2589,7 +2750,33 @@ impl EditorWindow {
                     )
                 })
                 .when(
-                    (ui.phase == ExportPhase::Done && ui.destination == ExportDestination::File)
+                    ui.phase == ExportPhase::Done
+                        && ui.destination == ExportDestination::Clipboard
+                        && ui.output_path.is_some(),
+                    |this| {
+                        let path = ui.output_path.clone();
+                        this.child(
+                            ui::Button::plain(
+                                &theme,
+                                "export-copy-again",
+                                ui::ButtonVariant::Primary,
+                                ui::ButtonSize::Md,
+                            )
+                            .icon("icons/copy.svg")
+                            .label("Copy Again")
+                            .on_click(move |_, _, cx| {
+                                if let Some(path) = &path {
+                                    let _ = platform::copy_file_to_clipboard(path, cx);
+                                    crate::app_sounds::play_notification();
+                                }
+                            }),
+                        )
+                    },
+                )
+                .when(
+                    (ui.phase == ExportPhase::Done
+                        && (ui.destination == ExportDestination::File
+                            || ui.destination == ExportDestination::Clipboard))
                         || ui.clipboard_retry_path().is_some(),
                     |this| {
                         let path = ui.output_path.clone();

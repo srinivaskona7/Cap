@@ -2345,6 +2345,118 @@ impl ScreenshotEditorWindow {
         }
         self.annotation_state.masks = overlays;
     }
+
+    pub(crate) fn auto_redact_screenshot_pii(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let rect = self.annotation_image_rect();
+        if rect.width <= 8.0 || rect.height <= 8.0 {
+            return;
+        }
+        let mut new_masks: Vec<Annotation> = Vec::new();
+        for existing in &self.project.annotations {
+            if existing.annotation_type == AnnotationType::Text
+                && let Some(text) = existing.text.as_deref()
+                && text
+                    .split_whitespace()
+                    .any(crate::transcription::is_pii_or_secret_token)
+            {
+                new_masks.push(Annotation {
+                    id: crate::store::new_uuid_v4(),
+                    annotation_type: AnnotationType::Mask,
+                    x: existing.x.clamp(rect.x, rect.x + rect.width - 8.0),
+                    y: existing.y.clamp(rect.y, rect.y + rect.height - 8.0),
+                    width: existing.width.abs().max(96.0),
+                    height: existing.height.abs().max(28.0),
+                    stroke_color: TRANSPARENT.to_string(),
+                    stroke_width: 0.0,
+                    fill_color: TRANSPARENT.to_string(),
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    text: None,
+                    mask_type: Some(MaskType::Blur),
+                    mask_level: Some(MASK_DEFAULT_LEVEL),
+                    points: None,
+                });
+            }
+        }
+
+        if new_masks.is_empty()
+            && let Some(rgba) = self.frame_rgba.as_ref()
+        {
+            let fw = self.frame_size.0.max(1.0) as usize;
+            let fh = self.frame_size.1.max(1.0) as usize;
+            let bands = 10usize;
+            let mut best_band = 2usize;
+            let mut best_score = 0u64;
+            for band in 1..bands - 1 {
+                let y0 = ((rect.y + rect.height * (band as f64 / bands as f64)).floor() as usize)
+                    .min(fh.saturating_sub(1));
+                let y1 = ((rect.y + rect.height * ((band + 1) as f64 / bands as f64)).ceil()
+                    as usize)
+                    .min(fh);
+                let x0 = (rect.x.floor() as usize).min(fw.saturating_sub(1));
+                let x1 = ((rect.x + rect.width).ceil() as usize).min(fw);
+                let mut edges = 0u64;
+                for y in (y0..y1).step_by(2) {
+                    let row_offset = y * fw * 4;
+                    for x in (x0..x1.saturating_sub(2)).step_by(2) {
+                        let i = row_offset + x * 4;
+                        let j = i + 8;
+                        if j + 2 < rgba.len() {
+                            let dr = u64::from(rgba[i].abs_diff(rgba[j]));
+                            let dg = u64::from(rgba[i + 1].abs_diff(rgba[j + 1]));
+                            let db = u64::from(rgba[i + 2].abs_diff(rgba[j + 2]));
+                            if dr + dg + db > 90 {
+                                edges += 1;
+                            }
+                        }
+                    }
+                }
+                if edges > best_score {
+                    best_score = edges;
+                    best_band = band;
+                }
+            }
+            let mask_w = (rect.width * 0.48).max(48.0).min(rect.width);
+            let mask_h = (rect.height / (bands as f64)).max(28.0).min(rect.height);
+            let mask_x = rect.x + (rect.width - mask_w) * 0.5;
+            let mask_y = (rect.y + rect.height * (best_band as f64 / bands as f64))
+                .clamp(rect.y, rect.y + rect.height - mask_h);
+            new_masks.push(Annotation {
+                id: crate::store::new_uuid_v4(),
+                annotation_type: AnnotationType::Mask,
+                x: mask_x,
+                y: mask_y,
+                width: mask_w,
+                height: mask_h,
+                stroke_color: TRANSPARENT.to_string(),
+                stroke_width: 0.0,
+                fill_color: TRANSPARENT.to_string(),
+                opacity: 1.0,
+                rotation: 0.0,
+                text: None,
+                mask_type: Some(MaskType::Blur),
+                mask_level: Some(MASK_DEFAULT_LEVEL),
+                points: None,
+            });
+        }
+
+        if let Some(last_id) = new_masks.last().map(|m| m.id.clone()) {
+            self.tool = Tool::Select;
+            self.selected_annotation = Some(last_id);
+            self.edit_project(
+                move |project| {
+                    project.annotations.extend(new_masks);
+                    true
+                },
+                window,
+                cx,
+            );
+        }
+    }
 }
 
 impl ScreenshotEditorWindow {

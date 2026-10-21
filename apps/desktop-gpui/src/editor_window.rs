@@ -491,7 +491,7 @@ pub fn preflight(path: &std::path::Path) -> Result<ProjectSummary, String> {
 const NO_AUTO_ZOOM_CLICKS_MESSAGE: &str =
     "No clicks found to zoom into. Drag across the lane to add one.";
 
-fn load_recording_clicks(
+pub(crate) fn load_recording_clicks(
     project_path: &std::path::Path,
 ) -> Vec<Vec<cap_project::CursorClickEvent>> {
     let Ok(meta) = RecordingMeta::load_for_project(project_path) else {
@@ -1497,7 +1497,7 @@ pub struct EditorWindow {
     clip_anim_generation: u64,
     /// `editorInstance.recordings.segments[i].display.duration`, which the clip
     /// trim clamps read (`TL/ClipTrack.tsx:1160-1162`).
-    clip_display_durations: Vec<f64>,
+    pub(crate) clip_display_durations: Vec<f64>,
     /// `editorInstance.recordingDuration` = `recordings.duration()`.
     recording_duration: f64,
     /// `meta().hasCamera` and "more than one recording clip", the two facts
@@ -9481,6 +9481,8 @@ impl EditorWindow {
                     .when(self.sharing.is_some(), |group| {
                         group.child(self.render_reupload_button(cx))
                     })
+                    .child(self.render_magic_polish_button(cx))
+                    .child(self.render_copy_to_clipboard_button(cx))
                     .child(self.render_export_button(cx))
                     .relative()
                     .children((!self.visual_ready()).then(|| {

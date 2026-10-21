@@ -35,7 +35,7 @@ use crate::{
 
 /// `productName` in `tauri.conf.json`, which is what macOS renames the first
 /// submenu to and what the About/Hide/Quit labels interpolate.
-pub const APP_NAME: &str = "Cap";
+pub const APP_NAME: &str = "sricap-rec";
 
 /// `env!("CARGO_PKG_VERSION")`, exactly as `build_tray_menu` spells it -- this
 /// crate's version, which is the gpui app's own (0.1.x) rather than the
@@ -903,16 +903,16 @@ mod tests {
             menus,
             vec![
                 (
-                    "Cap".to_string(),
+                    "sricap-rec".to_string(),
                     vec![
-                        "About Cap".to_string(),
+                        "About sricap-rec".to_string(),
                         "-".into(),
                         "Services".into(),
                         "-".into(),
-                        "Hide Cap".into(),
+                        "Hide sricap-rec".into(),
                         "Hide Others".into(),
                         "-".into(),
-                        "Quit Cap".into(),
+                        "Quit sricap-rec".into(),
                     ]
                 ),
                 ("File".into(), vec!["Close Window".into()]),

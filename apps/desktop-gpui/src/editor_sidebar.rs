@@ -2603,6 +2603,7 @@ impl EditorWindow {
                     div()
                         .flex()
                         .flex_col()
+                        .child(self.render_social_layout_presets(cx))
                         .child(self.slider_field(
                             "Background Blur",
                             SliderKey::Bg(BgSlider::Blur),
@@ -2681,6 +2682,280 @@ impl EditorWindow {
                     .is_none()
                     .then(|| self.render_color_correction(GradeTarget::Screen, cx)),
             )
+    }
+
+    fn render_social_layout_presets(&self, cx: &mut Context<Self>) -> AnyElement {
+        use cap_project::{AspectRatio, CameraPosition, CameraXPosition, CameraYPosition};
+
+        let theme = self.theme;
+        let current = self.project.aspect_ratio;
+        let presets: [(&'static str, &'static str, Option<AspectRatio>); 3] = [
+            ("layout-16-9-desktop", "16:9 Desktop", Some(AspectRatio::Wide)),
+            ("layout-9-16-reels", "9:16 Shorts & Reels", Some(AspectRatio::Vertical)),
+            ("layout-1-1-post", "1:1 Post", Some(AspectRatio::Square)),
+        ];
+
+        let mut row = div().flex().flex_row().gap(px(6.));
+        for (id, label, aspect) in presets {
+            let active = current == aspect;
+            let variant = if active {
+                ui::ButtonVariant::Primary
+            } else {
+                ui::ButtonVariant::Gray
+            };
+            row = row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, id, variant, ui::ButtonSize::Xs)
+                        .label(label)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if aspect == Some(AspectRatio::Vertical) {
+                                this.apply_tech_reel_preset(false, window, cx);
+                            } else {
+                                this.edit_project("social-layout-preset", window, cx, move |project| {
+                                    project.aspect_ratio = aspect;
+                                    project.background.display_position = None;
+                                    project.camera.position = CameraPosition {
+                                        x: CameraXPosition::Right,
+                                        y: CameraYPosition::Bottom,
+                                    };
+                                    project.camera.manual_position = None;
+                                    true
+                                });
+                            }
+                        })),
+                ),
+            );
+        }
+
+        let creator_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(6.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "preset-terminal-dev-reel",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Terminal Dev Reel (9:16)")
+                    .icon("icons/terminal.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_tech_reel_preset(true, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "preset-web-walkthrough-reel",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Web Demo Reel (9:16)")
+                    .icon("icons/globe.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_tech_reel_preset(false, window, cx);
+                    })),
+                ),
+            );
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .pb(px(10.))
+            .child(row)
+            .child(creator_row)
+            .into_any_element()
+    }
+
+    pub(crate) fn apply_tech_reel_preset(
+        &mut self,
+        terminal_mode: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use cap_project::{
+            AspectRatio, BackgroundSource, BorderConfiguration, CameraPosition, CameraShape,
+            CameraXPosition, CameraYPosition, CornerStyle, FrameConfiguration, FrameStyle,
+            FrameTheme, KeyboardData, XY,
+        };
+
+        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
+        let meta = cap_project::RecordingMeta::load_for_project(&self.project_path).ok();
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+
+        self.edit_project(
+            if terminal_mode {
+                "preset-terminal-dev-reel"
+            } else {
+                "preset-web-demo-reel"
+            },
+            window,
+            cx,
+            move |project| {
+                project.aspect_ratio = Some(AspectRatio::Vertical);
+
+                project.background.source = if terminal_mode {
+                    BackgroundSource::Gradient {
+                        from: [12, 12, 18],
+                        to: [28, 30, 44],
+                        angle: 135,
+                        noise_intensity: Some(12.0),
+                        noise_scale: Some(1.0),
+                        animated: Some(false),
+                        animation_speed: None,
+                    }
+                } else {
+                    BackgroundSource::Gradient {
+                        from: [20, 16, 48],
+                        to: [56, 32, 118],
+                        angle: 145,
+                        noise_intensity: Some(10.0),
+                        noise_scale: Some(1.0),
+                        animated: Some(false),
+                        animation_speed: None,
+                    }
+                };
+                project.background.padding = 5.5;
+                project.background.rounding = 20.0;
+                project.background.rounding_type = CornerStyle::Squircle;
+                project.background.shadow = 76.0;
+                project.background.display_position = Some(XY::new(0.5, 0.53));
+                project.background.frame = Some(if terminal_mode {
+                    FrameConfiguration {
+                        style: FrameStyle::MacOS,
+                        theme: FrameTheme::Dark,
+                        url: "localhost:3000".to_string(),
+                        title: "zsh — terminal".to_string(),
+                    }
+                } else {
+                    FrameConfiguration {
+                        style: FrameStyle::Browser,
+                        theme: FrameTheme::Dark,
+                        url: "app.cap.so".to_string(),
+                        title: "Web Walkthrough".to_string(),
+                    }
+                });
+
+                project.camera.hide = false;
+                project.camera.shape = CameraShape::Square;
+                project.camera.rounding = if terminal_mode { 28.0 } else { 100.0 };
+                project.camera.rounding_type = if terminal_mode {
+                    CornerStyle::Squircle
+                } else {
+                    CornerStyle::Rounded
+                };
+                project.camera.size = 33.0;
+                project.camera.shadow = 72.0;
+                project.camera.position = CameraPosition {
+                    x: CameraXPosition::Center,
+                    y: CameraYPosition::Top,
+                };
+                project.camera.manual_position = Some(XY::new(0.5, 0.17));
+                project.camera.border = Some(BorderConfiguration {
+                    enabled: true,
+                    width: 3.5,
+                    color: [255, 255, 255],
+                    opacity: 90.0,
+                });
+
+                project.color_correction.screen.preset = "custom".to_string();
+                project.color_correction.screen.intensity = 1.0;
+                project.color_correction.screen.contrast = if terminal_mode { 0.20 } else { 0.15 };
+                project.color_correction.screen.saturation = 0.12;
+
+                crate::transcription::regroup_captions_for_social_reels(
+                    project,
+                    &recording_durations,
+                    3,
+                );
+                if let Some(captions) = project.captions.as_mut() {
+                    captions.settings.enabled = true;
+                    captions.settings.preset = if terminal_mode {
+                        "dev-neon".to_string()
+                    } else {
+                        "pop".to_string()
+                    };
+                    captions.settings.font_weight = 700;
+                    captions.settings.size = 56;
+                    captions.settings.color = "#FFFFFF".to_string();
+                    captions.settings.outline = true;
+                    captions.settings.outline_color = "#000000".to_string();
+                    captions.settings.highlight_color = if terminal_mode {
+                        "#00FF66".to_string()
+                    } else {
+                        "#FFE600".to_string()
+                    };
+                    captions.settings.active_word_highlight = true;
+                    captions.settings.highlight_style = "color".to_string();
+                    captions.settings.animation = "pop".to_string();
+                    captions.settings.uppercase = true;
+                    captions.settings.position = "bottom-center".to_string();
+                    captions.settings.manual_position = Some(XY::new(0.5, 0.80));
+                }
+
+                let zoom_amount = if terminal_mode { 1.35 } else { 1.55 };
+                let mut kb_settings = crate::editor_tabs::keyboard_settings(project);
+                kb_settings.enabled = true;
+                kb_settings.show_modifiers = true;
+                let mut enable_kb = false;
+
+                if let Some(timeline) = project.timeline.as_mut() {
+                    if !clicks.is_empty() {
+                        let zooms = crate::editor_edits::generate_zoom_segments_for_timeline(
+                            &clicks,
+                            timeline,
+                            zoom_amount,
+                        );
+                        if !zooms.is_empty() {
+                            timeline.zoom_segments = zooms;
+                        }
+                    } else if timeline.zoom_segments.is_empty() {
+                        let total = timeline.duration().max(1.0);
+                        crate::editor_edits::insert_zoom_segment(timeline, 0.0, total, zoom_amount);
+                    }
+
+                    if terminal_mode
+                        && timeline.keyboard_segments.is_empty()
+                        && let Some(meta) = meta.as_ref()
+                        && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
+                            meta,
+                            timeline,
+                            &kb_settings,
+                        )
+                        && !kb_segs.is_empty()
+                    {
+                        timeline.keyboard_segments = kb_segs;
+                        enable_kb = true;
+                    }
+                }
+                if enable_kb {
+                    let kb = project.keyboard.get_or_insert_with(KeyboardData::default);
+                    kb.settings = kb_settings;
+                }
+                true
+            },
+        );
+
+        if self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.keyboard_segments.is_empty())
+        {
+            self.tracks.keyboard = true;
+        }
+        cx.notify();
     }
 
     // -- Source ------------------------------------------------------------

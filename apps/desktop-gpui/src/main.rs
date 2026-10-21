@@ -363,17 +363,17 @@ fn main() {
                     titlebar: None,
                     #[cfg(target_os = "windows")]
                     titlebar: Some(gpui::TitlebarOptions {
-                        title: Some("Cap".into()),
+                        title: Some("sricap-rec".into()),
                         appears_transparent: true,
                         ..Default::default()
                     }),
                     #[cfg(target_os = "linux")]
                     titlebar: Some(gpui::TitlebarOptions {
-                        title: Some("Cap".into()),
+                        title: Some("sricap-rec".into()),
                         ..Default::default()
                     }),
                     #[cfg(target_os = "linux")]
-                    app_id: Some("Cap".into()),
+                    app_id: Some("sricap-rec".into()),
                     #[cfg(target_os = "linux")]
                     window_min_size: Some(size(px(MAIN_WINDOW_WIDTH), px(MAIN_WINDOW_HEIGHT))),
                     #[cfg(target_os = "linux")]

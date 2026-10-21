@@ -548,7 +548,8 @@ pub fn active_material(cx: &gpui::App) -> Option<MaterialKind> {
 }
 
 fn clipboard_file_path(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let path = std::path::absolute(path)
+    let path = std::fs::canonicalize(path)
+        .or_else(|_| std::path::absolute(path))
         .map_err(|error| format!("Could not resolve the clipboard file: {error}"))?;
     let metadata = std::fs::metadata(&path)
         .map_err(|error| format!("Could not read the clipboard file: {error}"))?;
@@ -2074,10 +2075,19 @@ mod mac {
         use objc2::rc::autoreleasepool;
         use objc2::runtime::Bool;
         use objc2::{class, msg_send};
-        use objc2_foundation::NSString;
+        use objc2_foundation::{NSData, NSString};
 
-        let path = super::clipboard_file_path(path)?;
-        let path = path
+        let resolved = super::clipboard_file_path(path)?;
+        let is_gif = resolved
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("gif"));
+        let gif_bytes = if is_gif {
+            std::fs::read(&resolved).ok()
+        } else {
+            None
+        };
+        let path_str = resolved
             .to_str()
             .ok_or("The clipboard file path is not valid Unicode")?;
         autoreleasepool(|_| unsafe {
@@ -2086,15 +2096,31 @@ mod mac {
                 return Err("Clipboard unavailable".into());
             }
             let url_class = class!(NSURL);
-            let ns_path = NSString::from_str(path);
+            let ns_path = NSString::from_str(path_str);
             let url: *mut AnyObject = msg_send![url_class, fileURLWithPath: &*ns_path];
             if url.is_null() {
                 return Err("Failed to build file URL".into());
             }
             let objects: *mut AnyObject = msg_send![class!(NSArray), arrayWithObject: url];
             let _: isize = msg_send![pasteboard, clearContents];
-            let ok: Bool = msg_send![pasteboard, writeObjects: objects];
-            if ok.as_bool() {
+            let ok_url: Bool = msg_send![pasteboard, writeObjects: objects];
+
+            let filenames_type = NSString::from_str("NSFilenamesPboardType");
+            let paths_array: *mut AnyObject =
+                msg_send![class!(NSArray), arrayWithObject: &*ns_path];
+            let ok_plist: Bool = msg_send![
+                pasteboard,
+                setPropertyList: paths_array,
+                forType: &*filenames_type
+            ];
+
+            if let Some(bytes) = gif_bytes.as_deref() {
+                let gif_type = NSString::from_str("com.compuserve.gif");
+                let data = NSData::with_bytes(bytes);
+                let _: Bool = msg_send![pasteboard, setData: &*data, forType: &*gif_type];
+            }
+
+            if ok_url.as_bool() || ok_plist.as_bool() {
                 Ok(())
             } else {
                 Err("Failed to copy file to clipboard".into())

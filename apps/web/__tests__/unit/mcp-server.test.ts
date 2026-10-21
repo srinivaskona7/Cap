@@ -36,6 +36,22 @@ vi.mock("@/lib/mcp-data", () => ({
 		],
 		hasMoreCues: false,
 	}),
+	searchWorkspaceMcpCaps: async (_userId: string, input: { query: string }) => ({
+		query: input.query,
+		synthesizedAnswer: `Found 1 relevant recording for "${input.query}":`,
+		hits: [
+			{
+				videoId: "video-1",
+				title: "Demo",
+				shareUrl: "https://cap.so/s/video-1",
+				createdAt: "2026-01-01T00:00:00.000Z",
+				spaceNames: [],
+				score: 5,
+				summary: "A recording",
+				snippets: [],
+			},
+		],
+	}),
 }));
 
 describe("hosted MCP transport", () => {
@@ -151,6 +167,7 @@ describe("hosted MCP transport", () => {
 		expect(listBody).toContain("caps_list");
 		expect(listBody).toContain("caps_get");
 		expect(listBody).toContain("caps_context");
+		expect(listBody).toContain("caps_ask_workspace");
 		expect(listBody).toContain('"openWorldHint":false');
 		const data = listBody.split("\n").find((line) => line.startsWith("data: "));
 		expect(data).toBeDefined();
