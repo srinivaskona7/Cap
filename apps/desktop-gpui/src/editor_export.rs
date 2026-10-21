@@ -1862,6 +1862,21 @@ impl EditorWindow {
                             this.export_split_clips_as_chapters(window, cx);
                         })),
                     )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-subtitles-docs-bundle",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export Subtitles & Docs Bundle (.SRT + .VTT + .TXT + .MD)")
+                        .icon("icons/captions.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_subtitle_and_docs_bundle(window, cx);
+                        })),
+                    )
                     .child(self.export_cta(ui, cx)),
             )
     }

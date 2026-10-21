@@ -52,6 +52,27 @@ All notable features, presets, UI options, and architectural customizations buil
     - **Per-Image Duration Presets**: Set any image's visibility duration in 1 click (**`1s`**, **`2s` (Default)**, **`3s`**, **`5s`**, **`Full`**) or drag its start/end handles on the **Image** timeline track.
     - **Position Presets**: **`Center`**, **`TL`**, **`TR`**, **`BL`**, **`BR`** + **`Del`** to remove any image.
   - **`Add Reel Hook Banner`**: Inserts a bold top-anchored headline pill (`"HOW TO BUILD THIS IN 30s"`, `#4F46E5` pill backdrop, `800` weight, `2px` outline) on the Text track.
+- **20-Tool Creator Studio Suite (`Background → Layout`, `Audio`, & `Export`)**:
+  1. **`+ Intro (2s)` Card Generator**: Branded 2-second Intro Title Card at `0:00`.
+  2. **`+ Outro CTA` Card Generator**: 2.5-second `"FOLLOW FOR PART 2 · LIKE & SUBSCRIBE"` End Screen.
+  3. **`+ Lower-Third` Speaker Badge**: Animated speaker name & handle pill (`0.4s – 3.9s`).
+  4. **`+ Step ①②③` Auto-Incrementing Callouts**: Numbered `① STEP 1`, `② STEP 2`, `③ STEP 3` callout pills at the playhead (`2.5s` duration, draggable on canvas).
+  5. **`+ Spotlight` Focus Mask**: `MaskKind::Highlight` (`68%` dim surround, `14%` soft feather) at the playhead (`3.0s` duration, draggable/resizable on canvas).
+  6. **Multi-Clip Transitions (`Cut (No Trans)` | `Crossfade Clips` | `Fade-Through`)**: Smooth `0.35s` transitions across split/merged video clips.
+  7. **Cinema Color Grade LUT Presets (`Crisp Dev` | `Warm Face` | `Cyberpunk` | `Keynote`)**: 1-click color grading for Screen and Camera.
+  8. **`Cursor Boost`**: Toggles `195%` high-visibility mobile cursor sizing with smooth spring physics.
+  9. **`Cover .PNG` / `Save Cover Thumbnail (.png)`**: Renders the current composited GPU frame to `<recordings_dir>/Exports/<title>-thumbnail.png` and copies it to the macOS Clipboard.
+  10. **`Export Split Clips as Separate Chapter MP4s (01, 02…)`**: Batch-exports each split segment as `<title>-01.mp4`, `<title>-02.mp4`... in `Exports/`.
+  11. **`Talking Head` Scene Switcher**: Inserts a `2.5s` full-screen webcam `SceneMode::CameraOnly` segment at the playhead with smooth transitions.
+  12. **`Hide Cam 3s` Scene**: Temporarily hides the camera bubble for `3.0s` at the playhead (`SceneMode::HideCamera`).
+  13. **`+ 3D Tilt` Hero Keyframe**: Inserts a `3.0s` Apple-style 3D perspective screen tilt (`rotate_y = -14°`, `rotate_x = 8°`, `zoom = 1.10x`) at the playhead.
+  14. **`Freeze 2s` Hold Frame**: Splits a micro-slice at the playhead and slows it to `0.04x` so the video freezes for ~2 seconds while voiceover/callouts continue.
+  15. **`+ Progress` Retention Bar**: Generates 4 sequential progress bar indicators (`25%` → `50%` → `75%` → `100%`) across the video duration.
+  16. **`+ CLI Box` Terminal Command Overlay**: Inserts a dark terminal command snippet card (`#090D16` bg, `#00FF66` neon green text) at the playhead.
+  17. **`+ Pro-Tip` Callout Card**: Inserts an amber/gold `"⚡ PRO TIP"` badge at the playhead.
+  18. **`Zoom Steps` Auto-Zoom Sync**: Automatically creates `1.55x` manual-target `ZoomSegment`s aligned to every Step Callout, Pro-Tip, and Spotlight mask on the timeline.
+  19. **`Podcast Voice Master EQ` (`Audio` Tab)**: Enables Studio Sound voice isolation, `+2.5 dB` mic boost, and `-14 dB` background/system audio ducking in 1 click.
+  20. **`Export Subtitles & Docs Bundle (.SRT + .VTT + .TXT + .MD)` (`Export` Drawer)**: Writes `<title>.srt`, `<title>.vtt`, `<title>-transcript.txt`, and `<title>-sop.md` to `<recordings_dir>/Exports/`.
 
 ---
 

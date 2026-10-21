@@ -2002,6 +2002,20 @@ impl EditorWindow {
                         .child(
                             ui::Button::plain(
                                 &theme,
+                                "audio-podcast-voice-master",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .label("Podcast Voice Master EQ (+2.5dB Mic · -14dB Duck)")
+                            .icon("icons/microphone.svg")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.apply_podcast_voice_master(window, cx);
+                            })),
+                        )
+                        .child(
+                            ui::Button::plain(
+                                &theme,
                                 "audio-generate-click-key-sfx",
                                 ui::ButtonVariant::Gray,
                                 ui::ButtonSize::Sm,

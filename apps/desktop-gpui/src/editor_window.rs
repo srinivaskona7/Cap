@@ -6237,6 +6237,345 @@ impl EditorWindow {
         .detach();
     }
 
+    pub(crate) fn add_talking_head_scene_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 2.5).min(total);
+        self.tracks.scene = true;
+        self.edit_project("add-talking-head-scene", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_scene_segment(start, end);
+                seg.mode = cap_project::SceneMode::CameraOnly;
+                seg.transition_in = 0.3;
+                seg.transition_out = 0.3;
+                crate::editor_edits::insert_scene_segment(tl, seg);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_hide_camera_scene_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.scene = true;
+        self.edit_project("add-hide-cam-scene", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_scene_segment(start, end);
+                seg.mode = cap_project::SceneMode::HideCamera;
+                seg.transition_in = 0.25;
+                seg.transition_out = 0.25;
+                crate::editor_edits::insert_scene_segment(tl, seg);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_hero_3d_tilt_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.three_d = true;
+        self.edit_project("add-hero-3d-tilt", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_camera3d_segment(start, end);
+                seg.properties.rotate_y = -14.0;
+                seg.properties.rotate_x = 8.0;
+                seg.properties.zoom = 1.10;
+                seg.transition_in = 0.4;
+                seg.transition_out = 0.4;
+                crate::editor_edits::insert_camera3d_segment(tl, seg);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_freeze_frame_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let at = self.playhead.max(0.05);
+        self.edit_project("add-freeze-frame", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let _ = crate::editor_edits::split_clip_segment(tl, at, None);
+            let _ = crate::editor_edits::split_clip_segment(tl, at + 0.08, None);
+            let mut acc = 0.0_f64;
+            for seg in &mut tl.segments {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.01)).max(0.01);
+                if (acc - at).abs() < 0.15 && (seg.end - seg.start) <= 0.15 {
+                    seg.timescale = 0.04;
+                    break;
+                }
+                acc += dur;
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_reel_progress_bar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(2.0);
+        let step = total / 4.0;
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-reel-progress-bar", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                for (i, bar_txt) in [
+                    (0, "━━░░░░░░ 25%"),
+                    (1, "━━━━░░░░ 50%"),
+                    (2, "━━━━━━░░ 75%"),
+                    (3, "━━━━━━━━ 100%"),
+                ] {
+                    let s = (i as f64) * step;
+                    let e = ((i + 1) as f64 * step).min(total);
+                    let mut seg = crate::editor_edits::default_text_segment(s, e, 0);
+                    seg.content = bar_txt.to_string();
+                    seg.center = cap_project::XY::new(0.5, 0.95);
+                    seg.size = cap_project::XY::new(0.88, 0.04);
+                    seg.font_size = 28.0;
+                    seg.font_weight = 800.0;
+                    seg.color = "#FFE600".to_string();
+                    seg.background_color = Some("#0F172A".to_string());
+                    crate::editor_edits::insert_text_segment(tl, seg);
+                }
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_code_snippet_callout(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.5).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-code-snippet-callout", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut code = crate::editor_edits::default_text_segment(start, end, 0);
+                code.content = "$ npx create-app@latest --ts".to_string();
+                code.center = cap_project::XY::new(0.5, 0.72);
+                code.size = cap_project::XY::new(0.78, 0.09);
+                code.font_size = 40.0;
+                code.font_weight = 700.0;
+                code.color = "#00FF66".to_string();
+                code.background_color = Some("#090D16".to_string());
+                code.stroke_width = 1.5;
+                code.stroke_color = "#334155".to_string();
+                crate::editor_edits::insert_text_segment(tl, code);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn add_pro_tip_callout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-pro-tip-callout", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut tip = crate::editor_edits::default_text_segment(start, end, 0);
+                tip.content = "⚡ PRO TIP: REMEMBER THIS FLAG".to_string();
+                tip.center = cap_project::XY::new(0.5, 0.20);
+                tip.size = cap_project::XY::new(0.76, 0.08);
+                tip.font_size = 42.0;
+                tip.font_weight = 800.0;
+                tip.color = "#FDE047".to_string();
+                tip.background_color = Some("#78350F".to_string());
+                tip.stroke_width = 2.0;
+                tip.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, tip);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn sync_zooms_to_step_callouts(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("sync-zooms-to-steps", window, cx, |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut targets: Vec<(f64, f64, f32, f32)> = tl
+                .text_segments
+                .iter()
+                .filter(|t| t.content.contains("STEP ") || t.content.contains("PRO TIP"))
+                .map(|t| (t.start, t.end, t.center.x as f32, t.center.y as f32))
+                .collect();
+            for m in &tl.mask_segments {
+                if matches!(m.mask_type, cap_project::MaskKind::Highlight) {
+                    targets.push((m.start, m.end, m.center.x as f32, m.center.y as f32));
+                }
+            }
+            if targets.is_empty() {
+                return false;
+            }
+            for (s, e, x, y) in targets {
+                let idx = crate::editor_edits::insert_zoom_segment(tl, s, e, 1.55);
+                if let Some(z) = tl.zoom_segments.get_mut(idx) {
+                    z.mode = cap_project::ZoomMode::Manual {
+                        x: x.clamp(0.1, 0.9),
+                        y: y.clamp(0.1, 0.9),
+                    };
+                }
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn apply_podcast_voice_master(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("podcast-voice-master", window, cx, |project| {
+            project.audio.mute = false;
+            project.audio.improve = true;
+            project.audio.mic_volume_db = 2.5;
+            if project.audio.system_volume_db > -12.0 {
+                project.audio.system_volume_db = -14.0;
+            }
+            if let Some(tl) = project.timeline.as_mut() {
+                for seg in &mut tl.audio_segments {
+                    if seg.name.as_deref() != Some("Voiceover") && seg.volume_db > -12.0 {
+                        seg.volume_db = -14.0;
+                    }
+                }
+            }
+            true
+        });
+        self.show_notice(
+            "Applied Podcast Voice Master (Studio Sound + +2.5dB Mic + -14dB Ducking)!",
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn export_subtitle_and_docs_bundle(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "sricap-rec".to_string());
+        let safe_title: String = title
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        if std::fs::create_dir_all(&exports_dir).is_err() {
+            return;
+        }
+        let segments = self
+            .project
+            .captions
+            .as_ref()
+            .map(|c| c.segments.clone())
+            .unwrap_or_default();
+        let fmt_srt = |secs: f32| -> String {
+            let total_ms = (secs.max(0.0) * 1000.0).round() as u64;
+            let ms = total_ms % 1000;
+            let s = (total_ms / 1000) % 60;
+            let m = (total_ms / 60_000) % 60;
+            let h = total_ms / 3_600_000;
+            format!("{h:02}:{m:02}:{s:02},{ms:03}")
+        };
+        let fmt_vtt = |secs: f32| -> String { fmt_srt(secs).replace(',', ".") };
+
+        let mut srt_out = String::new();
+        let mut vtt_out = String::from("WEBVTT\n\n");
+        let mut txt_out = String::new();
+        for (i, seg) in segments.iter().enumerate() {
+            let idx = i + 1;
+            srt_out.push_str(&format!(
+                "{idx}\n{} --> {}\n{}\n\n",
+                fmt_srt(seg.start),
+                fmt_srt(seg.end),
+                seg.text.trim()
+            ));
+            vtt_out.push_str(&format!(
+                "{} --> {}\n{}\n\n",
+                fmt_vtt(seg.start),
+                fmt_vtt(seg.end),
+                seg.text.trim()
+            ));
+            txt_out.push_str(seg.text.trim());
+            txt_out.push('\n');
+        }
+        let clicks = load_recording_clicks(&self.project_path);
+        let recording_durations = self
+            .summary()
+            .map(|s| s.clip_display_durations.clone())
+            .unwrap_or_default();
+        let sop_md = crate::transcription::generate_studio_sop_markdown(
+            &self.project,
+            &clicks,
+            &recording_durations,
+            &title,
+        );
+        let _ = std::fs::write(exports_dir.join(format!("{safe_title}.srt")), srt_out);
+        let _ = std::fs::write(exports_dir.join(format!("{safe_title}.vtt")), vtt_out);
+        let _ = std::fs::write(
+            exports_dir.join(format!("{safe_title}-transcript.txt")),
+            txt_out,
+        );
+        let _ = std::fs::write(exports_dir.join(format!("{safe_title}-sop.md")), sop_md);
+        self.show_notice(
+            "Exported .SRT, .VTT, .TXT & SOP .MD bundle to Exports/!",
+            window,
+            cx,
+        );
+    }
+
     fn finish_audio_import(
         &mut self,
         request: AudioImportRequest,

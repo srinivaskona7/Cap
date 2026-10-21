@@ -3305,6 +3305,136 @@ impl EditorWindow {
             );
         }
 
+        let scene_and_3d_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-talking-head",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Talking Head")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_talking_head_scene_at_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-hide-cam",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Hide Cam 3s")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_hide_camera_scene_at_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-3d-tilt",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ 3D Tilt")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_hero_3d_tilt_at_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-freeze-frame",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Freeze 2s")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_freeze_frame_at_playhead(window, cx);
+                    })),
+                ),
+            );
+
+        let code_and_retention_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-progress-bar",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Progress")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_reel_progress_bar(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-code-box",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ CLI Box")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_code_snippet_callout(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-pro-tip",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Pro-Tip")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_pro_tip_callout(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-sync-zooms-steps",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Zoom Steps")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.sync_zooms_to_step_callouts(window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3315,8 +3445,10 @@ impl EditorWindow {
             .child(clips_row)
             .child(speed_row)
             .child(transitions_row)
+            .child(scene_and_3d_row)
             .child(studio_overlays_row)
             .child(focus_and_steps_row)
+            .child(code_and_retention_row)
             .child(color_looks_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))
