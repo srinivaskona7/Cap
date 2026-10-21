@@ -1617,6 +1617,15 @@ pub struct EditorWindow {
     /// The Clips layout mode (`ClipsSidebar.tsx`): while open, the config
     /// sidebar's column draws the clips sidebar instead.
     pub(crate) clips: crate::editor_clips::ClipsState,
+    pub(crate) voiceover_recording: Option<VoiceoverRecording>,
+}
+
+pub(crate) struct VoiceoverRecording {
+    pub stop_flag: Arc<std::sync::atomic::AtomicBool>,
+    pub relative_path: String,
+    pub full_path: PathBuf,
+    pub started_at: Instant,
+    pub start_playhead: f64,
 }
 
 struct PresetsMenu {
@@ -2171,6 +2180,7 @@ impl EditorWindow {
             caption_sync_signature: None,
             export: None,
             clips: crate::editor_clips::ClipsState::default(),
+            voiceover_recording: None,
         }
     }
 
@@ -5515,10 +5525,158 @@ impl EditorWindow {
     }
 
     pub(crate) fn import_audio_from_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.audio_picker.is_none() {
+            self.audio_picker_generation = self.audio_picker_generation.wrapping_add(1);
+            self.audio_picker = Some(crate::editor_audio::AudioPicker::Add { lane: 0 });
+            self.audio_picker_request = AudioImportRequest::new(
+                crate::editor_audio::AudioPicker::Add { lane: 0 },
+                self.audio_picker_generation,
+                &self.project,
+            );
+        }
         let Some(request) = self.begin_audio_import(window, cx) else {
             return;
         };
         self.import_audio_from_file(request, window, cx);
+    }
+
+    pub(crate) fn toggle_voiceover_recording(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(vo) = self.voiceover_recording.take() {
+            vo.stop_flag
+                .store(true, std::sync::atomic::Ordering::Release);
+            if self.playing {
+                self.toggle_playback(cx);
+            }
+            let full_path = vo.full_path;
+            let relative_path = vo.relative_path;
+            let elapsed = vo.started_at.elapsed().as_secs_f64().max(0.5);
+            let start_playhead = vo.start_playhead;
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(180))
+                    .await;
+                let duration = cx
+                    .background_executor()
+                    .spawn({
+                        let full_path = full_path.clone();
+                        async move { probe_audio_duration(&full_path).max(elapsed) }
+                    })
+                    .await;
+                this.update_in(cx, |this, window, cx| {
+                    this.playhead = start_playhead;
+                    this.commit_audio_import(
+                        0,
+                        ImportedAudio {
+                            path: relative_path,
+                            name: "Voiceover".to_string(),
+                            duration,
+                        },
+                        window,
+                        cx,
+                    );
+                })
+                .ok();
+            })
+            .detach();
+            cx.notify();
+            return;
+        }
+
+        let audio_dir = self.project_path.join("assets").join("audio");
+        if std::fs::create_dir_all(&audio_dir).is_err() {
+            return;
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let file_name = format!("voiceover-{stamp}.wav");
+        let full_path = audio_dir.join(&file_name);
+        let relative_path = format!("assets/audio/{file_name}");
+        let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop_clone = stop_flag.clone();
+        let wav_out = full_path.clone();
+
+        let mic_label = crate::store::recording_microphone().or_else(|| {
+            cap_recording::feeds::microphone::MicrophoneFeed::list_names()
+                .into_iter()
+                .next()
+        });
+        let Some(mic_label) = mic_label else {
+            self.show_notice("No microphone found for voiceover recording.", window, cx);
+            return;
+        };
+        let device_settings = crate::store::RecordingDeviceSettings::load();
+
+        gpui_tokio::Tokio::spawn(cx, async move {
+            use cap_recording::feeds::microphone::{self, MicrophoneFeed};
+            use kameo::Actor as _;
+
+            let (err_tx, _err_rx) = flume::unbounded();
+            let feed = MicrophoneFeed::spawn(MicrophoneFeed::new(err_tx));
+            let (samples_tx, samples_rx) = flume::unbounded();
+            if feed.ask(microphone::AddSender(samples_tx)).await.is_err() {
+                return;
+            }
+            let Ok(ready) = feed
+                .ask(microphone::SetInput {
+                    label: mic_label,
+                    settings: device_settings,
+                })
+                .await
+            else {
+                return;
+            };
+            if ready.await.is_err() {
+                return;
+            }
+
+            let mut writer: Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>> = None;
+            while !stop_clone.load(std::sync::atomic::Ordering::Acquire) {
+                match samples_rx.recv_timeout(Duration::from_millis(60)) {
+                    Ok(chunk) => {
+                        if writer.is_none() {
+                            let spec = hound::WavSpec {
+                                channels: chunk.info.channels().max(1),
+                                sample_rate: chunk.info.sample_rate().max(16_000),
+                                bits_per_sample: 32,
+                                sample_format: hound::SampleFormat::Float,
+                            };
+                            writer = hound::WavWriter::create(&wav_out, spec).ok();
+                        }
+                        if let Some(w) = writer.as_mut() {
+                            for &sample in &chunk.data {
+                                let _ = w.write_sample(sample);
+                            }
+                        }
+                    }
+                    Err(flume::RecvTimeoutError::Timeout) => continue,
+                    Err(flume::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            let _ = feed.ask(microphone::RemoveInput).await;
+            if let Some(w) = writer.take() {
+                let _ = w.finalize();
+            }
+        })
+        .detach();
+
+        let start_playhead = self.playhead;
+        self.voiceover_recording = Some(VoiceoverRecording {
+            stop_flag,
+            relative_path,
+            full_path,
+            started_at: Instant::now(),
+            start_playhead,
+        });
+        if !self.playing {
+            self.toggle_playback(cx);
+        }
+        cx.notify();
     }
 
     fn finish_audio_import(

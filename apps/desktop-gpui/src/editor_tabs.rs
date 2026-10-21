@@ -1831,6 +1831,9 @@ impl EditorWindow {
             .is_some_and(|seg| seg.volume_db <= -10.0);
         let auto_ducked =
             (audio.system_volume_db <= -10.0 || bg_music_ducked) && !audio.mute;
+        let original_clip_muted =
+            audio.mic_volume_db <= -30.0 && audio.system_volume_db <= -30.0;
+        let recording_voiceover = self.voiceover_recording.is_some();
 
         div()
             .flex()
@@ -1841,8 +1844,8 @@ impl EditorWindow {
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(16.))
-                        .child(ui::Subfield::plain(&theme, "Mute Audio").child(
+                        .gap(px(14.))
+                        .child(ui::Subfield::plain(&theme, "Mute All Audio").child(
                             ui::Toggle::plain(&theme, "audio-mute", audio.mute).on_click(
                                 cx.listener(|this, _, window, cx| {
                                     let next = !this.project.audio.mute;
@@ -1854,18 +1857,91 @@ impl EditorWindow {
                             ),
                         ))
                         .child(
+                            ui::Subfield::plain(
+                                &theme,
+                                "Mute Original Clip Audio (Keep Voiceover/Music)",
+                            )
+                            .child(
+                                ui::Toggle::plain(
+                                    &theme,
+                                    "audio-mute-original-clip",
+                                    original_clip_muted,
+                                )
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    let next_db = if original_clip_muted { 0.0 } else { -30.0 };
+                                    this.edit_project(
+                                        "audio-mute-original-clip",
+                                        window,
+                                        cx,
+                                        move |p| {
+                                            p.audio.mute = false;
+                                            p.audio.mic_volume_db = next_db;
+                                            p.audio.system_volume_db = next_db;
+                                            true
+                                        },
+                                    );
+                                })),
+                            ),
+                        )
+                        .child(
                             ui::Button::plain(
                                 &theme,
-                                "audio-import-bg-music",
-                                ui::ButtonVariant::Primary,
+                                "audio-record-voiceover",
+                                if recording_voiceover {
+                                    ui::ButtonVariant::Destructive
+                                } else {
+                                    ui::ButtonVariant::Primary
+                                },
                                 ui::ButtonSize::Sm,
                             )
-                            .label("Import Background Audio (.mp3 / .wav)")
-                            .icon("icons/music.svg")
+                            .label(if recording_voiceover {
+                                "Stop & Add Voiceover to Timeline"
+                            } else {
+                                "Record Live Voiceover (from Playhead)"
+                            })
+                            .icon("icons/microphone.svg")
                             .full_width()
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.import_audio_from_picker(window, cx);
+                                this.toggle_voiceover_recording(window, cx);
                             })),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(6.))
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-import-bg-music",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("Import Audio (.mp3/.wav)")
+                                        .icon("icons/music.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.import_audio_from_picker(window, cx);
+                                        })),
+                                    ),
+                                )
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-open-music-library",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("Music Library")
+                                        .icon("icons/music.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|this, _, _window, cx| {
+                                            this.open_audio_picker(0, cx);
+                                        })),
+                                    ),
+                                ),
                         )
                         .children(has_bg_music.then(|| {
                             let mut vol_row = div().flex().flex_row().gap(px(6.));
