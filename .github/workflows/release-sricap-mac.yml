@@ -30,6 +30,14 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup target add aarch64-apple-darwin --toolchain 1.95.0
 
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: aarch64-apple-darwin
+          workspaces: |
+            . -> target
+            apps/desktop-gpui -> apps/desktop-gpui/target
+
       - name: Install dependencies & native libraries
         run: |
           bun install

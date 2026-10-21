@@ -60,7 +60,10 @@ node "$repo_root/scripts/sync-desktop-versions.mjs"
 	fi
 )
 
-source_binary="$artifact_dir/cap-gpui$extension"
+source_binary="$artifact_dir/sricap-rec$extension"
+if [[ ! -f "$source_binary" ]]; then
+	source_binary="$artifact_dir/cap-gpui$extension"
+fi
 staged_binary="$binaries_dir/cap-gpui-$target$extension"
 if [[ ! -f "$source_binary" ]]; then
 	echo "error: built GPUI binary not found at $source_binary" >&2
