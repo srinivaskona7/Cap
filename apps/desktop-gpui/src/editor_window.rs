@@ -5733,6 +5733,510 @@ impl EditorWindow {
         self.add_track_kind(TrackKind::Text, window, cx);
     }
 
+    pub(crate) fn add_intro_title_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(2.0);
+        let end = total.min(2.2);
+        let title_text = self
+            .summary()
+            .map(|s| s.pretty_name.to_uppercase())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "HOW IT WORKS · STEP BY STEP".to_string());
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-intro-title-card", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut card = crate::editor_edits::default_text_segment(0.0, end, 0);
+                card.content = title_text.clone();
+                card.center = cap_project::XY::new(0.5, 0.14);
+                card.size = cap_project::XY::new(0.86, 0.12);
+                card.font_size = 56.0;
+                card.font_weight = 800.0;
+                card.color = "#FFFFFF".to_string();
+                card.background_color = Some("#4F46E5".to_string());
+                card.uppercase = true;
+                card.stroke_width = 2.0;
+                card.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, card);
+            }
+            true
+        });
+        self.seek_to_time(0.0, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn add_outro_cta_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(3.0);
+        let start = (total - 2.5).max(0.0);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-outro-cta-card", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut card = crate::editor_edits::default_text_segment(start, total, 0);
+                card.content = "FOLLOW FOR PART 2 · LIKE & SUBSCRIBE".to_string();
+                card.center = cap_project::XY::new(0.5, 0.84);
+                card.size = cap_project::XY::new(0.86, 0.10);
+                card.font_size = 48.0;
+                card.font_weight = 800.0;
+                card.color = "#FFFFFF".to_string();
+                card.background_color = Some("#10B981".to_string());
+                card.uppercase = true;
+                card.stroke_width = 2.0;
+                card.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, card);
+            }
+            true
+        });
+        self.seek_to_time(start, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn add_speaker_lower_third(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(3.0);
+        let start = 0.4_f64.min(total - 0.5).max(0.0);
+        let end = (start + 3.5).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-speaker-lower-third", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut badge = crate::editor_edits::default_text_segment(start, end, 0);
+                badge.content = "SRINIVAS KONA · @sricap-rec".to_string();
+                badge.center = cap_project::XY::new(0.32, 0.86);
+                badge.size = cap_project::XY::new(0.52, 0.08);
+                badge.font_size = 40.0;
+                badge.font_weight = 700.0;
+                badge.color = "#FFFFFF".to_string();
+                badge.background_color = Some("#1E1B4B".to_string());
+                badge.stroke_width = 1.5;
+                badge.stroke_color = "#6366F1".to_string();
+                crate::editor_edits::insert_text_segment(tl, badge);
+            }
+            true
+        });
+        self.seek_to_time(start, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn add_numbered_step_callout(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 2.5).min(total);
+        let step_num = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| {
+                tl.text_segments
+                    .iter()
+                    .filter(|t| t.content.contains("STEP "))
+                    .count()
+                    + 1
+            })
+            .unwrap_or(1);
+        let circled = match step_num {
+            1 => "①",
+            2 => "②",
+            3 => "③",
+            4 => "④",
+            5 => "⑤",
+            6 => "⑥",
+            7 => "⑦",
+            8 => "⑧",
+            9 => "⑨",
+            10 => "⑩",
+            _ => "•",
+        };
+        let label = format!("{circled} STEP {step_num}: KEY ACTION");
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-step-callout", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut step = crate::editor_edits::default_text_segment(start, end, 0);
+                step.content = label.clone();
+                step.center = cap_project::XY::new(0.5, 0.28);
+                step.size = cap_project::XY::new(0.64, 0.08);
+                step.font_size = 44.0;
+                step.font_weight = 800.0;
+                step.color = "#FFE600".to_string();
+                step.background_color = Some("#0F172A".to_string());
+                step.stroke_width = 2.0;
+                step.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(tl, step);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn add_spotlight_focus_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.mask = self.tracks.mask.max(1);
+        self.edit_project("add-spotlight-focus", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut mask = crate::editor_edits::default_mask_segment(start, end, 0);
+                mask.mask_type = cap_project::MaskKind::Highlight;
+                mask.darkness = 0.68;
+                mask.feather = 0.14;
+                mask.opacity = 1.0;
+                mask.center = cap_project::XY::new(0.5, 0.52);
+                mask.size = cap_project::XY::new(0.62, 0.36);
+                crate::editor_edits::insert_mask_segment(tl, mask);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.mask_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Mask, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Mask(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn set_all_clip_transitions(
+        &mut self,
+        kind: Option<cap_project::ClipTransitionType>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("set-clip-transitions", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            tl.transitions.clear();
+            if let Some(kind) = kind {
+                for idx in 0..tl.segments.len().saturating_sub(1) {
+                    tl.transitions.push(cap_project::ClipTransition {
+                        segment_index: idx as u32,
+                        kind,
+                        duration: 0.35,
+                    });
+                }
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn apply_cinema_color_preset(
+        &mut self,
+        preset_id: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("apply-cinema-color-preset", window, cx, move |project| {
+            project.color_correction.screen.preset = preset_id.to_string();
+            project.color_correction.screen.intensity = 1.0;
+            project.color_correction.camera.preset = preset_id.to_string();
+            project.color_correction.camera.intensity = 1.0;
+            match preset_id {
+                "crisp-dev" => {
+                    project.color_correction.screen.contrast = 0.22;
+                    project.color_correction.screen.exposure = -0.02;
+                    project.color_correction.screen.saturation = 0.14;
+                    project.color_correction.screen.vignette = 0.15;
+                }
+                "warm-studio" => {
+                    project.color_correction.screen.contrast = 0.10;
+                    project.color_correction.screen.temperature = 0.12;
+                    project.color_correction.camera.contrast = 0.12;
+                    project.color_correction.camera.temperature = 0.18;
+                    project.color_correction.camera.saturation = 0.10;
+                }
+                "cyberpunk" => {
+                    project.color_correction.screen.contrast = 0.20;
+                    project.color_correction.screen.saturation = 0.28;
+                    project.color_correction.screen.tint = 0.18;
+                    project.color_correction.screen.vignette = 0.25;
+                }
+                _ => {
+                    project.color_correction.screen.contrast = 0.08;
+                    project.color_correction.screen.exposure = 0.04;
+                    project.color_correction.screen.saturation = 0.06;
+                    project.color_correction.screen.temperature = 0.0;
+                    project.color_correction.screen.tint = 0.0;
+                    project.color_correction.screen.vignette = 0.0;
+                }
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_cursor_halo_boost(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("toggle-cursor-halo-boost", window, cx, |project| {
+            project.cursor.hide = false;
+            project.cursor.raw = false;
+            project.cursor.size = if project.cursor.size < 180 { 195 } else { 120 };
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn generate_click_and_key_sfx_track(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let clicks = load_recording_clicks(&self.project_path);
+        let key_times: Vec<f64> = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| tl.keyboard_segments.iter().map(|k| k.start).collect())
+            .unwrap_or_default();
+        let audio_dir = self.project_path.join("assets").join("audio");
+        if std::fs::create_dir_all(&audio_dir).is_err() {
+            return;
+        }
+        let wav_path = audio_dir.join("ui-click-key-sfx.wav");
+        let relative_path = "assets/audio/ui-click-key-sfx.wav".to_string();
+        let sample_rate = 48_000_u32;
+        let total_samples = ((total * f64::from(sample_rate)) as usize).clamp(48_000, 48_000 * 600);
+        let mut buf = vec![0.0_f32; total_samples];
+
+        for seg_clicks in &clicks {
+            for click in seg_clicks {
+                if !click.down {
+                    continue;
+                }
+                let start_idx = ((click.time_ms / 1000.0) * f64::from(sample_rate)) as usize;
+                let tap_samples = (0.018 * f64::from(sample_rate)) as usize;
+                for i in 0..tap_samples {
+                    let idx = start_idx + i;
+                    if idx >= buf.len() {
+                        break;
+                    }
+                    let t = i as f32 / sample_rate as f32;
+                    let env = (-t * 240.0).exp();
+                    let wave = (2.0 * std::f32::consts::PI * 1650.0 * t).sin() * 0.35
+                        + (2.0 * std::f32::consts::PI * 820.0 * t).sin() * 0.25;
+                    buf[idx] = (buf[idx] + wave * env).clamp(-0.9, 0.9);
+                }
+            }
+        }
+        for &kt in &key_times {
+            let start_idx = (kt * f64::from(sample_rate)) as usize;
+            let tick_samples = (0.012 * f64::from(sample_rate)) as usize;
+            for i in 0..tick_samples {
+                let idx = start_idx + i;
+                if idx >= buf.len() {
+                    break;
+                }
+                let t = i as f32 / sample_rate as f32;
+                let env = (-t * 320.0).exp();
+                let wave = (2.0 * std::f32::consts::PI * 2200.0 * t).sin() * 0.28;
+                buf[idx] = (buf[idx] + wave * env).clamp(-0.9, 0.9);
+            }
+        }
+
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+            for s in buf {
+                let _ = writer.write_sample(s);
+            }
+            let _ = writer.finalize();
+            self.commit_audio_import(
+                0,
+                ImportedAudio {
+                    path: relative_path,
+                    name: "Click & Key SFX".to_string(),
+                    duration: total,
+                },
+                window,
+                cx,
+            );
+            self.show_notice("Added Click & Keystroke SFX track to timeline.", window, cx);
+        }
+    }
+
+    pub(crate) fn export_current_frame_thumbnail(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let path = self.project_path.clone();
+        let time = self.preview_or_playhead();
+        let instance = self.instance.clone();
+        let project = self.project.clone();
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "sricap-rec".to_string());
+        let settings = cap_export::preview::ExportPreviewSettings {
+            fps: 60,
+            resolution_base: cap_project::XY::new(1920, 1080),
+            compression_bpp: 0.45,
+            cursor_only: false,
+        };
+        cx.spawn_in(window, async move |this, cx| {
+            let rendered = gpui_tokio::Tokio::spawn(cx, async move {
+                match instance {
+                    Some(inst) => {
+                        cap_export::preview::render_preview_with_editor(
+                            &inst, project, time, settings,
+                        )
+                        .await
+                    }
+                    None => {
+                        cap_export::preview::render_preview_with_config(
+                            path, project, time, settings, false,
+                        )
+                        .await
+                    }
+                }
+            })
+            .await
+            .ok()
+            .and_then(|r| r.ok());
+
+            let Some(preview) = rendered else {
+                return;
+            };
+            let Ok(jpeg_bytes) = base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                preview.jpeg_base64.as_bytes(),
+            ) else {
+                return;
+            };
+            let Ok(dyn_img) = image::load_from_memory(&jpeg_bytes) else {
+                return;
+            };
+            let exports_dir = crate::recording::recordings_dir().join("Exports");
+            let _ = std::fs::create_dir_all(&exports_dir);
+            let safe_title: String = title
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+                .collect();
+            let out_png = exports_dir.join(format!("{safe_title}-thumbnail.png"));
+            if dyn_img
+                .save_with_format(&out_png, image::ImageFormat::Png)
+                .is_ok()
+            {
+                this.update_in(cx, |this, window, cx| {
+                    let _ = crate::platform::copy_file_to_clipboard(&out_png, cx);
+                    this.show_notice(
+                        "Saved Cover Thumbnail (.png) to Exports/ & copied to Clipboard!",
+                        window,
+                        cx,
+                    );
+                })
+                .ok();
+            }
+        })
+        .detach();
+    }
+
+    pub(crate) fn export_split_clips_as_chapters(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(segments) = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| tl.segments.clone())
+            .filter(|s| !s.is_empty())
+        else {
+            self.show_notice("No timeline clips to split-export.", window, cx);
+            return;
+        };
+        let path = self.project_path.clone();
+        let base_project = self.project.clone();
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "sricap-rec".to_string());
+        let safe_title: String = title
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let count = segments.len();
+        self.show_notice(
+            format!("Exporting {count} chapter MP4s to Exports/..."),
+            window,
+            cx,
+        );
+
+        cx.spawn_in(window, async move |this, cx| {
+            let exported_count = gpui_tokio::Tokio::spawn(cx, async move {
+                let mut done = 0usize;
+                for (i, seg) in segments.into_iter().enumerate() {
+                    let mut chap_project = base_project.clone();
+                    if let Some(tl) = chap_project.timeline.as_mut() {
+                        tl.segments = vec![seg];
+                        tl.transitions.clear();
+                    }
+                    let out_file = exports_dir.join(format!("{safe_title}-{:02}.mp4", i + 1));
+                    let Ok(builder) = cap_export::ExporterBase::builder(path.clone())
+                        .with_config(chap_project)
+                        .with_output_path(out_file)
+                        .build()
+                        .await
+                    else {
+                        continue;
+                    };
+                    let mp4_settings = cap_export::mp4::Mp4ExportSettings {
+                        fps: 60,
+                        resolution_base: cap_project::XY::new(1920, 1080),
+                        compression: cap_export::mp4::ExportCompression::Maximum,
+                        custom_bpp: None,
+                        force_ffmpeg_decoder: false,
+                        optimize_filesize: false,
+                    };
+                    if mp4_settings.export(builder, |_| true).await.is_ok() {
+                        done += 1;
+                    }
+                }
+                done
+            })
+            .await
+            .unwrap_or(0);
+
+            this.update_in(cx, |this, window, cx| {
+                this.show_notice(
+                    format!("Exported {exported_count}/{count} Chapter MP4s to Exports/!"),
+                    window,
+                    cx,
+                );
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     fn finish_audio_import(
         &mut self,
         request: AudioImportRequest,

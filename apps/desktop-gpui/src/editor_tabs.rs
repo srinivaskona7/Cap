@@ -1999,6 +1999,20 @@ impl EditorWindow {
                                     ),
                                 ),
                         )
+                        .child(
+                            ui::Button::plain(
+                                &theme,
+                                "audio-generate-click-key-sfx",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .label("+ Synthesize Click & Keystroke SFX Track")
+                            .icon("icons/music.svg")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.generate_click_and_key_sfx_track(window, cx);
+                            })),
+                        )
                         .children((!audio_tracks_list.is_empty()).then(|| {
                             let mut list = div().flex().flex_col().gap(px(6.));
                             for (idx, name, start_s, end_s) in &audio_tracks_list {

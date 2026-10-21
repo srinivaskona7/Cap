@@ -3113,6 +3113,198 @@ impl EditorWindow {
             );
         }
 
+        let studio_overlays_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-intro-card",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Intro (2s)")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_intro_title_card(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-outro-card",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Outro CTA")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_outro_cta_card(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-lower-third",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Lower-Third")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_speaker_lower_third(window, cx);
+                    })),
+                ),
+            );
+
+        let focus_and_steps_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-step-callout",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Step ①②③")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_numbered_step_callout(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-spotlight-focus",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Spotlight")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_spotlight_focus_at_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-cursor-halo",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Cursor Boost")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_cursor_halo_boost(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-save-thumbnail-png",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Cover .PNG")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.export_current_frame_thumbnail(window, cx);
+                    })),
+                ),
+            );
+
+        let transitions_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "tr-none",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Cut (No Trans)")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_all_clip_transitions(None, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "tr-crossfade",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Crossfade Clips")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_all_clip_transitions(
+                            Some(cap_project::ClipTransitionType::CrossFade),
+                            window,
+                            cx,
+                        );
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "tr-fade-black",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Fade-Through")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_all_clip_transitions(
+                            Some(cap_project::ClipTransitionType::FadeThroughBlack),
+                            window,
+                            cx,
+                        );
+                    })),
+                ),
+            );
+
+        let mut color_looks_row = div().flex().flex_row().gap(px(4.));
+        for (look_id, look_lbl, preset_key) in [
+            ("lut-crisp", "Crisp Dev", "crisp-dev"),
+            ("lut-warm", "Warm Face", "warm-studio"),
+            ("lut-cyber", "Cyberpunk", "cyberpunk"),
+            ("lut-clean", "Keynote", "default"),
+        ] {
+            color_looks_row = color_looks_row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, look_id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(look_lbl)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.apply_cinema_color_preset(preset_key, window, cx);
+                        })),
+                ),
+            );
+        }
+
         div()
             .flex()
             .flex_col()
@@ -3122,6 +3314,10 @@ impl EditorWindow {
             .child(creator_row)
             .child(clips_row)
             .child(speed_row)
+            .child(transitions_row)
+            .child(studio_overlays_row)
+            .child(focus_and_steps_row)
+            .child(color_looks_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))
             .into_any_element()

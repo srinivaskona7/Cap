@@ -1832,6 +1832,36 @@ impl EditorWindow {
                             this.start_export(window, cx);
                         })),
                     )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-save-cover-thumbnail-png",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Save Cover Thumbnail (.png) to Exports & Clipboard")
+                        .icon("icons/image.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_current_frame_thumbnail(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-split-chapters-mp4",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("Export Split Clips as Separate Chapter MP4s (01, 02…)")
+                        .icon("icons/layers.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_split_clips_as_chapters(window, cx);
+                        })),
+                    )
                     .child(self.export_cta(ui, cx)),
             )
     }
