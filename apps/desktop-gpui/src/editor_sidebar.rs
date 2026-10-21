@@ -3018,6 +3018,59 @@ impl EditorWindow {
             }
         }
 
+        let clips_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(6.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "layout-split-video-playhead",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Split Video Here")
+                    .icon("icons/scissors.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.split_at_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "layout-append-mp4-clip",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Add Video (.mp4)")
+                    .icon("icons/import.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.pick_mp4(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "layout-open-clips-manager",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Reorder Clips")
+                    .icon("icons/layers.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_clips(window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3025,6 +3078,7 @@ impl EditorWindow {
             .pb(px(10.))
             .child(row)
             .child(creator_row)
+            .child(clips_row)
             .child(brand_row)
             .children(has_images.then_some(images_panel))
             .into_any_element()

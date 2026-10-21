@@ -6470,7 +6470,7 @@ impl EditorWindow {
     /// The `C` binding (`TL/index.tsx:1007-1013`): cut the clip under
     /// `previewTime ?? playbackTime`. Works while playing, which is why it
     /// falls back to the playhead.
-    fn split_at_playhead(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn split_at_playhead(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let time = self.view.preview_time.unwrap_or(self.playhead);
         if let Some(selection) = self.selection.clone()
             && matches!(selection.track, TrackKind::Style | TrackKind::Image)

@@ -1552,7 +1552,7 @@ impl EditorWindow {
         .detach();
     }
 
-    fn pick_mp4(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn pick_mp4(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.clips.importing {
             return;
         }
