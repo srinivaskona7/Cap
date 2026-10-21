@@ -78,6 +78,15 @@ jobs:
         run: |
           node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app,dmg
 
+      - name: Ad-hoc Deep Codesign App Bundle
+        run: |
+          APP_PATH="$(find apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
+          if [ -d "$APP_PATH" ]; then
+            echo "Signing $APP_PATH with deep ad-hoc signature..."
+            codesign --force --deep --sign - "$APP_PATH"
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH" || true
+          fi
+
       - name: Package release artifacts & SHA256 checksums
         run: |
           mkdir -p dist-release
@@ -93,7 +102,14 @@ jobs:
           fi
           echo "Found DMG: $DMG_FILE"
           echo "Found APP: $APP_PATH"
-          cp "$DMG_FILE" dist-release/sricap-rec.dmg
+
+          # Re-create DMG with the freshly signed .app
+          DMG_DIR="$(mktemp -d)"
+          cp -R "$APP_PATH" "$DMG_DIR/"
+          ln -s /Applications "$DMG_DIR/Applications"
+          hdiutil create -volname "sricap-rec" -srcfolder "$DMG_DIR" -ov -format UDZO dist-release/sricap-rec.dmg
+          rm -rf "$DMG_DIR"
+
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" dist-release/sricap-rec-macos-arm64.zip
           cd dist-release
           shasum -a 256 sricap-rec.dmg sricap-rec-macos-arm64.zip > SHA256SUMS.txt
