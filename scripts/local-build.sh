@@ -16,17 +16,17 @@ MODE="${1:-check}"
 case "$MODE" in
   check)
     echo "==> Running fast incremental type-check..."
-    cargo check --bin sricap-rec
+    cargo +1.95.0 check --bin sricap-rec
     echo "==> Done in seconds! [Check Passed]"
     ;;
   build)
     echo "==> Building local executable binary without launching..."
-    cargo build --bin sricap-rec
+    cargo +1.95.0 build --bin sricap-rec
     echo "==> Binary ready at: apps/desktop-gpui/target/debug/sricap-rec"
     ;;
   release)
     echo "==> Building optimized release binary..."
-    cargo build --release --bin sricap-rec
+    cargo +1.95.0 build --release --bin sricap-rec
     echo "==> Release binary ready at: apps/desktop-gpui/target/release/sricap-rec"
     ;;
   bundle)

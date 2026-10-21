@@ -28,17 +28,17 @@ if [[ ! -d "$ZED_DIR/.git" ]] || [[ ! -f "$STAMP_FILE" ]] || [[ "$(cat "$STAMP_F
 	echo "$CURRENT_STAMP" > "$STAMP_FILE"
 fi
 
-cd "$REPO_ROOT"
+cd "$REPO_ROOT/apps/desktop-gpui"
 SECONDS=0
 
 if [[ "${1:-}" == "--release" ]]; then
 	echo "⚡ Building sricap-rec (release with cache)..."
-	cargo build --release --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	cargo +1.95.0 build --release --bin sricap-rec
 	echo "✅ Build completed in ${SECONDS}s — Launching sricap-rec"
 	exec "$REPO_ROOT/apps/desktop-gpui/target/release/sricap-rec"
 else
 	echo "⚡ Building sricap-rec (incremental dev with cache)..."
-	cargo build --manifest-path apps/desktop-gpui/Cargo.toml --bin sricap-rec
+	cargo +1.95.0 build --bin sricap-rec
 	echo "✅ Build completed in ${SECONDS}s — Launching sricap-rec"
 	exec "$REPO_ROOT/apps/desktop-gpui/target/debug/sricap-rec"
 fi
