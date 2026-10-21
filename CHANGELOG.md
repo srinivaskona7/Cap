@@ -73,6 +73,17 @@ All notable features, presets, UI options, and architectural customizations buil
   18. **`Zoom Steps` Auto-Zoom Sync**: Automatically creates `1.55x` manual-target `ZoomSegment`s aligned to every Step Callout, Pro-Tip, and Spotlight mask on the timeline.
   19. **`Podcast Voice Master EQ` (`Audio` Tab)**: Enables Studio Sound voice isolation, `+2.5 dB` mic boost, and `-14 dB` background/system audio ducking in 1 click.
   20. **`Export Subtitles & Docs Bundle (.SRT + .VTT + .TXT + .MD)` (`Export` Drawer)**: Writes `<title>.srt`, `<title>.vtt`, `<title>-transcript.txt`, and `<title>-sop.md` to `<recordings_dir>/Exports/`.
+  21. **Top Header `Save`, `Discard Edits`, `Discard & Close`, and `Quit App` Controls**:
+      - **`Save`**: Writes project changes to disk immediately and updates the restore checkpoint.
+      - **`Discard Edits`**: Reverts all unsaved experimental edits back to the last saved checkpoint without closing the window.
+      - **`Discard & Close`**: Ignores unsaved edits, restores the last saved state on disk, closes the Studio Editor, and returns to the Main Window.
+      - **`Quit App`**: Cleanly exits `sricap-rec` in 1 click.
+  22. **`Trim Start [` & `Trim End ]` (`Background → Layout`)**: 1-click ripple-trim of dead air before or after the current playhead on the active clip.
+  23. **`Duplicate` Selected Segment (`Background → Layout`)**: Duplicates the selected `Text`, `Image`, `Mask`, or `Zoom` segment and places the copy right after it.
+  24. **`+ Pixelate` Sensitive Area Mask (`Background → Layout`)**: Inserts a `MaskKind::Sensitive` pixelation box (`24px` blocks, `3.0s` duration) at the playhead and activates its canvas drag/resize handles.
+  25. **`Split Scene` & `Floating Dual` (`Background → Layout`)**: Inserts a `SceneMode::SplitScreen` or `SceneMode::Floating` dual-card layout (`3.0s` duration) at the playhead.
+  26. **`Clear Overlays` (`Background → Layout`)**: Clears all added Text, Mask, Scene, and 3D overlays in 1 click while preserving video clips.
+  27. **`Exports Dir` (`Background → Layout`)**: Opens `<recordings_dir>/Exports/` directly in macOS Finder.
 
 ---
 

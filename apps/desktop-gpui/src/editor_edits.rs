@@ -171,6 +171,10 @@ impl ProjectHistory {
         }
     }
 
+    pub fn initial(&self) -> Option<&ProjectConfiguration> {
+        self.entries.first()
+    }
+
     /// One store change. Truncates the redo tail (`newLength = list.length -
     /// count`), pushes, and keeps at most [`HISTORY_LIMIT`] entries.
     pub fn record(&mut self, config: &ProjectConfiguration) {

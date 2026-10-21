@@ -6576,6 +6576,253 @@ impl EditorWindow {
         );
     }
 
+    pub(crate) fn save_project_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Err(err) = self.project.write(&self.project_path) {
+            self.show_notice(format!("Failed to save project: {err}"), window, cx);
+            return;
+        }
+        self.history = ProjectHistory::new(self.project.clone());
+        self.show_notice("Project saved!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn discard_unsaved_edits(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(orig) = self.history.initial().cloned() else {
+            return;
+        };
+        let _ = orig.write(&self.project_path);
+        self.set_project(orig, window, cx);
+        self.project_changed(window, cx);
+        self.show_notice(
+            "Discarded unsaved edits & restored last saved state.",
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn discard_and_close_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(orig) = self.history.initial().cloned() {
+            let _ = orig.write(&self.project_path);
+        }
+        self.pending_save.borrow_mut().config = None;
+        self.save_task = None;
+        cx.defer(crate::app_windows::show_main_window);
+        window.remove_window();
+    }
+
+    pub(crate) fn open_exports_folder_in_finder(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        crate::library::reveal_in_folder(&exports_dir);
+        self.show_notice("Opened Exports/ folder in Finder.", window, cx);
+    }
+
+    pub(crate) fn trim_clip_start_to_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let playhead = self.playhead;
+        if playhead <= 0.05 {
+            return;
+        }
+        self.edit_project("trim-clip-start-to-playhead", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut acc = 0.0_f64;
+            for seg in &mut tl.segments {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.05)).max(0.01);
+                if playhead > acc && playhead < acc + dur - 0.1 {
+                    let delta_src = (playhead - acc) * seg.timescale.max(0.05);
+                    seg.start = (seg.start + delta_src).min(seg.end - 0.1);
+                    return true;
+                }
+                acc += dur;
+            }
+            false
+        });
+        self.seek_to_time(0.0, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn trim_clip_end_to_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let playhead = self.playhead;
+        self.edit_project("trim-clip-end-to-playhead", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut acc = 0.0_f64;
+            for seg in &mut tl.segments {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.05)).max(0.01);
+                if playhead > acc + 0.1 && playhead < acc + dur {
+                    let keep_src = (playhead - acc) * seg.timescale.max(0.05);
+                    seg.end = (seg.start + keep_src).max(seg.start + 0.1);
+                    return true;
+                }
+                acc += dur;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn duplicate_selected_segment(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let sel = self.selection.clone();
+        self.edit_project("duplicate-selected-segment", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            if let Some(sel) = sel {
+                let Some(&idx) = sel.indices.first() else {
+                    return false;
+                };
+                match sel.track {
+                    TrackKind::Text => {
+                        if let Some(mut item) = tl.text_segments.get(idx).cloned() {
+                            let dur = (item.end - item.start).max(0.5);
+                            item.start = item.end.min((total - 0.3).max(0.0));
+                            item.end = (item.start + dur).min(total);
+                            crate::editor_edits::insert_text_segment(tl, item);
+                            return true;
+                        }
+                    }
+                    TrackKind::Image => {
+                        if let Some(mut item) = tl.image_segments.get(idx).cloned() {
+                            let dur = (item.end - item.start).max(0.5);
+                            item.start = item.end.min((total - 0.3).max(0.0));
+                            item.end = (item.start + dur).min(total);
+                            crate::editor_edits::insert_image_segment(tl, item);
+                            return true;
+                        }
+                    }
+                    TrackKind::Mask => {
+                        if let Some(mut item) = tl.mask_segments.get(idx).cloned() {
+                            let dur = (item.end - item.start).max(0.5);
+                            item.start = item.end.min((total - 0.3).max(0.0));
+                            item.end = (item.start + dur).min(total);
+                            crate::editor_edits::insert_mask_segment(tl, item);
+                            return true;
+                        }
+                    }
+                    TrackKind::Zoom => {
+                        if let Some(item) = tl.zoom_segments.get(idx).cloned() {
+                            let dur = (item.end - item.start).max(0.5);
+                            let s = item.end.min((total - 0.3).max(0.0));
+                            let e = (s + dur).min(total);
+                            crate::editor_edits::insert_zoom_segment(tl, s, e, item.amount);
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(mut last_txt) = tl.text_segments.last().cloned() {
+                let dur = (last_txt.end - last_txt.start).max(0.5);
+                last_txt.start = last_txt.end.min((total - 0.3).max(0.0));
+                last_txt.end = (last_txt.start + dur).min(total);
+                crate::editor_edits::insert_text_segment(tl, last_txt);
+                return true;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_pixelate_mask_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.mask = self.tracks.mask.max(1);
+        self.edit_project("add-pixelate-mask", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut mask = crate::editor_edits::default_mask_segment(start, end, 0);
+                mask.mask_type = cap_project::MaskKind::Sensitive;
+                mask.pixelation = 24.0;
+                mask.opacity = 1.0;
+                mask.center = cap_project::XY::new(0.5, 0.45);
+                mask.size = cap_project::XY::new(0.36, 0.14);
+                crate::editor_edits::insert_mask_segment(tl, mask);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.mask_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Mask, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Mask(idx));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn add_split_or_floating_scene_at_playhead(
+        &mut self,
+        floating: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
+        let end = (start + 3.0).min(total);
+        self.tracks.scene = true;
+        self.edit_project("add-split-or-floating-scene", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_scene_segment(start, end);
+                seg.mode = if floating {
+                    cap_project::SceneMode::Floating
+                } else {
+                    cap_project::SceneMode::SplitScreen
+                };
+                seg.transition_in = 0.3;
+                seg.transition_out = 0.3;
+                crate::editor_edits::insert_scene_segment(tl, seg);
+            }
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn clear_all_overlay_tracks(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("clear-all-overlay-tracks", window, cx, |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            tl.text_segments.clear();
+            tl.mask_segments.clear();
+            tl.scene_segments.clear();
+            tl.camera3d_segments.clear();
+            true
+        });
+        self.selection = None;
+        self.canvas_selection = None;
+        self.show_notice("Cleared all Text, Mask, Scene & 3D overlays.", window, cx);
+        cx.notify();
+    }
+
     fn finish_audio_import(
         &mut self,
         request: AudioImportRequest,
@@ -10778,6 +11025,40 @@ impl EditorWindow {
                     .when(cfg!(target_os = "windows"), |group| group.occlude())
                     .child(self.history_button("editor-undo", "icons/undo.svg", true, cx))
                     .child(self.history_button("editor-redo", "icons/redo.svg", false, cx))
+                    .child(
+                        ui::EditorButton::plain(&theme, "editor-save-project")
+                            .label("Save")
+                            .tooltip(&theme, "Save project changes")
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.save_project_now(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "editor-discard-edits")
+                            .label("Discard Edits")
+                            .tooltip(&theme, "Discard unsaved edits & revert to last saved state")
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.discard_unsaved_edits(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "editor-discard-and-close")
+                            .label("Discard & Close")
+                            .tooltip(&theme, "Ignore edits without saving and close Editor")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.discard_and_close_editor(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "editor-quit-app")
+                            .label("Quit App")
+                            .tooltip(&theme, "Close and quit sricap-rec")
+                            .on_click(cx.listener(|_, _, _window, cx| {
+                                cx.quit();
+                            })),
+                    )
                     .child(self.header_divider())
                     .child(
                         ui::EditorButton::plain(&theme, "presets")

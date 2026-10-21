@@ -3435,6 +3435,136 @@ impl EditorWindow {
                 ),
             );
 
+        let trim_and_dup_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-trim-start",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Trim Start [")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.trim_clip_start_to_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-trim-end",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Trim End ]")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.trim_clip_end_to_playhead(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-duplicate-item",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Duplicate")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.duplicate_selected_segment(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-pixelate-pii",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Pixelate")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_pixelate_mask_at_playhead(window, cx);
+                    })),
+                ),
+            );
+
+        let dual_scene_and_actions_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-split-50-50",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Split Scene")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_split_or_floating_scene_at_playhead(false, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "scene-floating-dual",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Floating Dual")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_split_or_floating_scene_at_playhead(true, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-clear-overlays",
+                        ui::ButtonVariant::Destructive,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Clear Overlays")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.clear_all_overlay_tracks(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "edit-open-exports-dir",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Exports Dir")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.open_exports_folder_in_finder(window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3443,9 +3573,11 @@ impl EditorWindow {
             .child(row)
             .child(creator_row)
             .child(clips_row)
+            .child(trim_and_dup_row)
             .child(speed_row)
             .child(transitions_row)
             .child(scene_and_3d_row)
+            .child(dual_scene_and_actions_row)
             .child(studio_overlays_row)
             .child(focus_and_steps_row)
             .child(code_and_retention_row)
