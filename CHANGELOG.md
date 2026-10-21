@@ -44,8 +44,13 @@ All notable features, presets, UI options, and architectural customizations buil
   - **`16:9 Desktop`** | **`9:16 Shorts & Reels`** | **`1:1 Post`**
   - **`Terminal Dev Reel (9:16)`**: Deep Carbon gradient, dark macOS terminal window chrome (`zsh — terminal`), Top-Center Squircle Camera, `1.35x` cursor-follow auto-zoom, modifier keystroke badges enabled, `+0.20` text contrast boost, and `#00FF66` Dev Green 3-word captions.
   - **`Web Demo Reel (9:16)`**: Midnight Purple mesh gradient, dark Browser window chrome (`app.cap.so`), Top-Center Circular Camera, `1.55x` click-driven auto-zoom, `+0.15` contrast boost, and `#FFE600` Hormozi Yellow 3-word captions.
-- **Creative Brand Overlays & Hook Banners (`Background → Layout`)**:
-  - **`Add PNG Logo / Watermark`**: Imports a PNG/WebP/JPG logo onto the Image track with 1-click corner placement pills (**`Logo TL`**, **`Logo TR`**, **`Logo BL`**, **`Logo BR`**) stretched across the full video duration at `92%` opacity.
+- **Creative Brand Overlays, Multi-Image Sequence Manager & Hook Banners (`Background → Layout`)**:
+  - **`Upload Images (2s Default)`**: Multi-select image picker (`NSOpenPanel` / `rfd`) that imports multiple PNG/JPG/WebP/GIF images at once, numbers them `#1`, `#2`, `#3`..., and sequences them back-to-back at **`2.0s` each** starting from the playhead.
+  - **Numbered Image & Slide Sequence Manager (`#1`, `#2`...)**:
+    - Click any image header (`#1 Slide.png (0.0s–2.0s · 2.0s)`) to focus it on the timeline and select its **Canvas Drag & Resize Handles** so you can drag it anywhere on the video frame.
+    - **Reorder (`↑` / `↓`) & Auto-Sequence**: Swap image order (`↑` / `↓`) while automatically swapping timeline slots, or click **`Sequence All (2s Each)`** / **`Sequence All (3s Each)`**.
+    - **Per-Image Duration Presets**: Set any image's visibility duration in 1 click (**`1s`**, **`2s` (Default)**, **`3s`**, **`5s`**, **`Full`**) or drag its start/end handles on the **Image** timeline track.
+    - **Position Presets**: **`Center`**, **`TL`**, **`TR`**, **`BL`**, **`BR`** + **`Del`** to remove any image.
   - **`Add Reel Hook Banner`**: Inserts a bold top-anchored headline pill (`"HOW TO BUILD THIS IN 30s"`, `#4F46E5` pill backdrop, `800` weight, `2px` outline) on the Text track.
 
 ---

@@ -2020,6 +2020,50 @@ mod mac {
         open_file_panel(extensions)
     }
 
+    pub fn open_multiple_images_panel(extensions: &[&str]) -> Vec<std::path::PathBuf> {
+        use objc2::{class, msg_send};
+        use objc2_foundation::{NSArray, NSString};
+
+        unsafe {
+            let panel: *mut AnyObject = msg_send![class!(NSOpenPanel), openPanel];
+            if panel.is_null() {
+                return Vec::new();
+            }
+            let _: () = msg_send![panel, setCanChooseFiles: true];
+            let _: () = msg_send![panel, setCanChooseDirectories: false];
+            let _: () = msg_send![panel, setAllowsMultipleSelection: true];
+
+            let types: Vec<Id<NSString>> = extensions
+                .iter()
+                .map(|extension| NSString::from_str(extension))
+                .collect();
+            let types = NSArray::from_vec(types);
+            let _: () = msg_send![panel, setAllowedFileTypes: &*types];
+
+            let response: isize = msg_send![panel, runModal];
+            if response != 1 {
+                return Vec::new();
+            }
+            let urls: *mut AnyObject = msg_send![panel, URLs];
+            if urls.is_null() {
+                return Vec::new();
+            }
+            let count: usize = msg_send![urls, count];
+            let mut out = Vec::with_capacity(count);
+            for i in 0..count {
+                let url: *mut AnyObject = msg_send![urls, objectAtIndex: i];
+                if url.is_null() {
+                    continue;
+                }
+                let path: *mut NSString = msg_send![url, path];
+                if !path.is_null() {
+                    out.push(std::path::PathBuf::from((*path).to_string()));
+                }
+            }
+            out
+        }
+    }
+
     pub fn save_file_panel(suggested: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
         match try_save_file_panel(suggested, extensions) {
             Ok(path) => path,
@@ -2790,6 +2834,12 @@ mod stub {
     }
     pub fn open_image_panel(_extensions: &[&str]) -> Option<std::path::PathBuf> {
         None
+    }
+    pub fn open_multiple_images_panel(extensions: &[&str]) -> Vec<std::path::PathBuf> {
+        rfd::FileDialog::new()
+            .add_filter("Images", extensions)
+            .pick_files()
+            .unwrap_or_default()
     }
     pub fn open_audio_panel() -> Option<std::path::PathBuf> {
         None

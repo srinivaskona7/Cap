@@ -7910,7 +7910,7 @@ impl EditorWindow {
             cx.notify();
             return;
         };
-        let length = total.min(3.0);
+        let length = total.min(2.0);
         let mut segments: Vec<_> = timeline
             .image_segments
             .iter()
@@ -7960,8 +7960,196 @@ impl EditorWindow {
         ) {
             self.sidebar.image_import_error = None;
             self.set_selection(Some(Selection::single(TrackKind::Image, index)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Image(index));
             self.seek_to_time(start, cx);
         }
+    }
+
+    pub(crate) fn pick_multiple_timeline_images(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.sidebar.picking_image {
+            return;
+        }
+        self.end_field_edit(cx);
+        self.close_color_picker(cx);
+        self.sidebar.image_import_error = None;
+        self.sidebar.picking_image = true;
+        let project_path = self.project_path.clone();
+        let base_time = self.playhead.max(0.0);
+        cx.spawn_in(window, async move |this, cx| {
+            let sources = crate::platform::open_multiple_images_panel(
+                crate::import::OVERLAY_IMAGE_EXTENSIONS,
+            );
+            if sources.is_empty() {
+                this.update_in(cx, |this, _, cx| {
+                    this.sidebar.picking_image = false;
+                    cx.notify();
+                })
+                .ok();
+                return;
+            }
+            let imported_list = cx
+                .background_executor()
+                .spawn(async move {
+                    let mut list = Vec::new();
+                    for src in sources {
+                        if let Ok(item) = crate::import::import_editor_image(&project_path, &src) {
+                            list.push(item);
+                        }
+                    }
+                    list
+                })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.sidebar.picking_image = false;
+                let mut cursor_time = base_time;
+                for item in imported_list {
+                    this.commit_image_import(0, cursor_time, item, window, cx);
+                    cursor_time = (cursor_time + 2.0).min(this.total_duration().max(2.0));
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub(crate) fn select_and_focus_image(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(start) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.image_segments.get(index))
+            .map(|seg| seg.start)
+        {
+            self.seek_to_time(start, cx);
+            self.set_selection(Some(Selection::single(TrackKind::Image, index)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Image(index));
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn set_image_segment_duration(
+        &mut self,
+        index: usize,
+        duration_secs: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        self.edit_project("set-image-duration", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut()
+                && let Some(img) = tl.image_segments.get_mut(index)
+            {
+                let clamped_dur = duration_secs.clamp(0.5, total);
+                if img.start + clamped_dur <= total {
+                    img.end = img.start + clamped_dur;
+                } else {
+                    img.end = total;
+                    img.start = (total - clamped_dur).max(0.0);
+                }
+                return true;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn move_image_segment_order(
+        &mut self,
+        index: usize,
+        move_up: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("reorder-image-sequence", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            let len = tl.image_segments.len();
+            let target = if move_up {
+                if index == 0 {
+                    return false;
+                }
+                index - 1
+            } else {
+                if index + 1 >= len {
+                    return false;
+                }
+                index + 1
+            };
+            let (start_a, dur_a) = {
+                let a = &tl.image_segments[index];
+                (a.start, (a.end - a.start).max(0.5))
+            };
+            let (start_b, dur_b) = {
+                let b = &tl.image_segments[target];
+                (b.start, (b.end - b.start).max(0.5))
+            };
+            let min_start = start_a.min(start_b);
+            tl.image_segments.swap(index, target);
+            let first = index.min(target);
+            let second = index.max(target);
+            let first_dur = if index < target { dur_b } else { dur_a };
+            let second_dur = if index < target { dur_a } else { dur_b };
+            tl.image_segments[first].start = min_start;
+            tl.image_segments[first].end = min_start + first_dur;
+            tl.image_segments[second].start = min_start + first_dur;
+            tl.image_segments[second].end = min_start + first_dur + second_dur;
+            true
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn auto_sequence_images(
+        &mut self,
+        step_secs: f64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        self.edit_project("auto-sequence-images", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            if tl.image_segments.is_empty() {
+                return false;
+            }
+            let mut cursor = 0.0_f64;
+            for (i, img) in tl.image_segments.iter_mut().enumerate() {
+                let start = cursor.min((total - 0.5).max(0.0));
+                let end = (start + step_secs).min(total);
+                img.start = start;
+                img.end = end.max(start + 0.5);
+                img.track = (i as u32) % 2;
+                cursor += step_secs;
+            }
+            true
+        });
+        self.tracks.image = self.tracks.image.max(2);
+        cx.notify();
+    }
+
+    pub(crate) fn delete_image_segment_at(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("delete-image-segment", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut()
+                && index < tl.image_segments.len()
+            {
+                tl.image_segments.remove(index);
+                return true;
+            }
+            false
+        });
+        cx.notify();
     }
 
     fn commit_audio_import(

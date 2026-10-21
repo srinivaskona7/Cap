@@ -2765,11 +2765,26 @@ impl EditorWindow {
                 ),
             );
 
-        let has_images = self
+        let image_items: Vec<(usize, String, f64, f64)> = self
             .project
             .timeline
             .as_ref()
-            .is_some_and(|t| !t.image_segments.is_empty());
+            .map(|tl| {
+                tl.image_segments
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, seg)| {
+                        let name = if seg.name.is_empty() {
+                            format!("Image {}", idx + 1)
+                        } else {
+                            seg.name.clone()
+                        };
+                        (idx, name, seg.start, seg.end)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let has_images = !image_items.is_empty();
 
         let brand_row = div()
             .flex()
@@ -2779,15 +2794,15 @@ impl EditorWindow {
                 div().flex_1().child(
                     ui::Button::plain(
                         &theme,
-                        "brand-import-watermark",
-                        ui::ButtonVariant::Gray,
+                        "brand-import-multi-images",
+                        ui::ButtonVariant::Primary,
                         ui::ButtonSize::Xs,
                     )
-                    .label("Add PNG Logo / Watermark")
+                    .label("Upload Images (2s Default)")
                     .icon("icons/image.svg")
                     .full_width()
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.pick_timeline_image(None, 0, 0.0, window, cx);
+                        this.pick_multiple_timeline_images(window, cx);
                     })),
                 ),
             )
@@ -2808,35 +2823,197 @@ impl EditorWindow {
                 ),
             );
 
-        let mut watermark_corners = div().flex().flex_row().gap(px(4.));
+        let mut images_panel = div().flex().flex_col().gap(px(6.));
         if has_images {
-            for (id, label, cx_pos, cy_pos) in [
-                ("wm-tl", "Logo TL", 0.15, 0.08),
-                ("wm-tr", "Logo TR", 0.85, 0.08),
-                ("wm-bl", "Logo BL", 0.15, 0.90),
-                ("wm-br", "Logo BR", 0.85, 0.90),
-            ] {
-                watermark_corners = watermark_corners.child(
-                    div().flex_1().child(
-                        ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
-                            .label(label)
+            images_panel = images_panel.child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(4.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "img-seq-2s-all",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Sequence All (2s Each)")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.auto_sequence_images(2.0, window, cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "img-seq-3s-all",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Sequence All (3s Each)")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.auto_sequence_images(3.0, window, cx);
+                            })),
+                        ),
+                    ),
+            );
+
+            for (idx, name, start_s, end_s) in &image_items {
+                let idx_copy = *idx;
+                let dur_s = (end_s - start_s).max(0.1);
+                let total_dur = self.total_duration().max(1.0);
+                let header_label = format!(
+                    "#{} {} ({:.1}s–{:.1}s · {:.1}s)",
+                    idx_copy + 1,
+                    name,
+                    start_s,
+                    end_s,
+                    dur_s
+                );
+
+                let mut dur_row = div().flex().flex_row().gap(px(4.));
+                for (btn_id, lbl, target_dur) in [
+                    ("1s", "1s", 1.0_f64),
+                    ("2s", "2s", 2.0_f64),
+                    ("3s", "3s", 3.0_f64),
+                    ("5s", "5s", 5.0_f64),
+                    ("full", "Full", total_dur),
+                ] {
+                    let is_active = (dur_s - target_dur).abs() < 0.15;
+                    dur_row = dur_row.child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                SharedString::from(format!("img-dur-{idx_copy}-{btn_id}")),
+                                if is_active {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(lbl)
                             .full_width()
                             .on_click(cx.listener(move |this, _, window, cx| {
-                                let total = this.total_duration().max(1.0);
-                                this.edit_project("watermark-position", window, cx, move |p| {
+                                this.set_image_segment_duration(idx_copy, target_dur, window, cx);
+                            })),
+                        ),
+                    );
+                }
+
+                let mut pos_row = div().flex().flex_row().gap(px(4.));
+                for (pos_id, pos_lbl, cx_pos, cy_pos, sx, sy) in [
+                    ("center", "Center", 0.50, 0.50, 0.48, 0.48),
+                    ("tl", "TL", 0.16, 0.12, 0.22, 0.14),
+                    ("tr", "TR", 0.84, 0.12, 0.22, 0.14),
+                    ("bl", "BL", 0.16, 0.88, 0.22, 0.14),
+                    ("br", "BR", 0.84, 0.88, 0.22, 0.14),
+                ] {
+                    pos_row = pos_row.child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                SharedString::from(format!("img-pos-{idx_copy}-{pos_id}")),
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(pos_lbl)
+                            .full_width()
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.edit_project("image-preset-pos", window, cx, move |p| {
                                     if let Some(tl) = p.timeline.as_mut()
-                                        && let Some(img) = tl.image_segments.last_mut()
+                                        && let Some(img) = tl.image_segments.get_mut(idx_copy)
                                     {
-                                        img.start = 0.0;
-                                        img.end = total;
                                         img.center = cap_project::XY::new(cx_pos, cy_pos);
-                                        img.size = cap_project::XY::new(0.18, 0.09);
-                                        img.opacity = 0.92;
+                                        img.size = cap_project::XY::new(sx, sy);
                                     }
                                     true
                                 });
                             })),
-                    ),
+                        ),
+                    );
+                }
+
+                images_panel = images_panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(5.))
+                        .p(px(8.))
+                        .rounded(px(8.))
+                        .bg(Hsla::from(theme.editor.ctl))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .gap(px(4.))
+                                .child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        SharedString::from(format!("img-focus-{idx_copy}")),
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label(header_label)
+                                    .on_click(cx.listener(move |this, _, _window, cx| {
+                                        this.select_and_focus_image(idx_copy, cx);
+                                    })),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(4.))
+                                        .child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                SharedString::from(format!("img-up-{idx_copy}")),
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Xs,
+                                            )
+                                            .label("↑")
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.move_image_segment_order(
+                                                    idx_copy, true, window, cx,
+                                                );
+                                            })),
+                                        )
+                                        .child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                SharedString::from(format!("img-down-{idx_copy}")),
+                                                ui::ButtonVariant::Gray,
+                                                ui::ButtonSize::Xs,
+                                            )
+                                            .label("↓")
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.move_image_segment_order(
+                                                    idx_copy, false, window, cx,
+                                                );
+                                            })),
+                                        )
+                                        .child(
+                                            ui::Button::plain(
+                                                &theme,
+                                                SharedString::from(format!("img-del-{idx_copy}")),
+                                                ui::ButtonVariant::Destructive,
+                                                ui::ButtonSize::Xs,
+                                            )
+                                            .label("Del")
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.delete_image_segment_at(idx_copy, window, cx);
+                                            })),
+                                        ),
+                                ),
+                        )
+                        .child(dur_row)
+                        .child(pos_row),
                 );
             }
         }
@@ -2849,7 +3026,7 @@ impl EditorWindow {
             .child(row)
             .child(creator_row)
             .child(brand_row)
-            .children(has_images.then_some(watermark_corners))
+            .children(has_images.then_some(images_panel))
             .into_any_element()
     }
 
