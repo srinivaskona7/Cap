@@ -171,12 +171,10 @@ export async function buildMacosPackages(
 			env.MACOSX_DEPLOYMENT_TARGET,
 		),
 	};
-	const hasSigningKey = Boolean(env.TAURI_SIGNING_PRIVATE_KEY);
 	commandArguments.push(
 		"--config",
 		JSON.stringify({
 			bundle: {
-				createUpdaterArtifacts: hasSigningKey,
 				macOS: {
 					minimumSystemVersion: environment.MACOSX_DEPLOYMENT_TARGET,
 				},

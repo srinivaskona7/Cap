@@ -42,37 +42,17 @@ test("the GPUI app keeps the identity every existing install updates into", () =
 	assert.equal(gpuiConfig.productName, "sricap-rec");
 	assert.equal(gpuiConfig.mainBinaryName, "sricap-rec");
 	assert.equal(gpuiConfig.identifier, "com.sri.sricap-rec");
-	assert.equal(
-		gpuiConfig.plugins.updater.pubkey,
-		tauriProduction.plugins.updater.pubkey,
-	);
-	assert.deepEqual(gpuiConfig.plugins.updater.endpoints, [
-		"https://cdn.crabnebula.app/update/cap/cap/{{target}}/{{current_version}}",
-	]);
-	const installer = readFileSync(
-		new URL("../apps/desktop-gpui/src/installer.rs", import.meta.url),
-		"utf8",
-	);
-	assert.match(
-		installer,
-		new RegExp(
-			`const UPDATER_PUBLIC_KEY: &str = "${gpuiConfig.plugins.updater.pubkey}";`,
-		),
-	);
+	assert.equal(gpuiConfig.plugins.updater.active, false);
 	assert.deepEqual(
 		gpuiConfig.plugins["deep-link"],
 		tauriConfig.plugins["deep-link"],
 	);
-	assert.equal(gpuiConfig.bundle.createUpdaterArtifacts, true);
+	assert.equal(gpuiConfig.bundle.createUpdaterArtifacts, false);
 });
 
 test("the GPUI bundle takes over the identity the Tauri app shipped with", () => {
 	assert.equal(tauriProduction.productName, gpuiConfig.productName);
 	assert.equal(tauriProduction.identifier, gpuiConfig.identifier);
-	assert.deepEqual(
-		tauriProduction.plugins.updater.endpoints,
-		gpuiConfig.plugins.updater.endpoints,
-	);
 });
 
 test("every committed file the GPUI bundle references exists", () => {
