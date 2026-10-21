@@ -4,7 +4,7 @@ All notable features, presets, UI options, and architectural customizations buil
 
 ---
 
-## [v0.6.1-sricap] — 2026-10-21
+## [v0.6.3-sricap] — 2026-10-21
 
 ### 1. Brand Identity, Packaging & Offline Pro Unlock
 - **Standalone Rebrand (`sricap-rec`)**:
