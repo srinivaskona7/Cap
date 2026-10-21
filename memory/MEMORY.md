@@ -56,11 +56,16 @@ For every repository or new project worked on by Claude Code, OpenAI Codex, or G
 
 ### Mandatory Git Push & GitHub Actions / Pages Engineering Rules
 
-#### 1. Git Push, Author Email & SSH Remote Invariant (Mandatory)
-- **Public Repo Git Author Email**: Always use `kona.srinivas.app@gmail.com` (`git config user.email "kona.srinivas.app@gmail.com"`) for public GitHub repositories. NEVER use `@apple.com` email addresses on public repos.
-- **Always push with standard git over SSH**: Always execute `git push origin <branch>` (e.g. `git push origin main`).
-- **Zero `gh auth` Friction**: Authentication on this machine is pre-configured via SSH (`git@github.com:...`). Never run `gh auth login`, `gh auth status`, or rely on GitHub CLI tokens to push code. Directly commit and push. Only investigate auth if `git push` returns an actual SSH permission error.
-- **Ensure SSH Remote**: If any repo remote URL starts with HTTPS (`https://github.com/...`), immediately convert it to SSH: `git remote set-url origin git@github.com:<org-or-user>/<repo>.git`.
+#### 1. Mandatory Git Push Protocol: SSH Only & Zero `gh auth`
+1. **Standard Git over SSH Only**:
+   - Always push using standard git over SSH: `git push origin <branch>` (e.g. `git push origin feature1` or `git push origin main`).
+   - NEVER use `gh auth login`, `gh auth status`, or GitHub CLI tokens. Authentication on this machine is pre-configured via SSH (`git@github.com:...`).
+2. **Handle Non-Fast-Forward Rejections**:
+   - If a push is rejected because the remote has new commits, run `git pull --rebase origin <branch>` and then `git push origin <branch>`.
+3. **Verify SSH Remote URL**:
+   - Ensure the remote is set to SSH (`git remote -v`). If it starts with `https://`, immediately convert it: `git remote set-url origin git@github.com:srinivaskona7/Cap.git`.
+4. **Correct Author Identity**:
+   - Always commit as `git config user.email "kona.srinivas.app@gmail.com"` and `git config user.name "kona_srinivas"` for public repos. NEVER use `@apple.com`.
 
 #### 2. GitHub Actions & GitHub Pages Deployment Standards
 - **Pages Source Setting**: In repo Settings → Pages, ensure Source is set to "GitHub Actions" when using `.github/workflows/pages.yml`.

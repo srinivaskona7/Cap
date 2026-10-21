@@ -7586,7 +7586,7 @@ impl EditorWindow {
             });
     }
 
-    fn pick_timeline_image(
+    pub(crate) fn pick_timeline_image(
         &mut self,
         replace: Option<(usize, String)>,
         lane: u32,

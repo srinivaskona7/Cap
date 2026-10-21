@@ -142,6 +142,42 @@ export async function bundleGpui(target, args, { env = process.env } = {}) {
 	const platform = validate(target, bundleArgs);
 
 	if (!skipBuild) {
+		const ext = platform === "win32" ? ".exe" : "";
+		const muxerBin = path.join(
+			desktopDirectory,
+			"src-tauri",
+			"binaries",
+			`cap-muxer-${target}${ext}`,
+		);
+		const cliBin = path.join(
+			desktopDirectory,
+			"src-tauri",
+			"binaries",
+			`cap-cli-${target}${ext}`,
+		);
+		const hasSidecars =
+			(await fs
+				.stat(muxerBin)
+				.then(() => true)
+				.catch(() => false)) &&
+			(await fs
+				.stat(cliBin)
+				.then(() => true)
+				.catch(() => false));
+		if (!hasSidecars) {
+			run(
+				"node",
+				[path.join(repoRoot, "scripts", "build-desktop-binaries.mjs"), target],
+				{
+					env: {
+						...env,
+						RUST_TARGET_TRIPLE: target,
+						CARGO_PROFILE_RELEASE_DEBUG: "0",
+						CARGO_PROFILE_RELEASE_STRIP: "symbols",
+					},
+				},
+			);
+		}
 		run("bash", [
 			path.join(repoRoot, "scripts", "build-gpui-binary.sh"),
 			"release",
@@ -163,7 +199,25 @@ export async function bundleGpui(target, args, { env = process.env } = {}) {
 	}
 
 	if (platform === "darwin") {
-		const result = await buildMacosPackages(target, bundleArgs, {
+		const dotenvPath = path.join(repoRoot, ".env");
+		const hasDotenv = await fs
+			.stat(dotenvPath)
+			.then(() => true)
+			.catch(() => false);
+		if (!hasDotenv) {
+			await fs
+				.writeFile(dotenvPath, `RUST_TARGET_TRIPLE=${target}\n`)
+				.catch(() => {});
+		}
+		const hasBundlesFlag = bundleArgs.some(
+			(arg) =>
+				arg === "--bundles" || arg === "-b" || arg.startsWith("--bundles="),
+		);
+		const effectiveMacArgs =
+			!env.TAURI_SIGNING_PRIVATE_KEY && !hasBundlesFlag
+				? ["--bundles", "app,dmg", ...bundleArgs]
+				: bundleArgs;
+		const result = await buildMacosPackages(target, effectiveMacArgs, {
 			bundleOnly: true,
 			env: bundleEnvironment(env),
 		});

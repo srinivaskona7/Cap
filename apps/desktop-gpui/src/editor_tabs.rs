@@ -1481,14 +1481,15 @@ impl EditorWindow {
 
     fn render_camera_size_presets(&self, cx: &mut Context<Self>) -> AnyElement {
         let theme = self.theme;
-        let sizes: [(&'static str, &'static str, f32); 4] = [
-            ("cam-size-sm", "Small", 22.0),
-            ("cam-size-md", "Medium", 34.0),
-            ("cam-size-lg", "Large", 48.0),
-            ("cam-size-xl", "Full", 76.0),
+        let sizes: [(&'static str, &'static str, f32, bool); 4] = [
+            ("cam-size-sm", "Small 25%", 25.0, false),
+            ("cam-size-md", "Med 40%", 40.0, false),
+            ("cam-size-lg", "Lg Square 60%", 60.0, true),
+            ("cam-size-xl", "Split 50/50", 68.0, true),
         ];
         let mut row = div().flex().flex_row().gap(px(6.));
-        for (id, label, size_pct) in sizes {
+        for (id, label, size_pct, square_top) in sizes {
+            let is_split = id == "cam-size-xl";
             row = row.child(
                 div().flex_1().child(
                     ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
@@ -1496,7 +1497,30 @@ impl EditorWindow {
                         .full_width()
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.edit_project("camera-size-preset", window, cx, move |p| {
+                                p.camera.hide = false;
                                 p.camera.size = size_pct;
+                                if square_top {
+                                    p.camera.shape = CameraShape::Square;
+                                    p.camera.rounding = 16.0;
+                                    p.camera.rounding_type = CornerStyle::Squircle;
+                                    p.camera.shadow = p.camera.shadow.max(68.0);
+                                    if p.aspect_ratio == Some(cap_project::AspectRatio::Vertical)
+                                        || is_split
+                                    {
+                                        p.camera.position = cap_project::CameraPosition {
+                                            x: CameraXPosition::Center,
+                                            y: CameraYPosition::Top,
+                                        };
+                                        p.camera.manual_position = Some(cap_project::XY::new(
+                                            0.5,
+                                            if is_split { 0.23 } else { 0.18 },
+                                        ));
+                                        if is_split {
+                                            p.background.display_position =
+                                                Some(cap_project::XY::new(0.5, 0.68));
+                                        }
+                                    }
+                                }
                                 true
                             });
                         })),
@@ -1794,7 +1818,19 @@ impl EditorWindow {
             .unwrap_or_default();
         let silence_cuts =
             transcription::plan_silence_cuts(&self.project, &recording_durations, 1.0);
-        let auto_ducked = audio.system_volume_db <= -10.0 && !audio.mute;
+        let has_bg_music = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.audio_segments.is_empty());
+        let bg_music_ducked = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|t| t.audio_segments.first())
+            .is_some_and(|seg| seg.volume_db <= -10.0);
+        let auto_ducked =
+            (audio.system_volume_db <= -10.0 || bg_music_ducked) && !audio.mute;
 
         div()
             .flex()
@@ -1817,14 +1853,73 @@ impl EditorWindow {
                                 }),
                             ),
                         ))
-                        .children((has_microphone && has_system_audio).then(|| {
-                            ui::Subfield::plain(&theme, "Auto-Duck System Audio")
+                        .child(
+                            ui::Button::plain(
+                                &theme,
+                                "audio-import-bg-music",
+                                ui::ButtonVariant::Primary,
+                                ui::ButtonSize::Sm,
+                            )
+                            .label("Import Background Audio (.mp3 / .wav)")
+                            .icon("icons/music.svg")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.import_audio_from_picker(window, cx);
+                            })),
+                        )
+                        .children(has_bg_music.then(|| {
+                            let mut vol_row = div().flex().flex_row().gap(px(6.));
+                            for (id, label, db) in [
+                                ("bg-vol-subtle", "25% (-18dB)", -18.0_f32),
+                                ("bg-vol-med", "50% (-12dB)", -12.0_f32),
+                                ("bg-vol-high", "75% (-6dB)", -6.0_f32),
+                                ("bg-vol-full", "100% (0dB)", 0.0_f32),
+                            ] {
+                                vol_row = vol_row.child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            id,
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Xs,
+                                        )
+                                        .label(label)
+                                        .full_width()
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.edit_project(
+                                                "bg-music-volume",
+                                                window,
+                                                cx,
+                                                move |p| {
+                                                    if let Some(tl) = p.timeline.as_mut() {
+                                                        for seg in &mut tl.audio_segments {
+                                                            seg.volume_db = db;
+                                                        }
+                                                    }
+                                                    true
+                                                },
+                                            );
+                                        })),
+                                    ),
+                                );
+                            }
+                            ui::Field::section(&theme, "Background Music Volume")
+                                .child(vol_row)
+                                .into_any_element()
+                        }))
+                        .children((has_microphone && (has_system_audio || has_bg_music)).then(|| {
+                            ui::Subfield::plain(&theme, "Auto-Ducking (-12 dB under voice)")
                                 .child(
                                     ui::Toggle::plain(&theme, "audio-auto-duck", auto_ducked)
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             let next_db = if auto_ducked { 0.0 } else { -12.0 };
                                             this.edit_project("audio-auto-duck", window, cx, move |p| {
                                                 p.audio.system_volume_db = next_db;
+                                                if let Some(tl) = p.timeline.as_mut() {
+                                                    for seg in &mut tl.audio_segments {
+                                                        seg.volume_db = next_db;
+                                                    }
+                                                }
                                                 true
                                             });
                                         })),

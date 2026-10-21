@@ -2765,6 +2765,82 @@ impl EditorWindow {
                 ),
             );
 
+        let has_images = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|t| !t.image_segments.is_empty());
+
+        let brand_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(6.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "brand-import-watermark",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Add PNG Logo / Watermark")
+                    .icon("icons/image.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.pick_timeline_image(None, 0, 0.0, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "brand-add-reel-hook-banner",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("Add Reel Hook Banner")
+                    .icon("icons/text.svg")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_reel_hook_banner(window, cx);
+                    })),
+                ),
+            );
+
+        let mut watermark_corners = div().flex().flex_row().gap(px(4.));
+        if has_images {
+            for (id, label, cx_pos, cy_pos) in [
+                ("wm-tl", "Logo TL", 0.15, 0.08),
+                ("wm-tr", "Logo TR", 0.85, 0.08),
+                ("wm-bl", "Logo BL", 0.15, 0.90),
+                ("wm-br", "Logo BR", 0.85, 0.90),
+            ] {
+                watermark_corners = watermark_corners.child(
+                    div().flex_1().child(
+                        ui::Button::plain(&theme, id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                            .label(label)
+                            .full_width()
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                let total = this.total_duration().max(1.0);
+                                this.edit_project("watermark-position", window, cx, move |p| {
+                                    if let Some(tl) = p.timeline.as_mut()
+                                        && let Some(img) = tl.image_segments.last_mut()
+                                    {
+                                        img.start = 0.0;
+                                        img.end = total;
+                                        img.center = cap_project::XY::new(cx_pos, cy_pos);
+                                        img.size = cap_project::XY::new(0.18, 0.09);
+                                        img.opacity = 0.92;
+                                    }
+                                    true
+                                });
+                            })),
+                    ),
+                );
+            }
+        }
+
         div()
             .flex()
             .flex_col()
@@ -2772,7 +2848,33 @@ impl EditorWindow {
             .pb(px(10.))
             .child(row)
             .child(creator_row)
+            .child(brand_row)
+            .children(has_images.then_some(watermark_corners))
             .into_any_element()
+    }
+
+    pub(crate) fn add_reel_hook_banner(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let total = self.total_duration().max(3.0);
+        let end = total.min(5.0);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-reel-hook-banner", window, cx, move |project| {
+            if let Some(timeline) = project.timeline.as_mut() {
+                let mut banner = crate::editor_edits::default_text_segment(0.0, end, 0);
+                banner.content = "HOW TO BUILD THIS IN 30s".to_string();
+                banner.center = cap_project::XY::new(0.5, 0.08);
+                banner.size = cap_project::XY::new(0.84, 0.08);
+                banner.font_size = 52.0;
+                banner.font_weight = 800.0;
+                banner.color = "#FFFFFF".to_string();
+                banner.background_color = Some("#4F46E5".to_string());
+                banner.uppercase = true;
+                banner.stroke_width = 2.0;
+                banner.stroke_color = "#000000".to_string();
+                crate::editor_edits::insert_text_segment(timeline, banner);
+            }
+            true
+        });
+        cx.notify();
     }
 
     pub(crate) fn apply_tech_reel_preset(
