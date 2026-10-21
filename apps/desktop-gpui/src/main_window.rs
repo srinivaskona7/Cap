@@ -3549,6 +3549,18 @@ impl MainWindow {
                         }),
                     ))
                     .child(
+                        icon_button("import-video-studio", "icons/import.svg", 16.).on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.open_panel(
+                                    Panel::Library(LibraryKind::Recordings),
+                                    window,
+                                    cx,
+                                );
+                                cx.defer(crate::import::pick_and_import_video);
+                            }),
+                        ),
+                    )
+                    .child(
                         icon_button("recordings", "icons/play-circle.svg", 16.).on_click(
                             cx.listener(|this, _, window, cx| {
                                 this.open_panel(

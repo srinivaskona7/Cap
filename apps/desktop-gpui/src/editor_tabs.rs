@@ -1834,17 +1834,35 @@ impl EditorWindow {
         let original_clip_muted =
             audio.mic_volume_db <= -30.0 && audio.system_volume_db <= -30.0;
         let recording_voiceover = self.voiceover_recording.is_some();
+        let audio_tracks_list: Vec<(usize, String, f64, f64)> = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| {
+                tl.audio_segments
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, seg)| {
+                        let name = seg
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("Audio Track {}", idx + 1));
+                        (idx, name, seg.start, seg.end)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         div()
             .flex()
             .flex_col()
             .gap(px(14.))
             .child(
-                ui::Field::section(&theme, "Audio Controls").child(
+                ui::Field::section(&theme, "Studio Voiceover, Video & Audio Controls").child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(14.))
+                        .gap(px(12.))
                         .child(ui::Subfield::plain(&theme, "Mute All Audio").child(
                             ui::Toggle::plain(&theme, "audio-mute", audio.mute).on_click(
                                 cx.listener(|this, _, window, cx| {
@@ -1897,13 +1915,51 @@ impl EditorWindow {
                             .label(if recording_voiceover {
                                 "Stop & Add Voiceover to Timeline"
                             } else {
-                                "Record Live Voiceover (from Playhead)"
+                                "Record Live Voiceover (Plays Video)"
                             })
                             .icon("icons/microphone.svg")
                             .full_width()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.toggle_voiceover_recording(window, cx);
                             })),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(6.))
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-add-text-at-playhead",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("+ Text at Playhead")
+                                        .icon("icons/text.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.add_text_at_playhead(window, cx);
+                                        })),
+                                    ),
+                                )
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-import-video-studio",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Sm,
+                                        )
+                                        .label("Open Video in Studio")
+                                        .icon("icons/import.svg")
+                                        .full_width()
+                                        .on_click(cx.listener(|_, _, _window, cx| {
+                                            cx.defer(crate::import::pick_and_import_video);
+                                        })),
+                                    ),
+                                ),
                         )
                         .child(
                             div()
@@ -1943,6 +1999,103 @@ impl EditorWindow {
                                     ),
                                 ),
                         )
+                        .children((!audio_tracks_list.is_empty()).then(|| {
+                            let mut list = div().flex().flex_col().gap(px(6.));
+                            for (idx, name, start_s, end_s) in &audio_tracks_list {
+                                let idx_copy = *idx;
+                                let label_str = format!(
+                                    "{name} ({:.1}s – {:.1}s)",
+                                    start_s, end_s
+                                );
+                                list = list.child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .p(px(8.))
+                                        .rounded(px(8.))
+                                        .bg(Hsla::from(theme.editor.ctl))
+                                        .child(
+                                            div()
+                                                .text_size(px(11.5))
+                                                .text_color(Hsla::from(theme.editor.text_1))
+                                                .child(label_str),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_row()
+                                                .gap(px(6.))
+                                                .child(
+                                                    div().flex_1().child(
+                                                        ui::Button::plain(
+                                                            &theme,
+                                                            SharedString::from(format!(
+                                                                "vo-rerecord-{idx_copy}"
+                                                            )),
+                                                            ui::ButtonVariant::Gray,
+                                                            ui::ButtonSize::Xs,
+                                                        )
+                                                        .label("Re-record Take")
+                                                        .icon("icons/microphone.svg")
+                                                        .full_width()
+                                                        .on_click(cx.listener(
+                                                            move |this, _, window, cx| {
+                                                                this.rerecord_audio_segment_at(
+                                                                    idx_copy, window, cx,
+                                                                );
+                                                            },
+                                                        )),
+                                                    ),
+                                                )
+                                                .child(
+                                                    div().flex_1().child(
+                                                        ui::Button::plain(
+                                                            &theme,
+                                                            SharedString::from(format!(
+                                                                "vo-delete-{idx_copy}"
+                                                            )),
+                                                            ui::ButtonVariant::Destructive,
+                                                            ui::ButtonSize::Xs,
+                                                        )
+                                                        .label("Delete")
+                                                        .icon("icons/trash.svg")
+                                                        .full_width()
+                                                        .on_click(cx.listener(
+                                                            move |this, _, window, cx| {
+                                                                this.delete_audio_segment_at(
+                                                                    idx_copy, window, cx,
+                                                                );
+                                                            },
+                                                        )),
+                                                    ),
+                                                ),
+                                        ),
+                                );
+                            }
+                            if audio_tracks_list.len() > 1 {
+                                list = list.child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "vo-clear-all-tracks",
+                                        ui::ButtonVariant::Destructive,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("Delete All Voiceovers / Added Audio")
+                                    .icon("icons/trash.svg")
+                                    .full_width()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.clear_all_audio_segments(window, cx);
+                                    })),
+                                );
+                            }
+                            ui::Field::section(
+                                &theme,
+                                "Recorded Voiceovers & Audio Tracks",
+                            )
+                            .child(list)
+                            .into_any_element()
+                        }))
                         .children(has_bg_music.then(|| {
                             let mut vol_row = div().flex().flex_row().gap(px(6.));
                             for (id, label, db) in [

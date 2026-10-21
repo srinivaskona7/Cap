@@ -5679,6 +5679,68 @@ impl EditorWindow {
         cx.notify();
     }
 
+    pub(crate) fn delete_audio_segment_at(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("delete-audio-segment", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut()
+                && index < tl.audio_segments.len()
+            {
+                tl.audio_segments.remove(index);
+                return true;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn rerecord_audio_segment_at(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let start_time = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.audio_segments.get(index))
+            .map(|seg| seg.start)
+            .unwrap_or(self.playhead);
+        self.delete_audio_segment_at(index, window, cx);
+        self.seek_to_time(start_time, cx);
+        self.toggle_voiceover_recording(window, cx);
+    }
+
+    pub(crate) fn clear_all_audio_segments(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project("clear-all-audio-segments", window, cx, |project| {
+            if let Some(tl) = project.timeline.as_mut()
+                && !tl.audio_segments.is_empty()
+            {
+                tl.audio_segments.clear();
+                return true;
+            }
+            false
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn add_text_at_playhead(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let start = self.playhead.max(0.0);
+        self.add_track_at(TrackKind::Text, 0, start, window, cx);
+    }
+
     fn finish_audio_import(
         &mut self,
         request: AudioImportRequest,
