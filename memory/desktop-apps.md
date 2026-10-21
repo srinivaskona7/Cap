@@ -4,14 +4,19 @@ Cap maintains two desktop application directories in the monorepo that share the
 
 ---
 
-## 1. `apps/desktop-gpui` — Primary Shipping Desktop App
+## 1. `apps/desktop-gpui` — Primary Shipping Desktop App (`sricap-rec`)
 
-- **Status**: **Active production desktop client** (`cap-gpui`, v0.6.1+). Ships as Cap on macOS, Windows, and Linux.
+- **Status**: **Active production desktop client** (`sricap-rec`, v0.6.1+, bundle ID `com.sri.sricap-rec`).
 - **Standalone Cargo Workspace**:
-  - Intentionally excluded from the root `Cargo.toml` workspace (`apps/desktop-gpui/Cargo.toml` defines its own `[workspace]` with members `[".", "kernels"]`).
+  - Intentionally excluded from the root `Cargo.toml` workspace (`apps/desktop-gpui/Cargo.toml` defines its own `[workspace]` with members `[".", "kernels"]` and `[[bin]] name = "sricap-rec"`).
   - **Why**: GPUI (`wingleeio/zed` fork) pulls a massive dependency tree including `wgpu` v29, whereas `cap-rendering` uses `wgpu` v25 with `[patch.crates-io]` `vendor/wgpu-hal`. Isolating the workspace keeps `Cargo.lock`, `cargo hakari`, and Tauri patches cleanly separated.
-- **Performance Architecture (`kernels/`)**:
-  - In dev builds (`[profile.dev]`), `cap-desktop-gpui` compiles at `opt-level = 0` with `incremental = true` for fast rebuilds (~seconds), while all dependencies compile at `opt-level = 2` and `apps/desktop-gpui/kernels` (`cap-gpui-kernels`) compiles at `opt-level = 3` so hot pixel/audio loops (`frame_image`, waveform/sample processing) take ~1ms instead of ~42ms.
+- **Performance Architecture (`kernels/` & Fast Dev Profile)**:
+  - In dev builds (`[profile.dev]`), `cap-desktop-gpui` compiles at `opt-level = 0` with `incremental = true`, `codegen-units = 256`, and `split-debuginfo = "unpacked"` (skipping macOS `dsymutil` on incremental links), while all dependencies compile at `opt-level = 2` and `apps/desktop-gpui/kernels` (`cap-gpui-kernels`) compiles at `opt-level = 3` so hot pixel/audio loops (`frame_image`, waveform/sample processing) take ~1ms instead of ~42ms.
+  - In release builds (`[profile.release]`), `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `panic = "abort"`, and `strip = true` keep the final `.dmg` compact (~40–50MB).
+  - `./start.sh` caches the SHA-256 of `apps/desktop-gpui/patches/*.patch` in `target/.cap-gpui-patch-stamp` so `scripts/prepare-gpui-dependency.sh` is skipped when patches are unchanged.
+- **Packaging & Sidecar Invariant (`scripts/bundle-gpui.mjs`)**:
+  - `tauri.conf.json` bundles `../desktop/src-tauri/binaries/cap-muxer` and `../desktop/src-tauri/binaries/cap-cli`.
+  - `scripts/bundle-gpui.mjs` automatically builds `scripts/build-desktop-binaries.mjs <target>` if `cap-muxer-<target>` or `cap-cli-<target>` is missing, ensures `.env` exists at repo root, defaults to `--bundles app,dmg` when `TAURI_SIGNING_PRIVATE_KEY` is unset, and copies the finished `sricap-rec.app` and `sricap-rec.dmg` into `apps/desktop/src-tauri/target/release/bundle/macos/`.
 - **Complete Module Map (`apps/desktop-gpui/src/`)**:
   - **Core App & Window Management**:
     - `main.rs`, `app_windows.rs`, `main_window.rs`, `mode_select_window.rs`, `controls_window.rs`, `tray.rs`, `menus.rs`, `hotkeys.rs`, `single_instance.rs`, `deeplink.rs`, `updates.rs`, `installer.rs`.

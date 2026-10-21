@@ -4,12 +4,25 @@ This directory contains structured, long-lived architectural and operational mem
 
 ## Quick Orientation
 
-- **Product**: Open-source screen recording, studio editing, screenshot annotation & async video messaging platform (Instant Mode + Studio Mode + Screenshot Mode + Self-Hostable Cloud).
-- **Monorepo Stack**: Turborepo + Bun (`1.4.0`) + Node (`>=20`) + Rust (`1.88+`, Cargo workspaces).
-- **Primary Shipping Desktop App**: `apps/desktop-gpui` (`cap-gpui`, pure Rust GPUI app in a standalone Cargo workspace).
-- **Legacy Desktop / Dev Harness**: `apps/desktop` (Tauri v2 + SolidStart + `specta` IPC).
+- **Product**: **`sricap-rec`** (custom rebrand of Cap on branch `feature1`; `main` stays clean for upstream syncs) — open-source screen recording, 9:16 Reels/Shorts vertical teaching studio, screenshot annotation & async video messaging platform.
+- **Monorepo Stack**: Turborepo + Bun (`1.4.0`) + Node (`>=20`) + Rust (`1.88.0` root workspace + `1.95.0` GPUI workspace).
+- **Primary Shipping Desktop App**: `apps/desktop-gpui` (binary & bundle name: **`sricap-rec`**, bundle identifier: `com.sri.sricap-rec`, pure Rust GPUI app in a standalone Cargo workspace).
+- **Legacy Desktop / Dev Harness**: `apps/desktop` (Tauri v2 + SolidStart + `specta` IPC; `src-tauri/binaries/` holds sidecar binaries `cap-muxer-<target>` and `cap-cli-<target>`).
 - **Web Platform**: `apps/web` (Next.js 16 App Router, React 19, Effect-TS, Drizzle ORM + MySQL/PlanetScale, NextAuth + WorkOS SSO, S3/CloudFront, Tinybird analytics, MCP Server & Developer Platform).
 - **Media Engine**: `crates/*` (50+ Rust crates for screen capture, camera, audio, `wgpu` shader rendering, hardware encoding, out-of-process MP4 muxing, and deterministic A/V verification).
+
+## `sricap-rec` Custom Features & Direct File Map (`feature1` Branch)
+
+| Feature / Subsystem | Exact File Paths & Symbols |
+|---|---|
+| **App Rebranding & Icons (`sricap-rec`)** | `apps/desktop-gpui/Cargo.toml` (`[[bin]] name = "sricap-rec"`), `apps/desktop-gpui/tauri.conf.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/tauri.prod.conf.json` (`productName: "sricap-rec"`, `mainBinaryName: "sricap-rec"`, `identifier: "com.sri.sricap-rec"`), `apps/desktop-gpui/src/menus.rs` (`APP_NAME = "sricap-rec"`), `apps/desktop-gpui/assets/icons/logo-full*.svg`, `apps/desktop-gpui/assets/dock-icon.png`, `apps/desktop/src-tauri/icons/macos/icon.icns` |
+| **Offline Pro Unlock & Local Storage Controls** | `apps/desktop-gpui/src/store.rs` (`AuthSnapshot::is_upgraded() -> true`), `apps/desktop-gpui/src/settings_window.rs` (`has_cap_pro = true`, custom recordings folder picker, storage used banner, `Delete All Local Recordings`), `apps/desktop-gpui/src/library.rs` (`compute_directory_size_bytes`, `delete_all_recordings`) |
+| **Google Meet-Style Browser Tabs & Windows Picker** | `apps/desktop-gpui/src/devices.rs` (`BrowserTabOption`, `list_browser_tabs_for_windows`, `activate_browser_tab` via AppleScript across Chrome, Arc, Brave, Edge, Safari + fallback window IDs), `apps/desktop-gpui/src/main_window.rs` (`browser_tabs_mode`, `[All Windows] | [Browser Tabs]` toggle in `render_target_grid`, clicking `Window` tile opens picker panel directly) |
+| **9:16 Vertical Teaching Studio (Reels & Shorts)** | `apps/desktop-gpui/src/editor_sidebar.rs` (`render_social_layout_presets`, `apply_tech_reel_preset`: 3-zone 1080×1920 layout with Top Camera at `y=0.17`, Center Framed MacOS/Browser Window at `y=0.53`, Bottom Safe Zone Hormozi/Dev-Neon Captions at `y=0.80`, `1.35x`/`1.55x` cursor-follow auto-zoom, and shader contrast boost; `Terminal Dev Reel (9:16)` & `Web Demo Reel (9:16)` presets; `Add PNG Logo / Watermark` + `Logo TL/TR/BL/BR`; `Add Reel Hook Banner`) |
+| **Studio Autopilot, Camera & Audio Enhancements** | `apps/desktop-gpui/src/editor_tabs.rs` (`magic_polish_clicked`, `remove_filler_words_clicked`, `remove_silences_clicked`, `auto_redact_pii_clicked`, `copy_youtube_chapters_clicked`, `export_sop_markdown_clicked`, `export_audio_only_clicked`; Camera size presets `Small 25%`, `Med 40%`, `Lg Square 60%`, `Split 50/50`; Audio `Import Background Audio (.mp3 / .wav)`, `Background Music Volume` presets, `Auto-Ducking (-12 dB)`), `apps/desktop-gpui/src/transcription.rs` (`regroup_captions_for_social_reels`, `plan_filler_word_cuts`, `plan_silence_cuts`, `plan_pii_redaction_ranges`, `generate_youtube_chapters`, `generate_markdown_sop`) |
+| **4K/60fps & Reels/Shorts Export + Clipboard Fix** | `apps/desktop-gpui/src/editor_export.rs` (defaults: `4K`, `60fps`, `Maximum` 0.45 bpp; `Export for Reels & Shorts (1080×1920 · 60fps)` at 0.12 bpp ~14.2 Mbps; `Copy Reels & Shorts MP4 to Clipboard`; `Copy PR / Slack GIF`; clipboard exports saved in `<recordings_dir>/Exports/`), `crates/enc-ffmpeg/src/h264.rs` (CRF 16 + H.264 `high` profile on `h264_videotoolbox`), `apps/desktop-gpui/src/platform.rs` (`copy_file_to_clipboard` sets `NSURL`, `NSFilenamesPboardType`, and `com.compuserve.gif`) |
+| **Fast Dev Launch & macOS DMG Release Pipeline** | `start.sh` & `stop.sh` (`target/.cap-gpui-patch-stamp` skips `prepare-gpui-dependency.sh`, builds `--bin sricap-rec` with `split-debuginfo = "unpacked"` & `codegen-units = 256`), `scripts/build-gpui-binary.sh`, `scripts/bundle-gpui.mjs` (auto-builds `cap-muxer` & `cap-cli` sidecars via `build-desktop-binaries.mjs` if missing, defaults to `--bundles app,dmg` when unsigned), `.github/workflows/release-sricap-mac.yml` |
+| **Web Platform & Chrome Extension Features** | `packages/database/types/metadata.ts`, `apps/web/lib/edit-transcript.ts`, `apps/web/lib/video-sop-and-bug-report.ts`, `apps/web/lib/viewer-retention.ts`, `apps/web/lib/workspace-semantic-search.ts`, `apps/chrome-extension/src/content/blur-overlay.tsx`, `apps/chrome-extension/src/shared/bug-report.ts` |
 
 ## Fast File-Lookup Cheat Sheet (Zero-Search Direct Paths)
 
