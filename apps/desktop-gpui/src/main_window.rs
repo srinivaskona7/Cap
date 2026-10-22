@@ -6687,7 +6687,7 @@ impl MainWindow {
                     ui::ButtonSize::Sm,
                 )
                 .icon("icons/mobile.svg")
-                .label("Pro Android Mirror & Remote Hub (Screen-Off Stealth)")
+                .label("Apple (iPhone/iOS) & Android Mirror Hub (Screen-Off Stealth)")
                 .height(px(30.))
                 .full_width()
                 .on_click(cx.listener(|_, _, _window, cx| {

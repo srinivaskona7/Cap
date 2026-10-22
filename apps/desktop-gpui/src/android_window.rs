@@ -200,11 +200,20 @@ impl AndroidQualityPreset {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MobilePlatform {
+    Android,
+    AppleIosSimulator,
+    ApplePhysicalDevice,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AndroidDevice {
     pub serial: String,
     pub model: String,
     pub transport: String,
+    pub platform: MobilePlatform,
+    pub authorized: bool,
 }
 
 pub fn parse_adb_devices_output(output: &str) -> Vec<AndroidDevice> {
@@ -222,16 +231,23 @@ pub fn parse_adb_devices_output(output: &str) -> Vec<AndroidDevice> {
         let Some(state) = parts.next() else {
             continue;
         };
-        if state != "device" {
+        if state != "device" && state != "unauthorized" {
             continue;
         }
-        let mut model = serial.to_string();
+        let authorized = state == "device";
+        let mut model = if authorized {
+            serial.to_string()
+        } else {
+            format!("{serial} (Tap 'Allow' on Phone)")
+        };
         for token in parts {
             if let Some(m) = token.strip_prefix("model:") {
                 model = m.replace('_', " ");
             }
         }
-        let transport = if serial.contains(':') {
+        let transport = if !authorized {
+            "Auth Needed".to_string()
+        } else if serial.contains(':') {
             "Wi-Fi".to_string()
         } else {
             "USB".to_string()
@@ -240,7 +256,35 @@ pub fn parse_adb_devices_output(output: &str) -> Vec<AndroidDevice> {
             serial: serial.to_string(),
             model,
             transport,
+            platform: MobilePlatform::Android,
+            authorized,
         });
+    }
+    list
+}
+
+pub fn parse_simctl_booted_devices(output: &str) -> Vec<AndroidDevice> {
+    let mut list = Vec::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if !trimmed.ends_with("(Booted)") {
+            continue;
+        }
+        let without_state = trimmed.trim_end_matches("(Booted)").trim();
+        let Some(open_paren) = without_state.rfind('(') else {
+            continue;
+        };
+        let name = without_state[..open_paren].trim();
+        let udid = without_state[open_paren + 1..].trim_end_matches(')').trim();
+        if !name.is_empty() && udid.len() >= 8 {
+            list.push(AndroidDevice {
+                serial: format!("sim:{udid}"),
+                model: name.to_string(),
+                transport: "iOS Sim".to_string(),
+                platform: MobilePlatform::AppleIosSimulator,
+                authorized: true,
+            });
+        }
     }
     list
 }
@@ -265,11 +309,31 @@ fn find_adb_binary() -> String {
 }
 
 pub fn discover_adb_devices() -> Vec<AndroidDevice> {
+    let mut devices = Vec::new();
     let adb = find_adb_binary();
-    let Ok(out) = Command::new(adb).args(["devices", "-l"]).output() else {
-        return Vec::new();
-    };
-    parse_adb_devices_output(&String::from_utf8_lossy(&out.stdout))
+    if let Ok(out) = Command::new(&adb).args(["devices", "-l"]).output() {
+        devices.extend(parse_adb_devices_output(&String::from_utf8_lossy(
+            &out.stdout,
+        )));
+    }
+    if let Ok(sim_out) = Command::new("xcrun")
+        .args(["simctl", "list", "devices", "booted"])
+        .output()
+    {
+        devices.extend(parse_simctl_booted_devices(&String::from_utf8_lossy(
+            &sim_out.stdout,
+        )));
+    }
+    if std::path::Path::new("/System/Applications/iPhone Mirroring.app").exists() {
+        devices.push(AndroidDevice {
+            serial: "apple:iphone-mirroring".to_string(),
+            model: "iPhone Mirroring".to_string(),
+            transport: "macOS Continuity".to_string(),
+            platform: MobilePlatform::ApplePhysicalDevice,
+            authorized: true,
+        });
+    }
+    devices
 }
 
 pub struct AndroidWindow {
@@ -413,10 +477,31 @@ impl AndroidWindow {
 
     pub fn start_mirroring(&mut self, cx: &mut Context<Self>) {
         let Some(serial) = self.selected_serial.clone() else {
-            self.status_notice = "Connect an Android device before starting mirroring.".to_string();
+            self.status_notice =
+                "Connect an iPhone/iPad or Android device before starting mirroring.".to_string();
             cx.notify();
             return;
         };
+        if serial == "apple:iphone-mirroring" {
+            let _ = Command::new("open")
+                .arg("-a")
+                .arg("/System/Applications/iPhone Mirroring.app")
+                .spawn();
+            self.status_notice =
+                "Launched macOS iPhone Mirroring.app — click 'Record Mobile Demo' to capture in 9:16 Studio!"
+                    .to_string();
+            cx.notify();
+            return;
+        }
+        if let Some(dev) = self.devices.iter().find(|d| d.serial == serial)
+            && !dev.authorized
+        {
+            self.status_notice =
+                "Phone detected (Unauthorized): Please unlock your phone and tap 'Allow USB Debugging', then click Reconnect."
+                    .to_string();
+            cx.notify();
+            return;
+        }
         self.mirroring_active = true;
         let wake = self.wake_on_connect;
         let auto_dim = self.auto_dim_oled;
@@ -424,7 +509,7 @@ impl AndroidWindow {
         let max_size = self.quality_preset.max_size();
         let bitrate = self.quality_preset.bitrate_bps();
         let control_socket = self.control_socket.clone();
-        if self.auto_clipboard_sync {
+        if self.auto_clipboard_sync && !serial.starts_with("sim:") {
             self.sync_mac_clipboard_to_phone(cx);
         }
 
@@ -433,7 +518,7 @@ impl AndroidWindow {
             self.quality_preset.label(),
             max_size,
             bitrate / 1_000_000,
-            if stealth {
+            if stealth && !serial.starts_with("sim:") {
                 " · Screen-Off Stealth"
             } else {
                 ""
@@ -441,75 +526,81 @@ impl AndroidWindow {
         );
 
         let serial_init = serial.clone();
-        cx.background_executor()
-            .spawn(async move {
-                let adb = find_adb_binary();
-                let _ = Command::new(&adb)
-                    .args([
-                        "-s",
-                        &serial_init,
-                        "reverse",
-                        "localabstract:scrcpy",
-                        &format!("tcp:{SCRCPY_DEFAULT_PORT}"),
-                    ])
-                    .output();
-                if wake {
+        if !serial_init.starts_with("sim:") {
+            cx.background_executor()
+                .spawn(async move {
+                    let adb = find_adb_binary();
+                    let _ = Command::new(&adb).arg("start-server").output();
                     let _ = Command::new(&adb)
-                        .args(["-s", &serial_init, "shell", "input", "keyevent", "224"])
+                        .args(["-s", &serial_init, "reverse", "--remove-all"])
                         .output();
-                    let _ = Command::new(&adb)
-                        .args(["-s", &serial_init, "shell", "input", "keyevent", "82"])
-                        .output();
-                }
-                if auto_dim {
                     let _ = Command::new(&adb)
                         .args([
                             "-s",
                             &serial_init,
-                            "shell",
-                            "settings",
-                            "put",
-                            "system",
-                            "screen_brightness",
-                            "2",
+                            "reverse",
+                            "localabstract:scrcpy",
+                            &format!("tcp:{SCRCPY_DEFAULT_PORT}"),
                         ])
                         .output();
-                }
-                if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", SCRCPY_DEFAULT_PORT)) {
-                    let _ = stream.set_nodelay(true);
-                    let _ = stream.set_read_timeout(Some(Duration::from_millis(80)));
-                    let mut hdr = [0u8; 77];
-                    if std::io::Read::read_exact(&mut stream, &mut hdr).is_ok()
-                        && let Some(vhdr) = parse_video_stream_header(&hdr)
-                        && vhdr.codec_id == SCRCPY_CODEC_H264
-                    {
-                        let mut fhdr = [0u8; 12];
-                        if std::io::Read::read_exact(&mut stream, &mut fhdr).is_ok() {
-                            let parsed_frame = parse_frame_header(&fhdr);
-                            tracing::debug!(
-                                device = %vhdr.device_name,
-                                width = vhdr.initial_width,
-                                height = vhdr.initial_height,
-                                config = parsed_frame.config_packet,
-                                keyframe = parsed_frame.keyframe,
-                                pts_us = parsed_frame.pts_us,
-                                bytes = parsed_frame.packet_size,
-                                "scrcpy stream header handshake"
-                            );
+                    if wake {
+                        let _ = Command::new(&adb)
+                            .args(["-s", &serial_init, "shell", "input", "keyevent", "224"])
+                            .output();
+                        let _ = Command::new(&adb)
+                            .args(["-s", &serial_init, "shell", "input", "keyevent", "82"])
+                            .output();
+                    }
+                    if auto_dim {
+                        let _ = Command::new(&adb)
+                            .args([
+                                "-s",
+                                &serial_init,
+                                "shell",
+                                "settings",
+                                "put",
+                                "system",
+                                "screen_brightness",
+                                "2",
+                            ])
+                            .output();
+                    }
+                    if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", SCRCPY_DEFAULT_PORT)) {
+                        let _ = stream.set_nodelay(true);
+                        let _ = stream.set_read_timeout(Some(Duration::from_millis(80)));
+                        let mut hdr = [0u8; 77];
+                        if std::io::Read::read_exact(&mut stream, &mut hdr).is_ok()
+                            && let Some(vhdr) = parse_video_stream_header(&hdr)
+                            && vhdr.codec_id == SCRCPY_CODEC_H264
+                        {
+                            let mut fhdr = [0u8; 12];
+                            if std::io::Read::read_exact(&mut stream, &mut fhdr).is_ok() {
+                                let parsed_frame = parse_frame_header(&fhdr);
+                                tracing::debug!(
+                                    device = %vhdr.device_name,
+                                    width = vhdr.initial_width,
+                                    height = vhdr.initial_height,
+                                    config = parsed_frame.config_packet,
+                                    keyframe = parsed_frame.keyframe,
+                                    pts_us = parsed_frame.pts_us,
+                                    bytes = parsed_frame.packet_size,
+                                    "scrcpy stream header handshake"
+                                );
+                            }
+                        }
+                        if let Ok(mut guard) = control_socket.lock() {
+                            *guard = Some(stream);
+                        }
+                        if stealth
+                            && let Ok(mut guard) = control_socket.lock()
+                            && let Some(s) = guard.as_mut()
+                        {
+                            let _ = s.write_all(&encode_set_display_power(false));
                         }
                     }
-                    if let Ok(mut guard) = control_socket.lock() {
-                        *guard = Some(stream);
-                    }
-                    if stealth
-                        && let Ok(mut guard) = control_socket.lock()
-                        && let Some(s) = guard.as_mut()
-                    {
-                        let _ = s.write_all(&encode_set_display_power(false));
-                    }
-                }
-            })
-            .detach();
+                })
+                .detach();
+        }
 
         self._mirror_task = Some(cx.spawn(async move |this, cx| {
             loop {
@@ -525,14 +616,24 @@ impl AndroidWindow {
                 let Some(serial_now) = active_serial else {
                     break;
                 };
+                if serial_now == "apple:iphone-mirroring" {
+                    break;
+                }
                 let frame = cx
                     .background_executor()
                     .spawn(async move {
-                        let adb = find_adb_binary();
-                        let out = Command::new(adb)
-                            .args(["-s", &serial_now, "exec-out", "screencap", "-p"])
-                            .output()
-                            .ok()?;
+                        let out = if let Some(udid) = serial_now.strip_prefix("sim:") {
+                            Command::new("xcrun")
+                                .args(["simctl", "io", udid, "screenshot", "--type=png", "-"])
+                                .output()
+                                .ok()?
+                        } else {
+                            let adb = find_adb_binary();
+                            Command::new(adb)
+                                .args(["-s", &serial_now, "exec-out", "screencap", "-p"])
+                                .output()
+                                .ok()?
+                        };
                         if !out.status.success() || out.stdout.len() < 64 {
                             return None;
                         }
@@ -564,6 +665,90 @@ impl AndroidWindow {
                     .await;
             }
         }));
+        cx.notify();
+    }
+
+    pub fn apply_clean_demo_status_bar(&mut self, cx: &mut Context<Self>) {
+        let Some(serial) = self.selected_serial.clone() else {
+            return;
+        };
+        if let Some(udid) = serial.strip_prefix("sim:") {
+            let udid = udid.to_string();
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = Command::new("xcrun")
+                        .args([
+                            "simctl",
+                            "status_bar",
+                            &udid,
+                            "override",
+                            "--time",
+                            "9:41",
+                            "--batteryState",
+                            "charged",
+                            "--batteryLevel",
+                            "100",
+                            "--wifiBars",
+                            "3",
+                            "--cellularBars",
+                            "4",
+                        ])
+                        .output();
+                })
+                .detach();
+            self.status_notice =
+                "Applied Apple Keynote 9:41 Clean Status Bar (100% Battery · Full Bars)!"
+                    .to_string();
+        } else {
+            self.run_adb_async(
+                vec![
+                    "shell".into(),
+                    "settings".into(),
+                    "put".into(),
+                    "global".into(),
+                    "sysui_demo_allowed".into(),
+                    "1".into(),
+                ],
+                cx,
+            );
+            self.run_adb_async(
+                vec![
+                    "shell".into(),
+                    "am".into(),
+                    "broadcast".into(),
+                    "-a".into(),
+                    "com.android.systemui.demo".into(),
+                    "-e".into(),
+                    "command".into(),
+                    "clock".into(),
+                    "-e".into(),
+                    "hhmm".into(),
+                    "0941".into(),
+                ],
+                cx,
+            );
+            self.run_adb_async(
+                vec![
+                    "shell".into(),
+                    "am".into(),
+                    "broadcast".into(),
+                    "-a".into(),
+                    "com.android.systemui.demo".into(),
+                    "-e".into(),
+                    "command".into(),
+                    "battery".into(),
+                    "-e".into(),
+                    "level".into(),
+                    "100".into(),
+                    "-e".into(),
+                    "plugged".into(),
+                    "false".into(),
+                ],
+                cx,
+            );
+            self.status_notice =
+                "Applied Clean 9:41 Demo Status Bar (100% Battery) on Android device!".to_string();
+        }
         cx.notify();
     }
 
@@ -987,7 +1172,7 @@ impl Render for AndroidWindow {
                                 div()
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Pro Android Mirror & Remote Control Hub"),
+                                    .child("Apple (iOS/iPhone) & Android Pro Mirror Hub"),
                             )
                             .child(
                                 div()
@@ -1004,11 +1189,23 @@ impl Render for AndroidWindow {
                             .child(
                                 ui::Button::plain(
                                     &theme,
+                                    "android-clean-status-bar",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Xs,
+                                )
+                                .label("✨ 9:41 Demo Bar")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.apply_clean_demo_status_bar(cx);
+                                })),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
                                     "android-refresh-devices",
                                     ui::ButtonVariant::Gray,
                                     ui::ButtonSize::Xs,
                                 )
-                                .label("Refresh ADB")
+                                .label("Refresh Devices")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.refresh_devices(cx);
                                 })),
@@ -1058,7 +1255,16 @@ impl Render for AndroidWindow {
                                 Hsla::from(theme.gray_2)
                             })
                             .text_size(px(11.))
-                            .child(format!("📱 {} ({})", dev.model, dev.transport))
+                            .child(format!(
+                                "{} {} ({})",
+                                match dev.platform {
+                                    MobilePlatform::Android => "🤖",
+                                    MobilePlatform::AppleIosSimulator
+                                    | MobilePlatform::ApplePhysicalDevice => "🍎",
+                                },
+                                dev.model,
+                                dev.transport
+                            ))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected_serial = Some(serial.clone());
                                 this.start_mirroring(cx);
@@ -1497,18 +1703,25 @@ mod tests {
     }
 
     #[test]
-    fn adb_devices_output_parses_usb_and_wifi_transports() {
-        let sample = "List of devices attached
-
-                      R5CT90ABCDE          device usb:1-1 product:dm3q model:SM_S918B device:dm3q
-
-                      192.168.1.44:5555    device product:husky model:Pixel_8_Pro device:husky
-";
+    fn adb_devices_output_parses_usb_wifi_and_apple_simulators() {
+        let sample = "List of devices attached\n\
+                      R5CT90ABCDE          device usb:1-1 product:dm3q model:SM_S918B device:dm3q\n\
+                      192.168.1.44:5555    device product:husky model:Pixel_8_Pro device:husky\n\
+                      ZY225ABC99           unauthorized usb:1-2 transport_id:4\n";
         let list = parse_adb_devices_output(sample);
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0].model, "SM S918B");
         assert_eq!(list[0].transport, "USB");
+        assert!(list[0].authorized);
         assert_eq!(list[1].model, "Pixel 8 Pro");
         assert_eq!(list[1].transport, "Wi-Fi");
+        assert!(!list[2].authorized);
+        assert_eq!(list[2].transport, "Auth Needed");
+
+        let sim_sample = "== Devices ==\n-- iOS 18.2 --\n    iPhone 16 Pro (A1B2C3D4-E5F6-7890-1234-567890ABCDEF) (Booted)\n";
+        let sims = parse_simctl_booted_devices(sim_sample);
+        assert_eq!(sims.len(), 1);
+        assert_eq!(sims[0].model, "iPhone 16 Pro");
+        assert_eq!(sims[0].platform, MobilePlatform::AppleIosSimulator);
     }
 }
