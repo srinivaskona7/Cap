@@ -3472,6 +3472,8 @@ impl MainWindow {
                 "recordings" => "Recordings",
                 "teleprompter" => "Teleprompter",
                 "changelog" => "Changelog",
+                "walkthrough-guides" => "Interactive Walkthrough Guides (3 Demos)",
+                "quit-app" => "Quit sricap-rec (⌘Q)",
                 other => other,
             };
             div()
@@ -3596,6 +3598,23 @@ impl MainWindow {
                                 cx.defer(|cx: &mut gpui::App| {
                                     app_windows::open_settings(Page::Changelog, cx)
                                 });
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button("walkthrough-guides", "icons/book-open.svg", 16.).on_click(
+                            cx.listener(|_, _, _, cx| {
+                                let path = std::env::current_dir()
+                                    .unwrap_or_default()
+                                    .join("docs/interactive-demos/1-mirror-hub-walkthrough.html");
+                                cx.open_url(&format!("file://{}", path.display()));
+                            }),
+                        ),
+                    )
+                    .child(
+                        icon_button("quit-app", "icons/power.svg", 15.).on_click(cx.listener(
+                            |_, _, _, cx| {
+                                cx.quit();
                             },
                         )),
                     ),
@@ -6687,8 +6706,8 @@ impl MainWindow {
                     ui::ButtonSize::Sm,
                 )
                 .icon("icons/mobile.svg")
-                .label("Apple (iPhone/iOS) & Android Mirror Hub (Screen-Off Stealth)")
-                .height(px(30.))
+                .label("📱 Phone Mirror Hub (iPhone & Android)")
+                .height(px(32.))
                 .full_width()
                 .on_click(cx.listener(|_, _, _window, cx| {
                     app_windows::open_android_window(cx);
