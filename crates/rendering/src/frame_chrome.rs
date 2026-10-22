@@ -420,6 +420,25 @@ fn browser_svg(w: f64, h: f64, bar_h: f64, theme: FrameTheme, url: &str) -> Stri
         )
     };
 
+    let pill_markup = if text.is_empty() {
+        String::new()
+    } else {
+        format!(
+            concat!(
+                r##"<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="{pr}" fill="{pill}" stroke="{pill_stroke}" stroke-width="1"/>"##,
+                "{url_el}",
+            ),
+            px = pill_x,
+            py = pill_y,
+            pw = pill_w,
+            ph = pill_h,
+            pr = pill_h * 0.5,
+            pill = p.pill_fill,
+            pill_stroke = p.pill_stroke,
+            url_el = url_el,
+        )
+    };
+
     format!(
         concat!(
             r##"<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">"##,
@@ -428,8 +447,7 @@ fn browser_svg(w: f64, h: f64, bar_h: f64, theme: FrameTheme, url: &str) -> Stri
             r##"<rect y="{hair_y}" width="{w}" height="{hair_h}" fill="{hairline}"/>"##,
             "{lights}",
             "{nav}",
-            r##"<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="{pr}" fill="{pill}" stroke="{pill_stroke}" stroke-width="1"/>"##,
-            "{url_el}",
+            "{pill_markup}",
             "</svg>"
         ),
         w = w,
@@ -443,14 +461,7 @@ fn browser_svg(w: f64, h: f64, bar_h: f64, theme: FrameTheme, url: &str) -> Stri
         hairline = p.hairline,
         lights = traffic_lights(bar_h, cy),
         nav = nav,
-        px = pill_x,
-        py = pill_y,
-        pw = pill_w,
-        ph = pill_h,
-        pr = pill_h * 0.5,
-        pill = p.pill_fill,
-        pill_stroke = p.pill_stroke,
-        url_el = url_el,
+        pill_markup = pill_markup,
     )
 }
 
