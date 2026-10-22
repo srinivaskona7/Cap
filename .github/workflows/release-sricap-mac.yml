@@ -72,20 +72,15 @@ jobs:
           echo "RUST_TARGET_TRIPLE=aarch64-apple-darwin" >> .env
           RUST_TARGET_TRIPLE=aarch64-apple-darwin bun run cap-setup
 
-      - name: Build sidecars (cap-muxer & cap-cli) and GPUI binary in parallel
+      - name: Build sidecar binaries (cap-muxer & cap-cli)
         run: |
-          ./scripts/build-desktop-binaries.sh aarch64-apple-darwin &
-          SIDECAR_PID=$!
-          bash scripts/build-gpui-binary.sh release aarch64-apple-darwin &
-          GPUI_PID=$!
-          wait $SIDECAR_PID
-          wait $GPUI_PID
+          ./scripts/build-desktop-binaries.sh aarch64-apple-darwin
 
-      - name: Bundle sricap-rec macOS App (--skip-build --bundles app)
+      - name: Build & Bundle sricap-rec macOS App & DMG
         env:
           CI: "false"
         run: |
-          node scripts/bundle-gpui.mjs aarch64-apple-darwin --skip-build --bundles app
+          node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app,dmg
 
       - name: Ad-hoc Deep Codesign App Bundle
         run: |
