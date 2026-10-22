@@ -255,6 +255,10 @@ pub enum FrameStyle {
     Browser,
     /// A MacBook mockup: black bezel, aluminum body and deck.
     Macbook,
+    /// An iPhone Pro chassis with Liquid Retina bezels and Dynamic Island.
+    IPhone,
+    /// An iPad Pro/Air tablet chassis with rounded bezels and top camera lens.
+    IPad,
 }
 
 #[derive(Type, Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]

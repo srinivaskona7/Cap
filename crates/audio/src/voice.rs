@@ -263,6 +263,8 @@ pub struct StudioVoiceFilter {
     frame_buf: [f32; FRAME_SIZE],
     out_buf: [f32; FRAME_SIZE],
     buf_pos: usize,
+    last_vad: f32,
+    reduction_db: f32,
     enabled: bool,
 }
 
@@ -273,6 +275,8 @@ impl StudioVoiceFilter {
             frame_buf: [0.0; FRAME_SIZE],
             out_buf: [0.0; FRAME_SIZE],
             buf_pos: 0,
+            last_vad: 0.0,
+            reduction_db: -18.0,
             enabled,
         }
     }
@@ -283,6 +287,42 @@ impl StudioVoiceFilter {
 
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+
+    pub fn last_vad_probability(&self) -> f32 {
+        self.last_vad
+    }
+
+    pub fn estimated_noise_reduction_db(&self) -> f32 {
+        if self.enabled { self.reduction_db } else { 0.0 }
+    }
+
+    pub fn rnnoise_process_frame(&mut self, input: &[f32; FRAME_SIZE]) -> ([f32; FRAME_SIZE], f32) {
+        let mut scaled_in = [0.0_f32; FRAME_SIZE];
+        let mut in_energy = 0.0_f32;
+        for (dst, &s) in scaled_in.iter_mut().zip(input.iter()) {
+            let clean = if s.is_finite() {
+                s.clamp(-1.0, 1.0)
+            } else {
+                0.0
+            };
+            in_energy += clean * clean;
+            *dst = clean * 32_768.0;
+        }
+        let vad = self.denoiser.process_frame(&mut self.out_buf, &scaled_in);
+        self.last_vad = vad;
+        let mut out = [0.0_f32; FRAME_SIZE];
+        let mut out_energy = 0.0_f32;
+        for (dst, &s) in out.iter_mut().zip(self.out_buf.iter()) {
+            let norm = (s / 32_768.0).clamp(-1.0, 1.0);
+            out_energy += norm * norm;
+            *dst = norm;
+        }
+        if in_energy > 1e-7 {
+            let ratio = (out_energy / in_energy).clamp(0.01, 1.0);
+            self.reduction_db = (10.0 * ratio.log10()).clamp(-28.0, 0.0);
+        }
+        (out, vad)
     }
 
     pub fn process_samples(&mut self, samples: &mut [f32]) {
@@ -299,7 +339,7 @@ impl StudioVoiceFilter {
             self.buf_pos += 1;
 
             if self.buf_pos == FRAME_SIZE {
-                let _ = self
+                self.last_vad = self
                     .denoiser
                     .process_frame(&mut self.out_buf, &self.frame_buf);
                 self.buf_pos = 0;

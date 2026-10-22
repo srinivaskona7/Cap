@@ -56,6 +56,14 @@ const MACBOOK_DECK_FRAC: f64 = 0.045;
 const MACBOOK_OVERHANG_FRAC: f64 = 0.10;
 /// Room reserved under the deck for its baked soft shadow.
 const MACBOOK_SHADOW_ROOM_FRAC: f64 = 0.035;
+/// iPhone Liquid Retina uniform bezel thickness fraction.
+const IPHONE_BEZEL_FRAC: f64 = 0.022;
+/// iPhone Dynamic Island width fraction of frame width.
+const IPHONE_ISLAND_W_FRAC: f64 = 0.28;
+/// iPhone Dynamic Island height fraction of content height.
+const IPHONE_ISLAND_H_FRAC: f64 = 0.034;
+/// iPad uniform tablet bezel thickness fraction.
+const IPAD_BEZEL_FRAC: f64 = 0.032;
 
 /// Supersampling factor for the rasterized chrome texture, so it stays crisp
 /// when zoom segments scale the card up.
@@ -84,6 +92,18 @@ pub fn chrome_insets(style: FrameStyle) -> ChromeInsets {
             bottom: MACBOOK_BEZEL_FRAC + MACBOOK_DECK_FRAC + MACBOOK_SHADOW_ROOM_FRAC,
             left: MACBOOK_BEZEL_FRAC + MACBOOK_OVERHANG_FRAC,
         },
+        FrameStyle::IPhone => ChromeInsets {
+            top: IPHONE_BEZEL_FRAC,
+            right: IPHONE_BEZEL_FRAC,
+            bottom: IPHONE_BEZEL_FRAC,
+            left: IPHONE_BEZEL_FRAC,
+        },
+        FrameStyle::IPad => ChromeInsets {
+            top: IPAD_BEZEL_FRAC,
+            right: IPAD_BEZEL_FRAC,
+            bottom: IPAD_BEZEL_FRAC,
+            left: IPAD_BEZEL_FRAC,
+        },
     }
 }
 
@@ -93,7 +113,11 @@ pub fn chrome_insets(style: FrameStyle) -> ChromeInsets {
 pub fn style_uses_card_decoration(style: FrameStyle) -> bool {
     matches!(
         style,
-        FrameStyle::MacOS | FrameStyle::Windows | FrameStyle::Browser
+        FrameStyle::MacOS
+            | FrameStyle::Windows
+            | FrameStyle::Browser
+            | FrameStyle::IPhone
+            | FrameStyle::IPad
     )
 }
 
@@ -561,6 +585,122 @@ fn macbook_svg(w: f64, h: f64, content_h: f64, theme: FrameTheme) -> String {
     )
 }
 
+fn iphone_svg(w: f64, h: f64, content_h: f64, theme: FrameTheme) -> String {
+    let bezel = (content_h * IPHONE_BEZEL_FRAC).max(4.0);
+    let outer_rx = (bezel * 2.4).min(w * 0.12);
+    let inner_rx = (outer_rx - bezel * 0.45).max(4.0);
+    let titanium = match theme {
+        FrameTheme::Dark => "#2B2B2F",
+        FrameTheme::Light => "#D4D5D9",
+    };
+    let island_w = (w * IPHONE_ISLAND_W_FRAC).clamp(bezel * 3.2, w * 0.42);
+    let island_h = (content_h * IPHONE_ISLAND_H_FRAC).max(bezel * 0.95);
+    let island_x = (w - island_w) * 0.5;
+    let island_y = bezel + (bezel * 0.45).max(4.0);
+    let island_rx = island_h * 0.5;
+    let lens_cx = island_x + island_w - island_h * 0.55;
+    let lens_cy = island_y + island_h * 0.5;
+    let lens_r = (island_h * 0.24).max(1.8);
+    let mic_dot_cx = island_x + island_w * 0.62;
+    let home_w = (w * 0.34).clamp(40.0, w * 0.5);
+    let home_h = (bezel * 0.24).clamp(2.5, 6.0);
+    let home_x = (w - home_w) * 0.5;
+    let home_y = h - bezel - home_h * 2.2;
+
+    format!(
+        concat!(
+            r##"<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">"##,
+            r##"<path fill-rule="evenodd" d="M 0 0 H {w} V {h} H 0 Z M {bx} {by} H {br} V {bb} H {bx} Z" fill="#0B0B0E"/>"##,
+            r##"<rect x="1" y="1" width="{ow}" height="{oh}" rx="{outer_rx}" fill="none" stroke="{titanium}" stroke-width="{rim_w}"/>"##,
+            r##"<rect x="{bx}" y="{by}" width="{iw}" height="{ih}" rx="{inner_rx}" fill="none" stroke="#18181C" stroke-width="1.5"/>"##,
+            r##"<rect x="{island_x}" y="{island_y}" width="{island_w}" height="{island_h}" rx="{island_rx}" fill="#050507" stroke="#1F1F24" stroke-width="1"/>"##,
+            r##"<circle cx="{lens_cx}" cy="{lens_cy}" r="{lens_r}" fill="#141824"/>"##,
+            r##"<circle cx="{lens_cx}" cy="{lens_cy}" r="{lens_inner}" fill="#38BDF8" fill-opacity="0.55"/>"##,
+            r##"<circle cx="{mic_dot_cx}" cy="{lens_cy}" r="{mic_r}" fill="#F97316"/>"##,
+            r##"<rect x="{home_x}" y="{home_y}" width="{home_w}" height="{home_h}" rx="{home_rx}" fill="rgba(255,255,255,0.55)"/>"##,
+            "</svg>"
+        ),
+        w = w,
+        h = h,
+        ow = (w - 2.0).max(1.0),
+        oh = (h - 2.0).max(1.0),
+        outer_rx = outer_rx,
+        inner_rx = inner_rx,
+        titanium = titanium,
+        rim_w = (bezel * 0.28).max(2.0),
+        bx = bezel,
+        by = bezel,
+        br = (w - bezel).max(bezel + 1.0),
+        bb = (h - bezel).max(bezel + 1.0),
+        iw = (w - bezel * 2.0).max(1.0),
+        ih = (h - bezel * 2.0).max(1.0),
+        island_x = island_x,
+        island_y = island_y,
+        island_w = island_w,
+        island_h = island_h,
+        island_rx = island_rx,
+        lens_cx = lens_cx,
+        lens_cy = lens_cy,
+        lens_r = lens_r,
+        lens_inner = lens_r * 0.42,
+        mic_dot_cx = mic_dot_cx,
+        mic_r = (island_h * 0.11).max(1.2),
+        home_x = home_x,
+        home_y = home_y,
+        home_w = home_w,
+        home_h = home_h,
+        home_rx = home_h * 0.5,
+    )
+}
+
+fn ipad_svg(w: f64, h: f64, content_h: f64, theme: FrameTheme) -> String {
+    let bezel = (content_h * IPAD_BEZEL_FRAC).max(6.0);
+    let outer_rx = (bezel * 1.65).min(w * 0.08);
+    let chassis = match theme {
+        FrameTheme::Dark => "#27272A",
+        FrameTheme::Light => "#D4D4D8",
+    };
+    let cam_cx = w * 0.5;
+    let cam_cy = bezel * 0.5;
+    let cam_r = (bezel * 0.16).max(2.0);
+    let home_w = (w * 0.22).clamp(48.0, w * 0.36);
+    let home_h = (bezel * 0.18).clamp(2.5, 5.0);
+    let home_x = (w - home_w) * 0.5;
+    let home_y = h - bezel - home_h * 2.0;
+
+    format!(
+        concat!(
+            r##"<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">"##,
+            r##"<path fill-rule="evenodd" d="M 0 0 H {w} V {h} H 0 Z M {bx} {by} H {br} V {bb} H {bx} Z" fill="#0D0D11"/>"##,
+            r##"<rect x="1" y="1" width="{ow}" height="{oh}" rx="{outer_rx}" fill="none" stroke="{chassis}" stroke-width="{rim_w}"/>"##,
+            r##"<circle cx="{cam_cx}" cy="{cam_cy}" r="{cam_r}" fill="#18181B"/>"##,
+            r##"<circle cx="{cam_cx}" cy="{cam_cy}" r="{cam_inner}" fill="#38BDF8" fill-opacity="0.5"/>"##,
+            r##"<rect x="{home_x}" y="{home_y}" width="{home_w}" height="{home_h}" rx="{home_rx}" fill="rgba(255,255,255,0.45)"/>"##,
+            "</svg>"
+        ),
+        w = w,
+        h = h,
+        ow = (w - 2.0).max(1.0),
+        oh = (h - 2.0).max(1.0),
+        outer_rx = outer_rx,
+        chassis = chassis,
+        rim_w = (bezel * 0.24).max(2.0),
+        bx = bezel,
+        by = bezel,
+        br = (w - bezel).max(bezel + 1.0),
+        bb = (h - bezel).max(bezel + 1.0),
+        cam_cx = cam_cx,
+        cam_cy = cam_cy,
+        cam_r = cam_r,
+        cam_inner = cam_r * 0.45,
+        home_x = home_x,
+        home_y = home_y,
+        home_w = home_w,
+        home_h = home_h,
+        home_rx = home_h * 0.5,
+    )
+}
+
 /// Build the SVG for a chrome card of `w`×`h` texture pixels wrapping a video
 /// content area of height `content_h` texture pixels.
 pub fn chrome_svg(
@@ -584,6 +724,8 @@ pub fn chrome_svg(
         )),
         FrameStyle::Browser => Some(browser_svg(w, h, content_h * BROWSER_BAR_FRAC, theme, url)),
         FrameStyle::Macbook => Some(macbook_svg(w, h, content_h, theme)),
+        FrameStyle::IPhone => Some(iphone_svg(w, h, content_h, theme)),
+        FrameStyle::IPad => Some(ipad_svg(w, h, content_h, theme)),
     }
 }
 
@@ -708,6 +850,8 @@ mod tests {
             FrameStyle::Windows,
             FrameStyle::Browser,
             FrameStyle::Macbook,
+            FrameStyle::IPhone,
+            FrameStyle::IPad,
         ] {
             for theme in [FrameTheme::Light, FrameTheme::Dark] {
                 let rgba = rasterize_chrome(style, theme, "cap.so", "Recording", 640, 420, 360.0);

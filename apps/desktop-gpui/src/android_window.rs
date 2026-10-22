@@ -538,6 +538,8 @@ pub struct AndroidWindow {
     show_perf_hud: bool,
     perf_telemetry: MobilePerfTelemetry,
     bezel_skin: MobileBezelSkin,
+    show_touch_ripples: bool,
+    last_touch_ripple: Option<(f32, f32, Instant)>,
     _mirror_task: Option<Task<()>>,
 }
 
@@ -619,6 +621,8 @@ impl AndroidWindow {
             show_perf_hud: true,
             perf_telemetry: MobilePerfTelemetry::default(),
             bezel_skin: MobileBezelSkin::TitaniumDark,
+            show_touch_ripples: true,
+            last_touch_ripple: None,
             _mirror_task: None,
         };
         if this.selected_serial.is_some() {
@@ -1187,17 +1191,61 @@ impl AndroidWindow {
         }
         self.clipboard_seq = self.clipboard_seq.wrapping_add(1);
         let pkt = encode_set_clipboard(self.clipboard_seq, true, &text);
-        if !self.send_control_bytes(&pkt) {
-            let escaped = text
-                .replace(' ', "%s")
-                .replace("\"", "")
-                .replace('\u{27}', "");
-            self.run_adb_async(
-                vec!["shell".into(), "input".into(), "text".into(), escaped],
-                cx,
-            );
+        if !self.send_control_bytes(&pkt)
+            && let Some(serial) = self.selected_serial.clone()
+        {
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = crate::device_bridge::sync_mac_clipboard_to_device(&serial, &text);
+                })
+                .detach();
         }
-        self.status_notice = "Synced Mac clipboard text to Android device.".to_string();
+        self.status_notice = "Synced Mac clipboard text to mirrored device.".to_string();
+        cx.notify();
+    }
+
+    pub fn pull_phone_clipboard_to_mac(&mut self, cx: &mut Context<Self>) {
+        let Some(serial) = self.selected_serial.clone() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let text = cx
+                .background_executor()
+                .spawn(async move { crate::device_bridge::pull_device_clipboard_to_mac(&serial) })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                if let Some(t) = text {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(t));
+                    view.status_notice =
+                        "Pulled device clipboard text into macOS Clipboard!".to_string();
+                } else {
+                    view.status_notice = "Device clipboard is empty or unavailable.".to_string();
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn open_clipboard_url_on_device(&mut self, cx: &mut Context<Self>) {
+        let Some(serial) = self.selected_serial.clone() else {
+            return;
+        };
+        let raw_url = cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .filter(|s| crate::device_bridge::normalize_launch_url(s).is_some())
+            .unwrap_or_else(|| "https://github.com/srinivaskona7/Cap".to_string());
+        let Some(norm_url) = crate::device_bridge::normalize_launch_url(&raw_url) else {
+            return;
+        };
+        let url_for_bg = norm_url.clone();
+        cx.background_executor()
+            .spawn(async move {
+                let _ = crate::device_bridge::open_url_on_mirrored_device(&serial, &url_for_bg);
+            })
+            .detach();
+        self.status_notice = format!("Launched URL on mirrored device: {norm_url}");
         cx.notify();
     }
 
@@ -1538,7 +1586,10 @@ impl AndroidWindow {
             MouseButton::Left => {
                 let x = f32::from(event.position.x);
                 let y = f32::from(event.position.y);
-                self.drag_start = Some((x, y, Instant::now()));
+                let now = Instant::now();
+                self.drag_start = Some((x, y, now));
+                self.last_touch_ripple = Some((x, y, now));
+                cx.notify();
             }
             _ => {}
         }
@@ -2436,6 +2487,26 @@ impl Render for AndroidWindow {
                         div().flex_1().child(
                             ui::Button::plain(
                                 &theme,
+                                "android-touch-ripples-toggle",
+                                if self.show_touch_ripples {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("👆 Touch Ripples")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.show_touch_ripples = !this.show_touch_ripples;
+                                cx.notify();
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
                                 "android-bezel-skin-cycle",
                                 ui::ButtonVariant::Gray,
                                 ui::ButtonSize::Xs,
@@ -2513,6 +2584,34 @@ impl Render for AndroidWindow {
                                 .border_1()
                                 .border_color(gpui::rgb(0x27272a))
                         }),
+                    )
+                    .children(
+                        self.show_touch_ripples
+                            .then_some(self.last_touch_ripple)
+                            .flatten()
+                            .and_then(|(rx, ry, ts)| {
+                                let age = ts.elapsed().as_secs_f32();
+                                (age < 0.85).then(|| {
+                                    let sample = cap_rendering::TouchRippleSample {
+                                        x: rx,
+                                        y: ry,
+                                        age_sec: age,
+                                        duration_sec: 0.85,
+                                    };
+                                    let radius = sample.radius_px();
+                                    let alpha = sample.opacity();
+                                    div()
+                                        .absolute()
+                                        .left(px((rx - radius).max(4.0)))
+                                        .top(px((ry - 210.0 - radius).max(4.0)))
+                                        .w(px(radius * 2.0))
+                                        .h(px(radius * 2.0))
+                                        .rounded_full()
+                                        .border_2()
+                                        .border_color(gpui::hsla(0.55, 0.92, 0.60, alpha))
+                                        .bg(gpui::hsla(0.55, 0.92, 0.60, alpha * 0.28))
+                                })
+                            }),
                     )
                     .children(self.show_perf_hud.then(|| {
                         let p = self.perf_telemetry;
@@ -2765,10 +2864,40 @@ impl Render for AndroidWindow {
                                 ui::ButtonVariant::Gray,
                                 ui::ButtonSize::Xs,
                             )
-                            .label("📋 Paste Mac Clipboard")
+                            .label("📋 Mac → Phone")
                             .full_width()
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.sync_mac_clipboard_to_phone(cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-pull-clipboard",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("📲 Phone → Mac")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.pull_phone_clipboard_to_mac(cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-open-url-device",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🌐 Open URL")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_clipboard_url_on_device(cx);
                             })),
                         ),
                     )

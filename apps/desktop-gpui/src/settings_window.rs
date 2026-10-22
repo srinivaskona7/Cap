@@ -3535,24 +3535,52 @@ impl SettingsWindow {
                         .into_any_element(),
                     ),
                     self.setting_row(
-                        "Studio Sound on new recordings",
+                        "Studio Sound (Neural RNNoise Speech Shield)",
                         Some(
-                            "Clean up microphone audio automatically. You can still turn it \
-                             off for any recording in the editor.",
+                            "Clean up microphone audio automatically (48 kHz 10ms RNNoise recurrent \
+                             neural network stripping fan hum, AC drone & keyboard clatter).",
                         ),
-                        self.toggle(
-                            "studio-sound-default",
-                            settings.studio_sound_by_default,
-                            cx,
-                            |this, cx| {
-                                let value = !this.settings.studio_sound_by_default;
-                                if store::set_studio_sound_by_default(value) {
-                                    this.settings.studio_sound_by_default = value;
-                                }
-                                cx.notify();
-                            },
-                        )
-                        .into_any_element(),
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .px(px(7.))
+                                    .py(px(2.))
+                                    .rounded_full()
+                                    .border_1()
+                                    .border_color(if settings.studio_sound_by_default {
+                                        theme.blue_9
+                                    } else {
+                                        theme.gray_5
+                                    })
+                                    .text_size(px(10.5))
+                                    .text_color(if settings.studio_sound_by_default {
+                                        theme.blue_9
+                                    } else {
+                                        theme.gray_10
+                                    })
+                                    .child(if settings.studio_sound_by_default {
+                                        "◉ -18 dB RNNoise Shield"
+                                    } else {
+                                        "○ Bypassed (0 dB)"
+                                    }),
+                            )
+                            .child(self.toggle(
+                                "studio-sound-default",
+                                settings.studio_sound_by_default,
+                                cx,
+                                |this, cx| {
+                                    let value = !this.settings.studio_sound_by_default;
+                                    if store::set_studio_sound_by_default(value) {
+                                        this.settings.studio_sound_by_default = value;
+                                    }
+                                    cx.notify();
+                                },
+                            ))
+                            .into_any_element(),
                     ),
                     self.setting_row(
                         "Click & keystroke sound effects",

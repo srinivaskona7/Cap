@@ -19,6 +19,7 @@ mod camera_window;
 mod controls_window;
 mod deeplink;
 mod dev_restore;
+mod device_bridge;
 mod devices;
 mod diagnostics;
 mod doodle;

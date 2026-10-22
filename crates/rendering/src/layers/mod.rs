@@ -14,6 +14,7 @@ mod keyboard;
 mod mask;
 mod notch;
 mod text;
+pub mod touch_gestures;
 
 use std::sync::OnceLock;
 
@@ -92,6 +93,7 @@ pub use keyboard::*;
 pub use mask::*;
 pub use notch::*;
 pub use text::*;
+pub use touch_gestures::*;
 
 #[cfg(test)]
 mod font_tests {

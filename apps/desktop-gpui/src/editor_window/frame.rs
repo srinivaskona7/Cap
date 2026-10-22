@@ -8,7 +8,7 @@ use gpui::{
 use super::EditorWindow;
 use crate::ui;
 
-const FRAME_STYLES: [(FrameStyle, &str, &str, &str); 5] = [
+const FRAME_STYLES: [(FrameStyle, &str, &str, &str); 7] = [
     (
         FrameStyle::None,
         "None",
@@ -38,6 +38,18 @@ const FRAME_STYLES: [(FrameStyle, &str, &str, &str); 5] = [
         "MacBook",
         "Laptop bezel around the recording",
         "icons/laptop.svg",
+    ),
+    (
+        FrameStyle::IPhone,
+        "iPhone",
+        "Liquid Retina bezel with Dynamic Island",
+        "icons/mobile.svg",
+    ),
+    (
+        FrameStyle::IPad,
+        "iPad",
+        "Tablet chassis with top camera lens",
+        "icons/mobile.svg",
     ),
 ];
 
@@ -672,7 +684,9 @@ mod tests {
     fn frame_styles_and_button_labels_match_tauri() {
         assert_eq!(
             FRAME_STYLES.map(|option| option.1),
-            ["None", "macOS", "Windows", "Browser", "MacBook"]
+            [
+                "None", "macOS", "Windows", "Browser", "MacBook", "iPhone", "iPad"
+            ]
         );
         assert_eq!(
             button_content(FrameStyle::None),
@@ -723,7 +737,13 @@ mod tests {
     fn frame_text_fields_match_tauri_visibility() {
         assert!(FrameField::for_style(FrameStyle::Browser) == Some(FrameField::Url));
         assert!(FrameField::for_style(FrameStyle::MacOS) == Some(FrameField::Title));
-        for style in [FrameStyle::None, FrameStyle::Windows, FrameStyle::Macbook] {
+        for style in [
+            FrameStyle::None,
+            FrameStyle::Windows,
+            FrameStyle::Macbook,
+            FrameStyle::IPhone,
+            FrameStyle::IPad,
+        ] {
             assert!(FrameField::for_style(style).is_none());
         }
     }
@@ -753,7 +773,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .style,
-            FrameStyle::Browser
+            FrameStyle::IPhone
         );
         assert_eq!(
             history
@@ -764,7 +784,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .style,
-            FrameStyle::Macbook
+            FrameStyle::IPad
         );
     }
 }

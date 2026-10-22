@@ -8558,7 +8558,12 @@ impl EditorWindow {
                     width: Some(0.28),
                     height: Some(0.032),
                 });
-                project.background.frame = None;
+                project.background.frame = Some(FrameConfiguration {
+                    style: FrameStyle::IPhone,
+                    theme: FrameTheme::Dark,
+                    url: String::new(),
+                    title: String::new(),
+                });
             } else {
                 project.background.frame = Some(FrameConfiguration {
                     style: FrameStyle::MacOS,
