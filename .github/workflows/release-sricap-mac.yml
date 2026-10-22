@@ -28,17 +28,10 @@ jobs:
       RUST_TARGET_TRIPLE: aarch64-apple-darwin
       MACOSX_DEPLOYMENT_TARGET: "12.3"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_PROFILE_RELEASE_DEBUG: "0"
-      CARGO_PROFILE_RELEASE_STRIP: "symbols"
-      CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: "sccache"
-      SCCACHE_GHA_ENABLED: "true"
+      CARGO_BUILD_JOBS: "4"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup sccache for fast Rust compilation
-        uses: mozilla-actions/sccache-action@v0.0.7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
