@@ -16,15 +16,13 @@ esac
 
 mkdir -p "$BINARIES_DIR"
 
-build_sidecar() {
-    local package_name="$1"
-    local source_binary="$2"
-    shift 2
+echo "Building cap-muxer and cap in parallel for $TARGET..."
+cargo build --release -p cap-muxer -p cap --target "$TARGET"
+
+copy_binary() {
+    local source_binary="$1"
+    shift
     local dest_binaries=("$@")
-
-    echo "Building ${dest_binaries[*]} for $TARGET..."
-    cargo build --release -p "$package_name" --target "$TARGET"
-
     local src="$REPO_ROOT/target/$TARGET/release/$source_binary$EXT"
 
     if [[ ! -f "$src" ]]; then
@@ -39,5 +37,5 @@ build_sidecar() {
     done
 }
 
-build_sidecar "cap-muxer" "cap-muxer" "cap-muxer"
-build_sidecar "cap" "cap" "cap-cli" "cap-exporter"
+copy_binary "cap-muxer" "cap-muxer"
+copy_binary "cap" "cap-cli" "cap-exporter"
