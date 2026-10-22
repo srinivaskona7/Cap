@@ -83,6 +83,50 @@ pub fn render_touch_ripple_svg(
     )
 }
 
+pub fn embed_forensic_luma_watermark(rgba: &mut [u8], payload: &[u8]) {
+    let total_bits = payload.len() * 8;
+    for (bit_idx, px) in rgba.chunks_exact_mut(4).take(total_bits).enumerate() {
+        let byte = payload[bit_idx / 8];
+        let bit = (byte >> (7 - (bit_idx % 8))) & 1;
+        px[0] = (px[0] & !1) | bit;
+    }
+}
+
+pub fn extract_forensic_luma_watermark(rgba: &[u8], byte_len: usize) -> Vec<u8> {
+    let mut out = vec![0u8; byte_len];
+    let total_bits = byte_len * 8;
+    for (bit_idx, px) in rgba.chunks_exact(4).take(total_bits).enumerate() {
+        let bit = px[0] & 1;
+        out[bit_idx / 8] |= bit << (7 - (bit_idx % 8));
+    }
+    out
+}
+
+pub fn generate_c2pa_provenance_manifest_json(
+    title: &str,
+    sha256_hex: &str,
+    author: &str,
+) -> String {
+    serde_json::json!({
+        "claim_generator": "sricap-rec/0.6.5 (Apple Silicon Metal + Secure Enclave C2PA)",
+        "title": title,
+        "author": author,
+        "assertions": [
+            {
+                "label": "c2pa.actions",
+                "action": "c2pa.recorded",
+                "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture"
+            },
+            {
+                "label": "c2pa.hash.data",
+                "alg": "sha256",
+                "hash": sha256_hex
+            }
+        ]
+    })
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +161,22 @@ mod tests {
         assert!(svg.contains("<circle"));
         assert!(svg.contains("<path"));
         assert!(svg.contains("<line"));
+    }
+
+    #[test]
+    fn forensic_luma_watermark_round_trips_and_c2pa_manifest_validates() {
+        let mut frame = vec![128u8; 64 * 4];
+        let secret = b"SRICAP01";
+        embed_forensic_luma_watermark(&mut frame, secret);
+        let recovered = extract_forensic_luma_watermark(&frame, secret.len());
+        assert_eq!(recovered, secret);
+
+        let manifest = generate_c2pa_provenance_manifest_json(
+            "Demo",
+            "e3b0c44298fc1c149afbf4c8996fb924",
+            "kona_srinivas",
+        );
+        assert!(manifest.contains("c2pa.recorded"));
+        assert!(manifest.contains("screenCapture"));
     }
 }

@@ -1589,6 +1589,15 @@ pub fn default_creator_hotkeys() -> Map<String, Value> {
     }) {
         map.insert("toggleLaserAnnotation".to_string(), val);
     }
+    if let Ok(val) = serde_json::to_value(Hotkey {
+        code: "KeyS".to_string(),
+        meta: true,
+        ctrl: false,
+        alt: false,
+        shift: true,
+    }) {
+        map.insert("saveBugReplayDvr".to_string(), val);
+    }
     map
 }
 

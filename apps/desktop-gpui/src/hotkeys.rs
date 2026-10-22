@@ -39,6 +39,7 @@ pub enum HotkeyAction {
     ToggleRecording,
     ToggleSpotlightZoom,
     ToggleLaserAnnotation,
+    SaveBugReplayDvr,
     StartStudioRecording,
     StartInstantRecording,
     StopRecording,
@@ -54,10 +55,11 @@ pub enum HotkeyAction {
     ScreenshotArea,
 }
 
-const ACTION_KEYS: [(&str, HotkeyAction); 16] = [
+const ACTION_KEYS: [(&str, HotkeyAction); 17] = [
     ("toggleRecording", HotkeyAction::ToggleRecording),
     ("toggleSpotlightZoom", HotkeyAction::ToggleSpotlightZoom),
     ("toggleLaserAnnotation", HotkeyAction::ToggleLaserAnnotation),
+    ("saveBugReplayDvr", HotkeyAction::SaveBugReplayDvr),
     ("startStudioRecording", HotkeyAction::StartStudioRecording),
     ("startInstantRecording", HotkeyAction::StartInstantRecording),
     ("stopRecording", HotkeyAction::StopRecording),
@@ -763,6 +765,9 @@ fn dispatch(action: HotkeyAction, cx: &mut App) {
         }
         HotkeyAction::ToggleLaserAnnotation => {
             app_windows::trigger_laser_and_screen_pen(cx);
+        }
+        HotkeyAction::SaveBugReplayDvr => {
+            app_windows::save_dvr_bug_replay_bundle(cx);
         }
         HotkeyAction::StartStudioRecording => start_from_hotkey(Mode::Studio, cx),
         HotkeyAction::StartInstantRecording => start_from_hotkey(Mode::Instant, cx),

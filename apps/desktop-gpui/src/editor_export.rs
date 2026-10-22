@@ -2004,6 +2004,51 @@ impl EditorWindow {
                     .child(
                         ui::Button::plain(
                             &theme,
+                            "export-playwright-maestro-e2e",
+                            ui::ButtonVariant::Primary,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🤖 Export Playwright (.spec.ts) & Maestro (.yaml) E2E Tests")
+                        .icon("icons/captions.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_playwright_and_maestro_e2e_tests(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-interactive-html5-sandbox",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🎯 Export Interactive HTML5 Clickable Demo Sandbox (.html)")
+                        .icon("icons/globe.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_interactive_html5_demo_sandbox(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-c2pa-provenance-watermark",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🔒 Sign C2PA Hardware Provenance & Forensic Luma Watermark")
+                        .icon("icons/check.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_c2pa_provenance_and_forensic_manifest(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
                             "export-cheatsheet-md",
                             ui::ButtonVariant::Gray,
                             ui::ButtonSize::Sm,

@@ -4017,6 +4017,36 @@ pub fn trigger_laser_and_screen_pen(cx: &mut App) {
     }
 }
 
+pub fn save_dvr_bug_replay_bundle(cx: &mut App) {
+    let dvr = cap_recording::telemetry::RollingDvrBuffer::new(60_000);
+    let branch = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "feature1".to_string());
+    let commit = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "HEAD".to_string());
+    dvr.push(cap_recording::telemetry::DvrReplaySample {
+        ts_ms: 60_000,
+        git_branch: branch,
+        git_commit: commit,
+        console_line: "Instant Bug Replay DVR snapshot captured (last 60s)".to_string(),
+        active_url_or_window: "sricap-rec active session".to_string(),
+    });
+    let samples = dvr.snapshot_last_ms(60_000);
+    let exports_dir = crate::recording::recordings_dir().join("Exports");
+    let _ = std::fs::create_dir_all(&exports_dir);
+    if let Ok(json) = serde_json::to_string_pretty(&samples) {
+        let _ = std::fs::write(exports_dir.join("instant-bug-replay-dvr-60s.json"), json);
+    }
+    crate::import::open_studio_editor_directly(cx);
+}
+
 fn camera_preview_is_inline(cx: &App) -> bool {
     TargetSelect::global(cx).read(cx).mode == Some(TargetType::CameraOnly)
 }

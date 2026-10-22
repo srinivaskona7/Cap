@@ -4042,6 +4042,71 @@ impl EditorWindow {
             );
         }
 
+        let enterprise_suite_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "enterprise-magnetic-cursor",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🧲 Magnetic Cursor")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_magnetic_cursor_snap_and_smooth(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "enterprise-time-warp-builds",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("⚡ 4x Build Warp")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_neural_time_warp_on_stagnant_builds(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "enterprise-mask-secret-keys",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🔐 Mask Keys")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_smart_keystroke_password_masking(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "enterprise-voice-overdub",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🎙️ Overdub Typo")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_voice_overdub_fix_at_playhead(window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -4050,6 +4115,7 @@ impl EditorWindow {
             .child(row)
             .child(creator_row)
             .child(blueprint_director_row)
+            .child(enterprise_suite_row)
             .child(parallax_skins_row)
             .child(self.render_creator_identity_banner_card(cx))
             .child(clips_row)

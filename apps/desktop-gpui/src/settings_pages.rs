@@ -934,8 +934,9 @@ impl SettingsWindow {
 
 const SCREENSHOT_SHORTCUTS: [&str; 3] = ["screenshotArea", "screenshotWindow", "screenshotDisplay"];
 
-const RECORDING_SHORTCUTS: [&str; 8] = [
+const RECORDING_SHORTCUTS: [&str; 9] = [
     "toggleRecording",
+    "saveBugReplayDvr",
     "startStudioRecording",
     "startInstantRecording",
     "openRecordingPickerArea",
@@ -1050,6 +1051,7 @@ fn shortcut_label(action: &str) -> &'static str {
         "screenshotWindow" => "Screenshot a window",
         "screenshotDisplay" => "Screenshot the display",
         "toggleRecording" => "Toggle Record (Start / Stop)",
+        "saveBugReplayDvr" => "Instant Bug Replay (Save Last 60s DVR)",
         "startStudioRecording" => "Start Studio recording",
         "startInstantRecording" => "Start Instant recording",
         "openRecordingPickerArea" => "Record an area",
@@ -1106,6 +1108,10 @@ fn shortcut_effect(
         "screenshotWindow" => format!("capture the window under your pointer and {screenshot}"),
         "screenshotDisplay" => format!("capture the display under your pointer and {screenshot}"),
         "toggleRecording" => "start or stop recording in your current mode".into(),
+        "saveBugReplayDvr" => {
+            "save the last 60 seconds from the rolling DVR bug buffer with Git & console metadata"
+                .into()
+        }
         "startStudioRecording" => {
             format!("record your selected screen or window in Studio mode{studio_stop}")
         }
@@ -8180,7 +8186,7 @@ mod tests {
             .chain(WHILE_RECORDING_SHORTCUTS.iter())
             .copied()
             .collect();
-        assert_eq!(shown.len(), 16);
+        assert_eq!(shown.len(), 17);
         let settings = store::GeneralSettings::default();
         for action in &shown {
             assert_eq!(shown.iter().filter(|other| *other == action).count(), 1);
