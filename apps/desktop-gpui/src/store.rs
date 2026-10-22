@@ -980,6 +980,22 @@ pub fn set_android_screen_off_stealth_by_default(enabled: bool) -> bool {
     )
 }
 
+pub fn pause_recording_on_incoming_call() -> bool {
+    bool_at(
+        &store_section(GENERAL_SETTINGS),
+        "pauseRecordingOnIncomingCall",
+        true,
+    )
+}
+
+pub fn set_pause_recording_on_incoming_call(enabled: bool) -> bool {
+    set_store_setting(
+        GENERAL_SETTINGS,
+        "pauseRecordingOnIncomingCall",
+        Value::Bool(enabled),
+    )
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NeuralPersonaSettings {
     pub hair_preset: String,

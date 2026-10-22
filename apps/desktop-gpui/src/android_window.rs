@@ -208,6 +208,93 @@ pub enum MobilePlatform {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TelephonyCallState {
+    Idle,
+    Ringing { caller: String },
+    OffHook { caller: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallLogEntry {
+    pub number: String,
+    pub name: String,
+    pub call_type: String,
+}
+
+pub fn parse_telephony_registry_dump(output: &str) -> TelephonyCallState {
+    let mut state_code = 0u8;
+    let mut caller = String::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("mCallState=") {
+            if let Ok(code) = rest.trim().parse::<u8>() {
+                state_code = code.max(state_code);
+            }
+        } else if let Some(rest) = trimmed.strip_prefix("mCallIncomingNumber=") {
+            let num = rest.trim();
+            if !num.is_empty() && num != "null" {
+                caller = num.to_string();
+            }
+        }
+    }
+    let display_caller = if caller.is_empty() {
+        "Incoming Caller".to_string()
+    } else {
+        caller
+    };
+    match state_code {
+        1 => TelephonyCallState::Ringing {
+            caller: display_caller,
+        },
+        2 => TelephonyCallState::OffHook {
+            caller: display_caller,
+        },
+        _ => TelephonyCallState::Idle,
+    }
+}
+
+pub fn parse_call_log_query_output(output: &str) -> Vec<CallLogEntry> {
+    let mut entries = Vec::new();
+    for line in output.lines().take(8) {
+        let trimmed = line.trim();
+        let Some(after_row) = trimmed.strip_prefix("Row:") else {
+            continue;
+        };
+        let payload = after_row
+            .trim_start()
+            .split_once(' ')
+            .map_or(after_row.trim(), |(_, rest)| rest.trim());
+        let mut number = String::new();
+        let mut name = String::new();
+        let mut call_type = "Call".to_string();
+        for part in payload.split(", ") {
+            if let Some(n) = part.strip_prefix("number=") {
+                number = n.trim().to_string();
+            } else if let Some(nm) = part.strip_prefix("name=") {
+                if nm != "NULL" && !nm.trim().is_empty() {
+                    name = nm.trim().to_string();
+                }
+            } else if let Some(t) = part.strip_prefix("type=") {
+                call_type = match t.trim() {
+                    "1" => "Incoming".to_string(),
+                    "2" => "Outgoing".to_string(),
+                    "3" => "Missed".to_string(),
+                    _ => "Call".to_string(),
+                };
+            }
+        }
+        if !number.is_empty() {
+            entries.push(CallLogEntry {
+                number,
+                name,
+                call_type,
+            });
+        }
+    }
+    entries
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AndroidDevice {
     pub serial: String,
     pub model: String,
@@ -356,6 +443,11 @@ pub struct AndroidWindow {
     drag_start: Option<(f32, f32, Instant)>,
     status_notice: String,
     clipboard_seq: u64,
+    call_state: TelephonyCallState,
+    pause_recording_on_call: bool,
+    dialer_open: bool,
+    dial_number: String,
+    recent_calls: Vec<CallLogEntry>,
     _mirror_task: Option<Task<()>>,
 }
 
@@ -422,6 +514,11 @@ impl AndroidWindow {
             drag_start: None,
             status_notice,
             clipboard_seq: 1,
+            call_state: TelephonyCallState::Idle,
+            pause_recording_on_call: crate::store::pause_recording_on_incoming_call(),
+            dialer_open: false,
+            dial_number: String::new(),
+            recent_calls: Vec::new(),
             _mirror_task: None,
         };
         if this.selected_serial.is_some() {
@@ -603,7 +700,9 @@ impl AndroidWindow {
         }
 
         self._mirror_task = Some(cx.spawn(async move |this, cx| {
+            let mut tick = 0u64;
             loop {
+                tick = tick.wrapping_add(1);
                 let active_serial = cx.update(|cx| {
                     this.read_with(cx, |view, _| {
                         view.mirroring_active
@@ -619,47 +718,87 @@ impl AndroidWindow {
                 if serial_now == "apple:iphone-mirroring" {
                     break;
                 }
-                let frame = cx
+                let poll_telephony = !serial_now.starts_with("sim:") && tick.is_multiple_of(5);
+                let serial_tel = serial_now.clone();
+                let (frame, tel_state) = cx
                     .background_executor()
                     .spawn(async move {
+                        let tel = if poll_telephony {
+                            let adb = find_adb_binary();
+                            Command::new(adb)
+                                .args(["-s", &serial_tel, "shell", "dumpsys", "telephony.registry"])
+                                .output()
+                                .ok()
+                                .map(|o| {
+                                    parse_telephony_registry_dump(&String::from_utf8_lossy(
+                                        &o.stdout,
+                                    ))
+                                })
+                        } else {
+                            None
+                        };
                         let out = if let Some(udid) = serial_now.strip_prefix("sim:") {
                             Command::new("xcrun")
                                 .args(["simctl", "io", udid, "screenshot", "--type=png", "-"])
                                 .output()
-                                .ok()?
+                                .ok()
                         } else {
                             let adb = find_adb_binary();
                             Command::new(adb)
                                 .args(["-s", &serial_now, "exec-out", "screencap", "-p"])
                                 .output()
-                                .ok()?
+                                .ok()
                         };
-                        if !out.status.success() || out.stdout.len() < 64 {
-                            return None;
-                        }
-                        let mut rgba = image::load_from_memory(&out.stdout).ok()?.into_rgba8();
-                        let w = rgba.width();
-                        let h = rgba.height();
-                        for px_chunk in rgba.chunks_exact_mut(4) {
-                            px_chunk.swap(0, 2);
-                        }
-                        let frame = image::Frame::new(rgba);
-                        Some((
-                            w,
-                            h,
-                            Arc::new(gpui::RenderImage::new(smallvec::smallvec![frame])),
-                        ))
+                        let decoded_frame = out.and_then(|out| {
+                            if !out.status.success() || out.stdout.len() < 64 {
+                                return None;
+                            }
+                            let mut rgba = image::load_from_memory(&out.stdout).ok()?.into_rgba8();
+                            let w = rgba.width();
+                            let h = rgba.height();
+                            for px_chunk in rgba.chunks_exact_mut(4) {
+                                px_chunk.swap(0, 2);
+                            }
+                            let frame = image::Frame::new(rgba);
+                            Some((
+                                w,
+                                h,
+                                Arc::new(gpui::RenderImage::new(smallvec::smallvec![frame])),
+                            ))
+                        });
+                        (decoded_frame, tel)
                     })
                     .await;
 
-                if let Some((w, h, render_img)) = frame {
-                    let _ = this.update(cx, |view, cx| {
+                let _ = this.update(cx, |view, cx| {
+                    let mut changed = false;
+                    if let Some((w, h, render_img)) = frame {
                         view.device_width = w.max(1);
                         view.device_height = h.max(1);
                         view.frame_image = Some(render_img);
+                        changed = true;
+                    }
+                    if let Some(new_call) = tel_state
+                        && view.call_state != new_call
+                    {
+                        let became_active = !matches!(new_call, TelephonyCallState::Idle)
+                            && matches!(view.call_state, TelephonyCallState::Idle);
+                        view.call_state = new_call;
+                        if became_active && view.pause_recording_on_call {
+                            let session = crate::session::RecordingSession::global(cx);
+                            if !session.read(cx).is_paused() {
+                                session.update(cx, |s, cx| s.toggle_pause(cx));
+                                view.status_notice =
+                                    "Incoming phone call: Auto-paused active screen recording!"
+                                        .to_string();
+                            }
+                        }
+                        changed = true;
+                    }
+                    if changed {
                         cx.notify();
-                    });
-                }
+                    }
+                });
                 cx.background_executor()
                     .timer(Duration::from_millis(220))
                     .await;
@@ -999,6 +1138,136 @@ impl AndroidWindow {
         cx.notify();
     }
 
+    pub fn accept_incoming_call(&mut self, cx: &mut Context<Self>) {
+        self.send_android_keyevent(5, "Accept Call (KEYCODE_CALL)", cx);
+        if let TelephonyCallState::Ringing { caller } = &self.call_state {
+            self.call_state = TelephonyCallState::OffHook {
+                caller: caller.clone(),
+            };
+        }
+        cx.notify();
+    }
+
+    pub fn decline_or_end_call(&mut self, cx: &mut Context<Self>) {
+        self.send_android_keyevent(6, "End/Decline Call (KEYCODE_ENDCALL)", cx);
+        self.call_state = TelephonyCallState::Idle;
+        cx.notify();
+    }
+
+    pub fn reply_quick_sms_and_decline(&mut self, caller: String, cx: &mut Context<Self>) {
+        self.send_android_keyevent(6, "Decline Call", cx);
+        let clean_num: String = caller
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '+')
+            .collect();
+        let target = if clean_num.is_empty() {
+            "0000".to_string()
+        } else {
+            clean_num
+        };
+        self.run_adb_async(
+            vec![
+                "shell".into(),
+                "am".into(),
+                "start".into(),
+                "-a".into(),
+                "android.intent.action.SENDTO".into(),
+                "-d".into(),
+                format!("sms:{target}"),
+                "--es".into(),
+                "sms_body".into(),
+                "In a meeting, will call you back shortly.".into(),
+            ],
+            cx,
+        );
+        self.call_state = TelephonyCallState::Idle;
+        self.status_notice = format!("Declined call & opened Quick SMS reply to {caller}.");
+        cx.notify();
+    }
+
+    pub fn dial_phone_number(&mut self, number: String, cx: &mut Context<Self>) {
+        let clean: String = number
+            .chars()
+            .filter(|c| c.is_ascii_digit() || matches!(*c, '+' | '*' | '#'))
+            .collect();
+        if clean.is_empty() {
+            self.status_notice = "Type a phone number in the Quick Dialer first.".to_string();
+            cx.notify();
+            return;
+        }
+        if let Some(serial) = &self.selected_serial
+            && let Some(udid) = serial.strip_prefix("sim:")
+        {
+            let udid = udid.to_string();
+            let tel_url = format!("tel://{clean}");
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = Command::new("xcrun")
+                        .args(["simctl", "openurl", &udid, &tel_url])
+                        .output();
+                })
+                .detach();
+        } else {
+            self.run_adb_async(
+                vec![
+                    "shell".into(),
+                    "am".into(),
+                    "start".into(),
+                    "-a".into(),
+                    "android.intent.action.CALL".into(),
+                    "-d".into(),
+                    format!("tel:{clean}"),
+                ],
+                cx,
+            );
+        }
+        self.call_state = TelephonyCallState::OffHook {
+            caller: clean.clone(),
+        };
+        self.status_notice = format!("Dialing {clean} on connected phone...");
+        cx.notify();
+    }
+
+    pub fn refresh_recent_calls(&mut self, cx: &mut Context<Self>) {
+        let Some(serial) = self.selected_serial.clone() else {
+            return;
+        };
+        if serial.starts_with("sim:") || serial == "apple:iphone-mirroring" {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let entries = cx
+                .background_executor()
+                .spawn(async move {
+                    let adb = find_adb_binary();
+                    let out = Command::new(adb)
+                        .args([
+                            "-s",
+                            &serial,
+                            "shell",
+                            "content",
+                            "query",
+                            "--uri",
+                            "content://call_log/calls",
+                            "--projection",
+                            "number:name:type",
+                        ])
+                        .output()
+                        .ok()?;
+                    Some(parse_call_log_query_output(&String::from_utf8_lossy(
+                        &out.stdout,
+                    )))
+                })
+                .await
+                .unwrap_or_default();
+            let _ = this.update(cx, |view, cx| {
+                view.recent_calls = entries;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn on_canvas_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<Self>) {
         match event.button {
             MouseButton::Right => {
@@ -1014,6 +1283,226 @@ impl AndroidWindow {
             }
             _ => {}
         }
+    }
+
+    fn render_call_hud_banner(&self, cx: &mut Context<Self>) -> Option<gpui::Div> {
+        let theme = self.theme;
+        let (title, caller, is_ringing) = match &self.call_state {
+            TelephonyCallState::Idle => return None,
+            TelephonyCallState::Ringing { caller } => {
+                ("📞 Incoming Phone Call", caller.clone(), true)
+            }
+            TelephonyCallState::OffHook { caller } => (
+                "🟢 Active Call (Mac Studio Mic & CoreAudio)",
+                caller.clone(),
+                false,
+            ),
+        };
+        let sms_caller = caller.clone();
+
+        Some(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap(px(8.))
+                .p(px(10.))
+                .rounded(px(10.))
+                .border_1()
+                .border_color(Hsla::from(theme.blue_9))
+                .bg(Theme::with_alpha(theme.blue_9, 0.16))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(Hsla::from(theme.gray_12))
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(Hsla::from(theme.gray_11))
+                                .child(format!("Caller ID: {caller}")),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap(px(6.))
+                        .children(is_ringing.then(|| {
+                            ui::Button::plain(
+                                &theme,
+                                "call-hud-accept",
+                                ui::ButtonVariant::Primary,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🟢 Accept")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.accept_incoming_call(cx);
+                            }))
+                        }))
+                        .child(
+                            ui::Button::plain(
+                                &theme,
+                                "call-hud-decline",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(if is_ringing {
+                                "🔴 Decline"
+                            } else {
+                                "🔴 End Call"
+                            })
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.decline_or_end_call(cx);
+                            })),
+                        )
+                        .child(
+                            ui::Button::plain(
+                                &theme,
+                                "call-hud-reply-sms",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("💬 Reply SMS")
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.reply_quick_sms_and_decline(sms_caller.clone(), cx);
+                                },
+                            )),
+                        ),
+                ),
+        )
+    }
+
+    fn render_quick_dialer_drawer(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let theme = self.theme;
+        let current_num = self.dial_number.clone();
+        let dial_target = current_num.clone();
+        let keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "0", "#"];
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .p(px(10.))
+            .rounded(px(10.))
+            .border_1()
+            .border_color(Hsla::from(theme.gray_5))
+            .bg(Hsla::from(theme.gray_2))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .px(px(10.))
+                            .py(px(6.))
+                            .rounded(px(6.))
+                            .bg(Hsla::from(theme.gray_1))
+                            .border_1()
+                            .border_color(Hsla::from(theme.gray_5))
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(if current_num.is_empty() {
+                                "Type number (0-9, +) or click keypad...".to_string()
+                            } else {
+                                current_num
+                            }),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "dialer-backspace",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Xs,
+                        )
+                        .label("⌫")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.dial_number.pop();
+                            cx.notify();
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "dialer-call-now",
+                            ui::ButtonVariant::Primary,
+                            ui::ButtonSize::Xs,
+                        )
+                        .label("🟢 Call Now")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.dial_phone_number(dial_target.clone(), cx);
+                        })),
+                    ),
+            )
+            .child(div().flex().flex_row().flex_wrap().gap(px(4.)).children(
+                keys.into_iter().enumerate().map(|(i, k)| {
+                    ui::Button::plain(
+                        &theme,
+                        ("dial-key", i),
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label(k)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.dial_number.push_str(k);
+                        cx.notify();
+                    }))
+                }),
+            ))
+            .children((!self.recent_calls.is_empty()).then(|| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .text_size(px(10.5))
+                            .text_color(Hsla::from(theme.gray_11))
+                            .child("Recent Call Log (Click to Redial):"),
+                    )
+                    .children(
+                        self.recent_calls
+                            .iter()
+                            .take(4)
+                            .enumerate()
+                            .map(|(idx, entry)| {
+                                let num = entry.number.clone();
+                                let label = if entry.name.is_empty() {
+                                    format!("📞 {} ({})", entry.number, entry.call_type)
+                                } else {
+                                    format!(
+                                        "📞 {} · {} ({})",
+                                        entry.name, entry.number, entry.call_type
+                                    )
+                                };
+                                div()
+                                    .id(("recent-call", idx))
+                                    .px(px(8.))
+                                    .py(px(4.))
+                                    .rounded(px(6.))
+                                    .cursor_pointer()
+                                    .bg(Hsla::from(theme.gray_3))
+                                    .text_size(px(11.))
+                                    .child(label)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.dial_number = num.clone();
+                                        this.dial_phone_number(num.clone(), cx);
+                                    }))
+                            }),
+                    )
+            }))
     }
 
     fn on_canvas_mouse_move(&mut self, event: &MouseMoveEvent, _cx: &mut Context<Self>) {
@@ -1104,9 +1593,47 @@ impl AndroidWindow {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        if event.keystroke.modifiers.platform && event.keystroke.key.as_str() == "k" {
+            self.dialer_open = !self.dialer_open;
+            if self.dialer_open {
+                self.refresh_recent_calls(cx);
+            }
+            cx.notify();
+            return;
+        }
         if event.keystroke.modifiers.platform && event.keystroke.key.as_str() == "v" {
             self.sync_mac_clipboard_to_phone(cx);
             return;
+        }
+        if self.dialer_open {
+            match event.keystroke.key.as_str() {
+                "backspace" => {
+                    self.dial_number.pop();
+                    cx.notify();
+                    return;
+                }
+                "enter" => {
+                    let num = self.dial_number.clone();
+                    self.dial_phone_number(num, cx);
+                    return;
+                }
+                "escape" => {
+                    self.dialer_open = false;
+                    cx.notify();
+                    return;
+                }
+                other
+                    if other.len() == 1
+                        && other
+                            .chars()
+                            .all(|c| c.is_ascii_digit() || matches!(c, '+' | '*' | '#')) =>
+                {
+                    self.dial_number.push_str(other);
+                    cx.notify();
+                    return;
+                }
+                _ => {}
+            }
         }
         match event.keystroke.key.as_str() {
             "backspace" => self.send_android_keyevent(67, "Backspace", cx),
@@ -1186,6 +1713,26 @@ impl Render for AndroidWindow {
                             .flex()
                             .flex_row()
                             .gap(px(6.))
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "android-open-dialer",
+                                    if self.dialer_open {
+                                        ui::ButtonVariant::Primary
+                                    } else {
+                                        ui::ButtonVariant::Gray
+                                    },
+                                    ui::ButtonSize::Xs,
+                                )
+                                .label("📞 Dialer (⌘K)")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.dialer_open = !this.dialer_open;
+                                    if this.dialer_open {
+                                        this.refresh_recent_calls(cx);
+                                    }
+                                    cx.notify();
+                                })),
+                            )
                             .child(
                                 ui::Button::plain(
                                     &theme,
@@ -1417,8 +1964,37 @@ impl Render for AndroidWindow {
                                 cx.notify();
                             })),
                         ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-pause-rec-on-call",
+                                if self.pause_recording_on_call {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(if self.pause_recording_on_call {
+                                "⏸ Auto-Pause on Call: ON"
+                            } else {
+                                "⏸ Auto-Pause on Call: OFF"
+                            })
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.pause_recording_on_call = !this.pause_recording_on_call;
+                                let _ = crate::store::set_pause_recording_on_incoming_call(
+                                    this.pause_recording_on_call,
+                                );
+                                cx.notify();
+                            })),
+                        ),
                     ),
             )
+            .children(self.render_call_hud_banner(cx))
+            .children(self.dialer_open.then(|| self.render_quick_dialer_drawer(cx)))
             .child(
                 div()
                     .id("android-viewport-canvas")
@@ -1723,5 +2299,25 @@ mod tests {
         assert_eq!(sims.len(), 1);
         assert_eq!(sims[0].model, "iPhone 16 Pro");
         assert_eq!(sims[0].platform, MobilePlatform::AppleIosSimulator);
+    }
+
+    #[test]
+    fn telephony_registry_and_call_log_parse_cleanly() {
+        let dump = "  Phone Id=0\n    mCallState=1\n    mCallIncomingNumber=+14155550199\n";
+        assert_eq!(
+            parse_telephony_registry_dump(dump),
+            TelephonyCallState::Ringing {
+                caller: "+14155550199".to_string()
+            }
+        );
+
+        let log_sample = "Row: 0 number=+14155550199, name=Alex Rivera, type=1\n\
+                          Row: 1 number=+16505550123, name=NULL, type=2\n";
+        let logs = parse_call_log_query_output(log_sample);
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].name, "Alex Rivera");
+        assert_eq!(logs[0].call_type, "Incoming");
+        assert_eq!(logs[1].number, "+16505550123");
+        assert_eq!(logs[1].call_type, "Outgoing");
     }
 }
