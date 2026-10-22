@@ -134,10 +134,7 @@ jobs:
       - name: Ad-hoc Sign & Package Distributable DMG + ZIP + Prebuilt Sidecars + SHA256SUMS
         run: |
           mkdir -p dist-release
-          tar -czf dist-release/cap-sidecars-macos-arm64.tar.gz 
-            -C apps/desktop/src-tauri/binaries 
-            cap-muxer-aarch64-apple-darwin 
-            cap-cli-aarch64-apple-darwin
+          tar -czf dist-release/cap-sidecars-macos-arm64.tar.gz -C apps/desktop/src-tauri/binaries cap-muxer-aarch64-apple-darwin cap-cli-aarch64-apple-darwin
 
           APP_PATH="$(find apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
           if [ -z "$APP_PATH" ]; then
