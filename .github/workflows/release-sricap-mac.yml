@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   MACOSX_DEPLOYMENT_TARGET: "13.0"
   CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
