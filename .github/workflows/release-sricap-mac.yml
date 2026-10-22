@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (e.g. v0.6.5)"
+        description: "Release tag to publish (e.g. v0.6.6)"
         required: false
-        default: "v0.6.5"
+        default: "v0.6.6"
 
 permissions:
   contents: write
@@ -212,8 +212,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/feature1'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.5' }}
-          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.5' }} (macOS Apple Silicon)"
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.6' }}
+          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.6' }} (macOS Apple Silicon)"
           body: |
             ### sricap-rec macOS Release (Apple Silicon `aarch64-apple-darwin`)
             - **Direct Drag-and-Drop Installer**: Download `sricap-rec.dmg`, open it, and drag `sricap-rec.app` to `/Applications`.
