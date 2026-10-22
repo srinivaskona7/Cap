@@ -128,6 +128,15 @@ impl H264EncoderBuilder {
         self
     }
 
+    pub fn with_dynamic_static_delta_scaling(mut self, static_ratio: f32) -> Self {
+        if static_ratio >= 0.85 {
+            let reduction = ((static_ratio - 0.85) / 0.15).clamp(0.0, 1.0);
+            let scale = 1.0 - 0.55 * reduction;
+            self.bpp = (self.bpp * scale).max(0.04);
+        }
+        self
+    }
+
     pub fn with_encoder_priority_override(mut self, codecs: &'static [&'static str]) -> Self {
         self.encoder_priority_override = Some(codecs);
         self
@@ -1772,6 +1781,87 @@ mod self_test_tests {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MacroBlockDeltaStats {
+    pub total_blocks: usize,
+    pub static_blocks: usize,
+    pub static_ratio: f32,
+    pub recommended_bpp_scale: f32,
+    pub recommended_gop_multiplier: u32,
+}
+
+pub fn analyze_macroblock_static_delta(
+    prev_luma: &[u8],
+    curr_luma: &[u8],
+    width: usize,
+    height: usize,
+    stride: usize,
+) -> MacroBlockDeltaStats {
+    if width < 16 || height < 16 || stride < width {
+        return MacroBlockDeltaStats {
+            total_blocks: 0,
+            static_blocks: 0,
+            static_ratio: 0.0,
+            recommended_bpp_scale: 1.0,
+            recommended_gop_multiplier: 1,
+        };
+    }
+    let required = (height - 1) * stride + width;
+    if prev_luma.len() < required || curr_luma.len() < required {
+        return MacroBlockDeltaStats {
+            total_blocks: 0,
+            static_blocks: 0,
+            static_ratio: 0.0,
+            recommended_bpp_scale: 1.0,
+            recommended_gop_multiplier: 1,
+        };
+    }
+
+    let blocks_x = width / 16;
+    let blocks_y = height / 16;
+    let total_blocks = blocks_x * blocks_y;
+    let mut static_blocks = 0usize;
+
+    for by in 0..blocks_y {
+        for bx in 0..blocks_x {
+            let mut sad = 0u32;
+            for y in (0..16).step_by(2) {
+                let row_offset = (by * 16 + y) * stride + bx * 16;
+                for x in (0..16).step_by(2) {
+                    let idx = row_offset + x;
+                    sad += u32::from(prev_luma[idx].abs_diff(curr_luma[idx]));
+                }
+            }
+            if sad <= 96 {
+                static_blocks += 1;
+            }
+        }
+    }
+
+    let static_ratio = if total_blocks > 0 {
+        static_blocks as f32 / total_blocks as f32
+    } else {
+        0.0
+    };
+    let (recommended_bpp_scale, recommended_gop_multiplier) = if static_ratio >= 0.85 {
+        let factor = ((static_ratio - 0.85) / 0.15).clamp(0.0, 1.0);
+        (
+            1.0 - 0.55 * factor,
+            if static_ratio >= 0.94 { 3 } else { 2 },
+        )
+    } else {
+        (1.0, 1)
+    };
+
+    MacroBlockDeltaStats {
+        total_blocks,
+        static_blocks,
+        static_ratio,
+        recommended_bpp_scale,
+        recommended_gop_multiplier,
+    }
+}
+
 #[cfg(test)]
 mod rgb_color_tests {
     use super::super::colour::is_rgb;
@@ -2076,5 +2166,24 @@ mod rgb_color_tests {
         ] {
             assert!(!is_rgb(format));
         }
+    }
+
+    #[test]
+    fn static_macroblock_delta_clamps_bitrate_when_screen_is_mostly_static() {
+        let width = 320;
+        let height = 160;
+        let prev = vec![42u8; width * height];
+        let mut curr = prev.clone();
+        for y in 0..16 {
+            for x in 0..16 {
+                curr[y * width + x] = 220;
+            }
+        }
+        let stats = analyze_macroblock_static_delta(&prev, &curr, width, height, width);
+        assert_eq!(stats.total_blocks, 200);
+        assert_eq!(stats.static_blocks, 199);
+        assert!(stats.static_ratio > 0.99);
+        assert!(stats.recommended_bpp_scale < 0.5);
+        assert_eq!(stats.recommended_gop_multiplier, 3);
     }
 }

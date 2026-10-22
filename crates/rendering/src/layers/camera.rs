@@ -12,6 +12,85 @@ use crate::{
 #[cfg(target_os = "macos")]
 use crate::yuv_converter::RetainedImageBuf;
 
+pub const JUMP_CUT_MORPH_FRAMES: u32 = 4;
+
+pub fn interpolate_jump_cut_rgba_frames(
+    prev_rgba: &[u8],
+    next_rgba: &[u8],
+    width: u32,
+    height: u32,
+    frame_step: u32,
+    total_steps: u32,
+) -> Vec<u8> {
+    let expected_len = (width as usize) * (height as usize) * 4;
+    if prev_rgba.len() != expected_len || next_rgba.len() != expected_len || total_steps == 0 {
+        return next_rgba.to_vec();
+    }
+    let raw_t = (frame_step as f32 / total_steps as f32).clamp(0.0, 1.0);
+    let alpha = raw_t * raw_t * (3.0 - 2.0 * raw_t);
+
+    let w = width as usize;
+    let h = height as usize;
+    let mut prev_cx = 0.0_f64;
+    let mut prev_cy = 0.0_f64;
+    let mut prev_mass = 0.0_f64;
+    let mut next_cx = 0.0_f64;
+    let mut next_cy = 0.0_f64;
+    let mut next_mass = 0.0_f64;
+
+    for y in (0..h).step_by(4) {
+        for x in (0..w).step_by(4) {
+            let idx = (y * w + x) * 4;
+            let luma_p = f64::from(prev_rgba[idx]) * 0.299
+                + f64::from(prev_rgba[idx + 1]) * 0.587
+                + f64::from(prev_rgba[idx + 2]) * 0.114;
+            let luma_n = f64::from(next_rgba[idx]) * 0.299
+                + f64::from(next_rgba[idx + 1]) * 0.587
+                + f64::from(next_rgba[idx + 2]) * 0.114;
+            prev_cx += x as f64 * luma_p;
+            prev_cy += y as f64 * luma_p;
+            prev_mass += luma_p;
+            next_cx += x as f64 * luma_n;
+            next_cy += y as f64 * luma_n;
+            next_mass += luma_n;
+        }
+    }
+
+    let (dx, dy) = if prev_mass > 1.0 && next_mass > 1.0 {
+        (
+            ((next_cx / next_mass) - (prev_cx / prev_mass)).clamp(-12.0, 12.0) as f32,
+            ((next_cy / next_mass) - (prev_cy / prev_mass)).clamp(-12.0, 12.0) as f32,
+        )
+    } else {
+        (0.0, 0.0)
+    };
+
+    let shift_prev_x = (-dx * alpha).round() as isize;
+    let shift_prev_y = (-dy * alpha).round() as isize;
+    let shift_next_x = (dx * (1.0 - alpha)).round() as isize;
+    let shift_next_y = (dy * (1.0 - alpha)).round() as isize;
+
+    let mut out = vec![0u8; expected_len];
+    for y in 0..h {
+        for x in 0..w {
+            let px = (x as isize + shift_prev_x).clamp(0, w as isize - 1) as usize;
+            let py = (y as isize + shift_prev_y).clamp(0, h as isize - 1) as usize;
+            let nx = (x as isize + shift_next_x).clamp(0, w as isize - 1) as usize;
+            let ny = (y as isize + shift_next_y).clamp(0, h as isize - 1) as usize;
+
+            let p_idx = (py * w + px) * 4;
+            let n_idx = (ny * w + nx) * 4;
+            let dst_idx = (y * w + x) * 4;
+            for c in 0..4 {
+                let blended = f32::from(prev_rgba[p_idx + c]) * (1.0 - alpha)
+                    + f32::from(next_rgba[n_idx + c]) * alpha;
+                out[dst_idx + c] = blended.round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    out
+}
+
 pub struct CameraLayer {
     frame_textures: [wgpu::Texture; 2],
     frame_texture_views: [wgpu::TextureView; 2],
@@ -695,6 +774,19 @@ mod tests {
         CursorEvents, DecodedSegmentFrames, FrameRenderer, ProjectConfiguration, ProjectUniforms,
         RecordingMeta, RenderOptions, RenderVideoConstants, RendererLayers, ZoomTransformTimeline,
     };
+
+    #[test]
+    fn jump_cut_morph_interpolator_bridges_adjacent_rgba_frames() {
+        let width = 16;
+        let height = 16;
+        let prev = [20u8, 40, 60, 255].repeat((width * height) as usize);
+        let next = [220u8, 180, 140, 255].repeat((width * height) as usize);
+        let mid =
+            interpolate_jump_cut_rgba_frames(&prev, &next, width, height, 2, JUMP_CUT_MORPH_FRAMES);
+        assert_eq!(mid.len(), prev.len());
+        assert!(mid[0] > 100 && mid[0] < 140);
+        assert_eq!(mid[3], 255);
+    }
 
     async fn constants() -> RenderVideoConstants {
         let metadata: RecordingMeta = serde_json::from_value(serde_json::json!({

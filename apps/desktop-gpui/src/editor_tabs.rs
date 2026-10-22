@@ -1937,6 +1937,19 @@ impl EditorWindow {
                     )),
                 ),
             )
+            .child(
+                ui::Button::plain(
+                    &theme,
+                    "neural-semantic-auto-direct-btn",
+                    ui::ButtonVariant::Gray,
+                    ui::ButtonSize::Xs,
+                )
+                .label("🧠 Apply Semantic Auto-Directing (Focus Modals & Terminal Errors)")
+                .full_width()
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.apply_semantic_attention_director(window, cx);
+                })),
+            )
             .into_any_element()
     }
 

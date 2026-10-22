@@ -116,6 +116,43 @@ impl Default for InterpolatedZoom {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SemanticAttentionEvent {
+    pub start_sec: f64,
+    pub end_sec: f64,
+    pub center: XY<f64>,
+    pub suggested_zoom: f64,
+    pub priority: u8,
+}
+
+pub fn compute_semantic_attention_bounds(
+    time_sec: f64,
+    events: &[SemanticAttentionEvent],
+    fallback_cursor: Option<XY<f64>>,
+) -> Option<SegmentBounds> {
+    let active = events
+        .iter()
+        .filter(|ev| time_sec >= ev.start_sec && time_sec <= ev.end_sec)
+        .max_by_key(|ev| ev.priority);
+
+    if let Some(ev) = active {
+        let duration = (ev.end_sec - ev.start_sec).max(0.05);
+        let elapsed = (time_sec - ev.start_sec).clamp(0.0, duration);
+        let ramp_in = (elapsed / 0.22).clamp(0.0, 1.0);
+        let ramp_out = ((ev.end_sec - time_sec) / 0.22).clamp(0.0, 1.0);
+        let smooth = ramp_in.min(ramp_out);
+        let spring_t = smooth * smooth * (3.0 - 2.0 * smooth);
+        let amount = 1.0 + (ev.suggested_zoom.max(1.0) - 1.0) * spring_t;
+        let (fx, fy) = SegmentBounds::calculate_follow_center((ev.center.x, ev.center.y), 0.08);
+        return Some(SegmentBounds::from_amount_center(amount, XY::new(fx, fy)));
+    }
+
+    fallback_cursor.map(|cursor| {
+        let (fx, fy) = SegmentBounds::calculate_follow_center((cursor.x, cursor.y), 0.1);
+        SegmentBounds::from_amount_center(1.35, XY::new(fx, fy))
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -215,5 +252,29 @@ mod test {
             bounds: SegmentBounds::from_amount_center(2.5, XY::new(0.4, 0.6)),
         };
         assert!((zoom.display_amount() - 2.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn semantic_attention_director_focuses_on_highest_priority_modal_or_error() {
+        let events = [
+            SemanticAttentionEvent {
+                start_sec: 1.0,
+                end_sec: 3.0,
+                center: XY::new(0.2, 0.2),
+                suggested_zoom: 1.5,
+                priority: 60,
+            },
+            SemanticAttentionEvent {
+                start_sec: 1.0,
+                end_sec: 3.0,
+                center: XY::new(0.8, 0.8),
+                suggested_zoom: 1.85,
+                priority: 100,
+            },
+        ];
+        let bounds = compute_semantic_attention_bounds(2.0, &events, None).unwrap();
+        let width = bounds.bottom_right.x - bounds.top_left.x;
+        assert!((width - 1.85).abs() < 1e-6);
+        assert!(bounds.top_left.x < -0.5);
     }
 }

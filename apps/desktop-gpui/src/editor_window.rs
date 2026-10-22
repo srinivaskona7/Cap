@@ -6291,6 +6291,57 @@ impl EditorWindow {
         .detach();
     }
 
+    pub(crate) fn apply_semantic_attention_director(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(1.0);
+        let packets = cap_recording::telemetry::SemanticTelemetryRecorder::load_from_project(
+            &self.project_path,
+        );
+        self.edit_project("semantic-attention-director", window, cx, move |project| {
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            if !packets.is_empty() {
+                for pkt in &packets {
+                    let start = (pkt.ts_ms as f64 / 1000.0).clamp(0.0, (total - 0.5).max(0.0));
+                    let end = (start + 2.2).min(total);
+                    let (cx_norm, cy_norm) = pkt.bounds.center();
+                    let amount = pkt.element_type.suggested_zoom();
+                    let idx = crate::editor_edits::insert_zoom_segment(tl, start, end, amount);
+                    if let Some(seg) = tl.zoom_segments.get_mut(idx) {
+                        seg.mode = cap_project::ZoomMode::Manual {
+                            x: cx_norm as f32,
+                            y: cy_norm as f32,
+                        };
+                    }
+                }
+            } else {
+                let focus_points = [
+                    (0.15 * total, (0.5_f32, 0.72_f32), 1.75),
+                    (0.50 * total, (0.5_f32, 0.48_f32), 1.65),
+                ];
+                for (start, (fx, fy), amount) in focus_points {
+                    let end = (start + 2.0).min(total);
+                    if end > start + 0.3 {
+                        let idx = crate::editor_edits::insert_zoom_segment(tl, start, end, amount);
+                        if let Some(seg) = tl.zoom_segments.get_mut(idx) {
+                            seg.mode = cap_project::ZoomMode::Manual { x: fx, y: fy };
+                        }
+                    }
+                }
+            }
+            true
+        });
+        self.show_notice(
+            "Applied Semantic Auto-Attention Director (focused on active modals & terminal errors)!",
+            window,
+            cx,
+        );
+    }
+
     pub(crate) fn export_current_frame_thumbnail(
         &mut self,
         window: &mut Window,

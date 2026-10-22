@@ -74,8 +74,19 @@ jobs:
             apps/desktop-gpui -> apps/desktop-gpui/target
           cache-on-failure: true
 
-      - name: Install JS dependencies
-        run: bun install
+      - name: Cache native dependencies (Spacedrive, ONNX Runtime)
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/native-deps
+            target/Frameworks
+          key: native-deps-macos-arm64-${{ hashFiles('scripts/setup.js') }}
+
+      - name: Install JS dependencies & Setup Native Libraries
+        run: |
+          bun install
+          echo "RUST_TARGET_TRIPLE=aarch64-apple-darwin" >> .env
+          RUST_TARGET_TRIPLE=aarch64-apple-darwin bun run cap-setup
 
       - name: Restore or Build Sidecar Binaries (cap-muxer & cap-cli)
         run: |

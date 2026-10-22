@@ -76,7 +76,10 @@ pub use frame_pipeline::{GpuOutputFormat, Nv12RenderedFrame, RenderedFrame, Shar
 #[cfg(target_os = "macos")]
 pub use frame_pipeline::{PendingSurface, RgbaToBgraSurfaceConverter};
 pub use frame_windows::FrameWindows;
-pub use layers::{BackgroundTextureCache, clean_background_path, new_font_system};
+pub use layers::{
+    BackgroundTextureCache, JUMP_CUT_MORPH_FRAMES, clean_background_path,
+    interpolate_jump_cut_rgba_frames, new_font_system,
+};
 pub use managed_segment::{
     ManagedRecordingSegmentDecoders, ManagedSegmentDecoderStatus, ManagedSegmentStopHandles,
     ManagedSegmentVideoError, ManagedSegmentVideoExit, ManagedSegmentVideoInput,
@@ -86,6 +89,7 @@ use overlay_layers::OverlayLayers;
 pub use project_recordings::{ProjectRecordingsMeta, SegmentRecordings, Video};
 pub use recorded_cursor_assets::{FrozenCursorAssetError, FrozenRecordedCursorAssets};
 use transition::{TransitionCompositor, TransitionParameters};
+pub use zoom::{SemanticAttentionEvent, compute_semantic_attention_bounds};
 
 /// Warms the process-wide system-font scan used by the text/captions/keyboard
 /// layers. The first scan is the slow part (hundreds of ms to over a second on
