@@ -2139,12 +2139,13 @@ impl Render for AndroidWindow {
                                 ui::Button::plain(
                                     &theme,
                                     "android-close-window",
-                                    ui::ButtonVariant::Danger,
+                                    ui::ButtonVariant::Destructive,
                                     ui::ButtonSize::Xs,
                                 )
                                 .label("✕ Close Hub")
                                 .on_click(cx.listener(|this, _, window, cx| {
-                                    this.stop_mirroring(cx);
+                                    this.mirroring_active = false;
+                                    cx.notify();
                                     window.remove_window();
                                 })),
                             ),
