@@ -1974,6 +1974,36 @@ impl EditorWindow {
                     .child(
                         ui::Button::plain(
                             &theme,
+                            "export-animated-webp-bundle",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("⚡ Export Animated WebP & Lossless Paletted GIF (README Ready)")
+                        .icon("icons/layers.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_animated_webp_and_gif_bundle(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-youtube-loom-chapters-toc",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🏷️ Copy YouTube / Loom Chapters Table of Contents")
+                        .icon("icons/copy.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.copy_automated_youtube_loom_chapters(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
                             "export-cheatsheet-md",
                             ui::ButtonVariant::Gray,
                             ui::ButtonSize::Sm,

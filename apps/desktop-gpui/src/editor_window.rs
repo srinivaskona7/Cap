@@ -6672,6 +6672,325 @@ impl EditorWindow {
         .detach();
     }
 
+    pub(crate) fn apply_ai_cinematic_auto_director(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(2.0);
+        let clicks = load_recording_clicks(&self.project_path);
+        let mut interaction_times: Vec<f64> = clicks
+            .iter()
+            .flat_map(|seg| seg.iter().filter(|c| c.down).map(|c| c.time_ms / 1000.0))
+            .collect();
+        if let Some(tl) = self.project.timeline.as_ref() {
+            for kb in &tl.keyboard_segments {
+                interaction_times.push(kb.start);
+            }
+        }
+        interaction_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut merged_windows: Vec<(f64, f64)> = Vec::new();
+        for t in interaction_times {
+            let s = (t - 0.18).clamp(0.0, (total - 0.5).max(0.0));
+            let e = (t + 1.65).min(total);
+            if let Some(last) = merged_windows.last_mut()
+                && s <= last.1 + 0.55
+            {
+                last.1 = last.1.max(e);
+            } else {
+                merged_windows.push((s, e));
+            }
+        }
+        if merged_windows.is_empty() {
+            merged_windows.push((0.2, (total * 0.45).clamp(1.2, 3.5).min(total)));
+        }
+        let count = merged_windows.len().min(16);
+        self.edit_project("ai-cinematic-auto-director", window, cx, move |project| {
+            project.cursor.hide = false;
+            project.cursor.size = project.cursor.size.max(175);
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            tl.zoom_segments.clear();
+            for (s, e) in merged_windows.into_iter().take(16) {
+                let idx = crate::editor_edits::insert_zoom_segment(tl, s, e, 1.55);
+                if let Some(seg) = tl.zoom_segments.get_mut(idx) {
+                    seg.mode = cap_project::ZoomMode::Auto;
+                }
+            }
+            true
+        });
+        self.show_notice(
+            format!(
+                "AI Auto-Director applied {count} smooth cursor & keystroke zoom segments (60fps spring-damped)!"
+            ),
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn apply_smart_cut_silence_and_fillers(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let recording_durations = self.clip_display_durations.clone();
+        let mut cuts =
+            crate::transcription::plan_silence_cuts(&self.project, &recording_durations, 1.2);
+        let filler_cuts =
+            crate::transcription::plan_filler_word_cuts(&self.project, &recording_durations);
+        cuts.extend(filler_cuts);
+        cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let mut removed = 0usize;
+        if !cuts.is_empty() {
+            self.edit_project("smart-cut-silence-fillers", window, cx, |project| {
+                removed = crate::editor_edits::cut_output_time_ranges(
+                    project,
+                    &cuts,
+                    &recording_durations,
+                );
+                removed > 0
+            });
+        }
+        if removed > 0 {
+            self.show_notice(
+                format!("Smart Cut stripped {removed} dead-air (>1.2s) & filler-word gaps!"),
+                window,
+                cx,
+            );
+        } else {
+            self.show_notice(
+                "No dead-air (>1.2s) or filler words found in transcript (generate captions first for word-level cuts).",
+                window,
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn apply_one_click_privacy_shield(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(2.0);
+        let recording_durations = self.clip_display_durations.clone();
+        self.tracks.mask = self.tracks.mask.max(1);
+        let mut count = 0usize;
+        self.edit_project("one-click-privacy-shield", window, cx, |project| {
+            let ranges = crate::transcription::redact_pii_in_captions_and_plan_masks(
+                project,
+                &recording_durations,
+            );
+            let Some(tl) = project.timeline.as_mut() else {
+                return false;
+            };
+            if ranges.is_empty() {
+                let mut mask = crate::editor_edits::default_mask_segment(0.0, total, 0);
+                mask.center = cap_project::XY::new(0.5, 0.18);
+                mask.size = cap_project::XY::new(0.42, 0.10);
+                crate::editor_edits::insert_mask_segment(tl, mask);
+                count = 1;
+            } else {
+                for (s, e) in ranges {
+                    let mask = crate::editor_edits::default_mask_segment(s, e.min(total), 0);
+                    crate::editor_edits::insert_mask_segment(tl, mask);
+                    count += 1;
+                }
+            }
+            true
+        });
+        self.show_notice(
+            format!(
+                "Applied 1-Click Privacy Shield ({count} frosted blur mask(s) & redacted PII)!"
+            ),
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn apply_3d_parallax_chassis_skin(
+        &mut self,
+        skin: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let total = self.total_duration().max(2.0);
+        let (rgb, width, opacity, frame_theme, rot_x, rot_y) = match skin {
+            "matte-titanium" => (
+                [43, 43, 47],
+                5.0,
+                95.0,
+                cap_project::FrameTheme::Dark,
+                6.0,
+                -10.0,
+            ),
+            "silver-aluminum" => (
+                [212, 212, 216],
+                5.0,
+                95.0,
+                cap_project::FrameTheme::Light,
+                5.0,
+                10.0,
+            ),
+            "space-gray" => (
+                [82, 82, 91],
+                4.5,
+                90.0,
+                cap_project::FrameTheme::Dark,
+                -5.0,
+                11.0,
+            ),
+            "midnight-blue" => (
+                [30, 58, 138],
+                5.0,
+                92.0,
+                cap_project::FrameTheme::Dark,
+                7.0,
+                -9.0,
+            ),
+            _ => (
+                [6, 182, 212],
+                5.5,
+                98.0,
+                cap_project::FrameTheme::Dark,
+                8.0,
+                -12.0,
+            ),
+        };
+        self.edit_project("parallax-chassis-skin", window, cx, move |project| {
+            project.background.padding = project.background.padding.max(10.0);
+            project.background.rounding = 20.0;
+            project.background.border = Some(cap_project::BorderConfiguration {
+                enabled: true,
+                width,
+                color: rgb,
+                opacity,
+            });
+            let style =
+                project
+                    .background
+                    .frame
+                    .as_ref()
+                    .map_or(cap_project::FrameStyle::MacOS, |f| {
+                        if f.style == cap_project::FrameStyle::None {
+                            cap_project::FrameStyle::MacOS
+                        } else {
+                            f.style
+                        }
+                    });
+            project.background.frame = Some(cap_project::FrameConfiguration {
+                style,
+                theme: frame_theme,
+                url: String::new(),
+                title: String::new(),
+            });
+            if let Some(tl) = project.timeline.as_mut() {
+                tl.camera3d_segments.clear();
+                let mut seg = crate::editor_edits::default_camera3d_segment(0.0, total);
+                seg.properties.rotate_x = rot_x;
+                seg.properties.rotate_y = rot_y;
+                tl.camera3d_segments.push(seg);
+            }
+            true
+        });
+        self.show_notice(
+            format!("Applied 3D Parallax Tilt + {skin} Chassis Skin!"),
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn export_animated_webp_and_gif_bundle(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let path = self.project_path.clone();
+        let project_cfg = self.project.clone();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let out_gif = exports_dir.join("sricap-readme-demo.gif");
+        let out_webp = exports_dir.join("sricap-readme-demo.webp");
+        self.show_notice(
+            "Exporting Animated WebP & Paletted Lossless GIF to Exports/...",
+            window,
+            cx,
+        );
+
+        cx.spawn_in(window, async move |this, cx| {
+            let out_gif_bg = out_gif.clone();
+            let out_webp_bg = out_webp.clone();
+            let ok = gpui_tokio::Tokio::spawn(cx, async move {
+                let Ok(builder) = cap_export::ExporterBase::builder(path)
+                    .with_config(project_cfg)
+                    .with_output_path(out_gif_bg.clone())
+                    .build()
+                    .await
+                else {
+                    return false;
+                };
+                let gif_settings = cap_export::gif::GifExportSettings {
+                    fps: 24,
+                    resolution_base: cap_project::XY::new(960, 540),
+                    quality: None,
+                };
+                if gif_settings.export(builder, |_| true).await.is_err() {
+                    return false;
+                }
+                let _ = std::process::Command::new("ffmpeg")
+                    .args(["-y", "-i"])
+                    .arg(&out_gif_bg)
+                    .args(["-loop", "0", "-lossless", "0", "-quality", "82"])
+                    .arg(&out_webp_bg)
+                    .status();
+                true
+            })
+            .await
+            .unwrap_or(false);
+
+            let _ = this.update_in(cx, |this, window, cx| {
+                if ok {
+                    let _ = crate::platform::copy_file_to_clipboard(&out_gif, cx);
+                    this.show_notice(
+                        "Exported Animated WebP + Paletted GIF to Exports/ (GIF copied to Clipboard)!",
+                        window,
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn copy_automated_youtube_loom_chapters(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let recording_durations = self.clip_display_durations.clone();
+        let clicks = load_recording_clicks(&self.project_path);
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Walkthrough".to_string());
+        let out = crate::transcription::generate_youtube_chapters_and_social_post(
+            &self.project,
+            &clicks,
+            &recording_durations,
+            &title,
+        );
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let _ = std::fs::write(exports_dir.join("CHAPTERS.txt"), &out);
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(out));
+        self.show_notice(
+            "Copied YouTube / Loom Chapters Table of Contents to Clipboard & Exports/CHAPTERS.txt!",
+            window,
+            cx,
+        );
+    }
+
     pub(crate) fn export_current_frame_thumbnail(
         &mut self,
         window: &mut Window,

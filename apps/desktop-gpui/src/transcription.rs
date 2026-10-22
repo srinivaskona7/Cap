@@ -2381,7 +2381,9 @@ pub fn is_pii_or_secret_token(text: &str) -> bool {
             || key.ends_with("_key")
             || key.ends_with("_token")
             || key.ends_with("_password")
-            || key == "database_url")
+            || key == "database_url"
+            || key == "openai_api_key"
+            || key == "aws_secret_access_key")
     {
         return true;
     }
@@ -2391,7 +2393,9 @@ pub fn is_pii_or_secret_token(text: &str) -> bool {
     }
     digits_only.len() >= 13
         && digits_only.len() <= 19
-        && cleaned.chars().all(|c| c.is_ascii_digit() || c == '-')
+        && cleaned
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == ' ')
 }
 
 pub fn map_source_range_to_edited(

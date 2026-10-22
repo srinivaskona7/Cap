@@ -3972,6 +3972,76 @@ impl EditorWindow {
                 ),
             );
 
+        let blueprint_director_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "blueprint-ai-auto-director",
+                        ui::ButtonVariant::Primary,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🎬 AI Auto-Director")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_ai_cinematic_auto_director(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "blueprint-smart-cut-silence",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🪄 Smart Cut (>1.2s)")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_smart_cut_silence_and_fillers(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "blueprint-privacy-shield",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("🛡 1-Click Privacy Blur")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_one_click_privacy_shield(window, cx);
+                    })),
+                ),
+            );
+
+        let mut parallax_skins_row = div().flex().flex_row().gap(px(4.));
+        for (skin_id, skin_lbl, skin_key) in [
+            ("skin-matte-ti", "Matte Ti 3D", "matte-titanium"),
+            ("skin-silver-alu", "Silver Alu 3D", "silver-aluminum"),
+            ("skin-space-gray", "Space Gray 3D", "space-gray"),
+            ("skin-midnight", "Midnight 3D", "midnight-blue"),
+            ("skin-cyber-neon", "Cyber Neon 3D", "cyberpunk-neon"),
+        ] {
+            parallax_skins_row = parallax_skins_row.child(
+                div().flex_1().child(
+                    ui::Button::plain(&theme, skin_id, ui::ButtonVariant::Gray, ui::ButtonSize::Xs)
+                        .label(skin_lbl)
+                        .full_width()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.apply_3d_parallax_chassis_skin(skin_key, window, cx);
+                        })),
+                ),
+            );
+        }
+
         div()
             .flex()
             .flex_col()
@@ -3979,6 +4049,8 @@ impl EditorWindow {
             .pb(px(10.))
             .child(row)
             .child(creator_row)
+            .child(blueprint_director_row)
+            .child(parallax_skins_row)
             .child(self.render_creator_identity_banner_card(cx))
             .child(clips_row)
             .child(trim_and_dup_row)

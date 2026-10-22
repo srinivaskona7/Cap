@@ -2819,6 +2819,51 @@ impl Render for AndroidWindow {
                                 this.trigger_panel(AndroidPanelAction::ExpandSettings, cx);
                             })),
                         ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-btn-vol-up",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🔊 Vol+")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.send_android_keyevent(24, "Volume Up", cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-btn-vol-down",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🔉 Vol-")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.send_android_keyevent(25, "Volume Down", cx);
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "android-btn-lock",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🔒 Lock")
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.send_android_keyevent(26, "Screen Lock", cx);
+                            })),
+                        ),
                     ),
             )
             .child(
