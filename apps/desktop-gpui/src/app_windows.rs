@@ -4000,6 +4000,23 @@ pub fn toggle_editor_spotlight_or_zoom(cx: &mut App) {
     }
 }
 
+pub fn trigger_laser_and_screen_pen(cx: &mut App) {
+    if !cx.has_global::<AppWindows>() {
+        return;
+    }
+    let editors: Vec<_> = cx
+        .global::<AppWindows>()
+        .editors
+        .iter()
+        .map(|(_, handle)| *handle)
+        .collect();
+    for handle in editors {
+        let _ = handle.update(cx, |editor, window, cx| {
+            editor.trigger_laser_pointer_and_doodle(window, cx);
+        });
+    }
+}
+
 fn camera_preview_is_inline(cx: &App) -> bool {
     TargetSelect::global(cx).read(cx).mode == Some(TargetType::CameraOnly)
 }

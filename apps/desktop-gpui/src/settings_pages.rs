@@ -945,10 +945,11 @@ const RECORDING_SHORTCUTS: [&str; 8] = [
     "cycleRecordingMode",
 ];
 
-const WHILE_RECORDING_SHORTCUTS: [&str; 4] = [
+const WHILE_RECORDING_SHORTCUTS: [&str; 5] = [
     "stopRecording",
     "togglePauseRecording",
     "toggleSpotlightZoom",
+    "toggleLaserAnnotation",
     "restartRecording",
 ];
 
@@ -1059,6 +1060,7 @@ fn shortcut_label(action: &str) -> &'static str {
         "stopRecording" => "Stop recording",
         "togglePauseRecording" => "Pause or resume",
         "toggleSpotlightZoom" => "Toggle Spotlight / Auto-Zoom",
+        "toggleLaserAnnotation" => "Screen Pen & Laser Pointer",
         "restartRecording" => "Restart recording",
         _ => "Shortcut",
     }
@@ -1118,6 +1120,9 @@ fn shortcut_effect(
         "stopRecording" => "stop the current recording".into(),
         "togglePauseRecording" => "pause the current recording, or resume it".into(),
         "toggleSpotlightZoom" => "toggle spotlight and cursor auto-zoom".into(),
+        "toggleLaserAnnotation" => {
+            "activate the glowing laser pointer trail and 3-second auto-fade screen pen".into()
+        }
         "restartRecording" => "throw away the current take and start again".into(),
         _ => String::new(),
     }
@@ -8175,7 +8180,7 @@ mod tests {
             .chain(WHILE_RECORDING_SHORTCUTS.iter())
             .copied()
             .collect();
-        assert_eq!(shown.len(), 15);
+        assert_eq!(shown.len(), 16);
         let settings = store::GeneralSettings::default();
         for action in &shown {
             assert_eq!(shown.iter().filter(|other| *other == action).count(), 1);

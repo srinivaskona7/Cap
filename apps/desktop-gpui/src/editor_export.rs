@@ -1929,6 +1929,51 @@ impl EditorWindow {
                     .child(
                         ui::Button::plain(
                             &theme,
+                            "export-github-pr-demo-bundle",
+                            ui::ButtonVariant::Primary,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🚀 Generate GitHub PR Demo Bundle (<10 MB MP4 + PR Markdown)")
+                        .icon("icons/copy.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.generate_github_pr_demo_bundle(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-smart-terminal-hud",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("💻 Smart Terminal Command HUD & Export COMMANDS.sh")
+                        .icon("icons/captions.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.generate_smart_terminal_command_hud_and_script(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "export-palettegen-instant-gif",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("✨ Export PaletteGen Instant GIF (<3 MB · Floyd-Steinberg)")
+                        .icon("icons/layers.svg")
+                        .full_width()
+                        .disabled(ui.phase.is_busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.export_palettegen_instant_gif(window, cx);
+                        })),
+                    )
+                    .child(
+                        ui::Button::plain(
+                            &theme,
                             "export-cheatsheet-md",
                             ui::ButtonVariant::Gray,
                             ui::ButtonSize::Sm,

@@ -38,6 +38,7 @@ use crate::{
 pub enum HotkeyAction {
     ToggleRecording,
     ToggleSpotlightZoom,
+    ToggleLaserAnnotation,
     StartStudioRecording,
     StartInstantRecording,
     StopRecording,
@@ -53,9 +54,10 @@ pub enum HotkeyAction {
     ScreenshotArea,
 }
 
-const ACTION_KEYS: [(&str, HotkeyAction); 15] = [
+const ACTION_KEYS: [(&str, HotkeyAction); 16] = [
     ("toggleRecording", HotkeyAction::ToggleRecording),
     ("toggleSpotlightZoom", HotkeyAction::ToggleSpotlightZoom),
+    ("toggleLaserAnnotation", HotkeyAction::ToggleLaserAnnotation),
     ("startStudioRecording", HotkeyAction::StartStudioRecording),
     ("startInstantRecording", HotkeyAction::StartInstantRecording),
     ("stopRecording", HotkeyAction::StopRecording),
@@ -758,6 +760,9 @@ fn dispatch(action: HotkeyAction, cx: &mut App) {
                 serde_json::Value::Bool(!current),
             );
             app_windows::toggle_editor_spotlight_or_zoom(cx);
+        }
+        HotkeyAction::ToggleLaserAnnotation => {
+            app_windows::trigger_laser_and_screen_pen(cx);
         }
         HotkeyAction::StartStudioRecording => start_from_hotkey(Mode::Studio, cx),
         HotkeyAction::StartInstantRecording => start_from_hotkey(Mode::Instant, cx),

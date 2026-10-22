@@ -1950,6 +1950,69 @@ impl EditorWindow {
                     this.apply_semantic_attention_director(window, cx);
                 })),
             )
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .text_color(Hsla::from(theme.gray_11))
+                    .child("Multi-Camera & iPad Sidecar Whiteboard PiP:"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(4.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "multicam-attach-ipad",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("📱 iPad / Desk Cam")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.attach_camera_video_clicked(window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "multicam-pip-corner",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🎥 PiP Corner")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.apply_multicam_pip_layout(false, window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "multicam-split-desk",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("📐 50/50 Whiteboard")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.apply_multicam_pip_layout(true, window, cx);
+                                },
+                            )),
+                        ),
+                    ),
+            )
             .into_any_element()
     }
 
@@ -3225,6 +3288,81 @@ impl EditorWindow {
             .child(
                 ui::Field::stacked(&theme, "Cursor Style")
                     .child(self.render_cursor_style_picker(cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .p(px(10.))
+                    .rounded(px(8.))
+                    .bg(Hsla::from(theme.gray_2))
+                    .border_1()
+                    .border_color(Hsla::from(theme.editor.line))
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(Hsla::from(theme.editor.text_1))
+                            .child("Dynamic Cursor Magnifier Loupe & Laser Pen (⌘⇧D)"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(6.))
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "cursor-loupe-2x",
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("🔍 2.5x Loupe")
+                                    .full_width()
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.trigger_cursor_magnifier_loupe(2.5, window, cx);
+                                        },
+                                    )),
+                                ),
+                            )
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "cursor-loupe-3x",
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("🔍 3.0x Deep Loupe")
+                                    .full_width()
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.trigger_cursor_magnifier_loupe(3.0, window, cx);
+                                        },
+                                    )),
+                                ),
+                            )
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "cursor-laser-pen",
+                                        ui::ButtonVariant::Primary,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("🔴 Laser & 3s Pen")
+                                    .full_width()
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.trigger_laser_pointer_and_doodle(window, cx);
+                                        },
+                                    )),
+                                ),
+                            ),
+                    ),
             )
             .child(self.slider_field("Size", SliderKey::Cursor(CursorSlider::Size), "", cx))
             .child(self.slider_field("Tilt", SliderKey::Cursor(CursorSlider::Tilt), "x100%", cx))
