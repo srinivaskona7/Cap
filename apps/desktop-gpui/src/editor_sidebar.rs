@@ -3979,6 +3979,7 @@ impl EditorWindow {
             .pb(px(10.))
             .child(row)
             .child(creator_row)
+            .child(self.render_creator_identity_banner_card(cx))
             .child(clips_row)
             .child(trim_and_dup_row)
             .child(speed_row)
@@ -3997,6 +3998,353 @@ impl EditorWindow {
             .child(brand_row)
             .children(has_images.then_some(images_panel))
             .into_any_element()
+    }
+
+    fn render_creator_identity_banner_card(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let cfg = crate::store::creator_banner_settings();
+        let pos_top = cfg.position_top;
+        let full_vid = cfg.full_video;
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .p(px(8.))
+            .rounded(px(8.))
+            .bg(Hsla::from(theme.gray_2))
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(Hsla::from(theme.editor.text_1))
+                            .child("Social & Contact Banner Preset (LinkedIn / YT / Phone)"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(10.))
+                            .text_color(Hsla::from(theme.gray_10))
+                            .child(format!(
+                                "{} · {}",
+                                if pos_top { "Top" } else { "Bottom" },
+                                if full_vid { "Full Video" } else { "5s Clip" }
+                            )),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(4.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-pos-top",
+                                if pos_top {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("⬆ Top Banner")
+                            .full_width()
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                let _ = crate::store::set_creator_banner_key(
+                                    "creatorBannerTop",
+                                    serde_json::Value::Bool(true),
+                                );
+                                cx.notify();
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-pos-bottom",
+                                if !pos_top {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("⬇ Bottom Banner")
+                            .full_width()
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                let _ = crate::store::set_creator_banner_key(
+                                    "creatorBannerTop",
+                                    serde_json::Value::Bool(false),
+                                );
+                                cx.notify();
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-dur-full",
+                                if full_vid {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🎬 Complete Video")
+                            .full_width()
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                let _ = crate::store::set_creator_banner_key(
+                                    "creatorBannerFullVideo",
+                                    serde_json::Value::Bool(true),
+                                );
+                                cx.notify();
+                            })),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-dur-5s",
+                                if !full_vid {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("⏱ 5s Only")
+                            .full_width()
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                let _ = crate::store::set_creator_banner_key(
+                                    "creatorBannerFullVideo",
+                                    serde_json::Value::Bool(false),
+                                );
+                                cx.notify();
+                            })),
+                        ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(4.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-preset-linkedin",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("💼 + LinkedIn")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.add_creator_identity_banner("linkedin", false, window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-preset-youtube",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("▶ + YouTube")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.add_creator_identity_banner("youtube", false, window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-preset-contact",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("📞 + Contact #")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.add_creator_identity_banner("contact", false, window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "banner-preset-all-in-one",
+                                ui::ButtonVariant::Primary,
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("🌟 + All-in-One Bar")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.add_creator_identity_banner("all", false, window, cx);
+                                },
+                            )),
+                        ),
+                    ),
+            )
+            .child(
+                ui::Button::plain(
+                    &theme,
+                    "banner-preset-from-clipboard",
+                    ui::ButtonVariant::Gray,
+                    ui::ButtonSize::Xs,
+                )
+                .label("📋 Paste Custom Name / Channel / Contact from Clipboard as Banner")
+                .full_width()
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.add_creator_identity_banner("clipboard", true, window, cx);
+                })),
+            )
+            .into_any_element()
+    }
+
+    pub(crate) fn add_creator_identity_banner(
+        &mut self,
+        kind: &'static str,
+        from_clipboard: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let cfg = crate::store::creator_banner_settings();
+        let total = self.total_duration().max(3.0);
+        let (start, end) = if cfg.full_video {
+            (0.0, total)
+        } else {
+            (0.0, total.min(5.0))
+        };
+        let y_pos = if cfg.position_top { 0.06 } else { 0.93 };
+
+        let clip_text = if from_clipboard {
+            cx.read_from_clipboard()
+                .and_then(|item| item.text())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        };
+
+        let (text_content, bg_hex, border_hex) = match kind {
+            "linkedin" => {
+                let text = clip_text.unwrap_or(cfg.linkedin_text);
+                let _ = crate::store::set_creator_banner_key(
+                    "creatorBannerLinkedin",
+                    serde_json::Value::String(text.clone()),
+                );
+                (text, "#0A66C2", "#38BDF8")
+            }
+            "youtube" => {
+                let text = clip_text.unwrap_or(cfg.youtube_text);
+                let _ = crate::store::set_creator_banner_key(
+                    "creatorBannerYoutube",
+                    serde_json::Value::String(text.clone()),
+                );
+                (text, "#991B1B", "#F87171")
+            }
+            "contact" => {
+                let text = clip_text.unwrap_or(cfg.contact_text);
+                let _ = crate::store::set_creator_banner_key(
+                    "creatorBannerContact",
+                    serde_json::Value::String(text.clone()),
+                );
+                (text, "#065F46", "#34D399")
+            }
+            "clipboard" => {
+                let text = clip_text.unwrap_or_else(|| {
+                    format!(
+                        "{}  ·  {}  ·  {}",
+                        cfg.linkedin_text, cfg.youtube_text, cfg.contact_text
+                    )
+                });
+                (text, "#0F172A", "#6366F1")
+            }
+            _ => (
+                format!(
+                    "{}  |  {}  |  {}",
+                    cfg.linkedin_text, cfg.youtube_text, cfg.contact_text
+                ),
+                "#0F172A",
+                "#6366F1",
+            ),
+        };
+
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-creator-identity-banner", window, cx, move |project| {
+            let Some(timeline) = project.timeline.as_mut() else {
+                return false;
+            };
+            let mut banner = crate::editor_edits::default_text_segment(start, end, 0);
+            banner.content = text_content;
+            banner.center = cap_project::XY::new(0.5, y_pos);
+            banner.size = cap_project::XY::new(0.86, 0.075);
+            banner.font_family = "Inter / Crisp UI".to_string();
+            banner.font_size = 28.0;
+            banner.font_weight = 700.0;
+            banner.color = "#FFFFFF".to_string();
+            banner.background_color = Some(bg_hex.to_string());
+            banner.stroke_width = 1.5;
+            banner.stroke_color = border_hex.to_string();
+            banner.fade_duration = if cfg.full_video { 0.0 } else { 0.25 };
+            crate::editor_edits::insert_text_segment(timeline, banner);
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(
+                Some(crate::editor_edits::Selection::single(
+                    crate::editor_timeline::TrackKind::Text,
+                    idx,
+                )),
+                cx,
+            );
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        self.show_notice(
+            format!(
+                "Added {} Banner ({}) — edit text anytime in the Text Inspector!",
+                if cfg.position_top { "Top" } else { "Bottom" },
+                if cfg.full_video {
+                    "Complete Video"
+                } else {
+                    "5s Segment"
+                }
+            ),
+            window,
+            cx,
+        );
+        cx.notify();
     }
 
     pub(crate) fn add_reel_hook_banner(&mut self, window: &mut Window, cx: &mut Context<Self>) {

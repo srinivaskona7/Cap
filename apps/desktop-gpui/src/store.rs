@@ -1045,6 +1045,50 @@ pub fn set_neural_persona_key(key: &str, val: Value) -> bool {
     set_store_setting(GENERAL_SETTINGS, key, val)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreatorBannerSettings {
+    pub position_top: bool,
+    pub full_video: bool,
+    pub linkedin_text: String,
+    pub youtube_text: String,
+    pub contact_text: String,
+}
+
+impl Default for CreatorBannerSettings {
+    fn default() -> Self {
+        Self {
+            position_top: false,
+            full_video: true,
+            linkedin_text: "💼 LinkedIn: in/srinivas-kona".to_string(),
+            youtube_text: "▶ YouTube: @sricap-dev".to_string(),
+            contact_text: "📞 Contact: +1 (555) 019-2834".to_string(),
+        }
+    }
+}
+
+pub fn creator_banner_settings() -> CreatorBannerSettings {
+    let section = store_section(GENERAL_SETTINGS);
+    let defaults = CreatorBannerSettings::default();
+    let str_at = |key: &str, fallback: String| -> String {
+        section
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map_or(fallback, str::to_string)
+    };
+    CreatorBannerSettings {
+        position_top: bool_at(&section, "creatorBannerTop", defaults.position_top),
+        full_video: bool_at(&section, "creatorBannerFullVideo", defaults.full_video),
+        linkedin_text: str_at("creatorBannerLinkedin", defaults.linkedin_text),
+        youtube_text: str_at("creatorBannerYoutube", defaults.youtube_text),
+        contact_text: str_at("creatorBannerContact", defaults.contact_text),
+    }
+}
+
+pub fn set_creator_banner_key(key: &str, val: Value) -> bool {
+    set_store_setting(GENERAL_SETTINGS, key, val)
+}
+
 pub fn studio_sound_by_default() -> bool {
     bool_at(
         &store_section(AUDIO_ENHANCEMENT),
