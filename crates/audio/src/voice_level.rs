@@ -412,6 +412,178 @@ pub fn synthesize_tactile_click_and_keystroke_sfx(
     pcm
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StudioAudioProConfig {
+    pub ai_noise_shield: bool,
+    pub keyboard_click_silencer: bool,
+    pub warmth_250hz_boost: bool,
+    pub presence_5khz_boost: bool,
+    pub dynamic_de_esser: bool,
+    pub high_pass_80hz: bool,
+    pub soft_knee_noise_gate: bool,
+    pub broadcast_limiter_minus_1db: bool,
+    pub normalize_minus_14_lufs: bool,
+    pub auto_ducking_minus_12db: bool,
+    pub room_reverb_dampener: bool,
+    pub mic_agc_auto_leveler: bool,
+    pub echo_cancellation: bool,
+}
+
+impl Default for StudioAudioProConfig {
+    fn default() -> Self {
+        Self {
+            ai_noise_shield: true,
+            keyboard_click_silencer: true,
+            warmth_250hz_boost: true,
+            presence_5khz_boost: true,
+            dynamic_de_esser: true,
+            high_pass_80hz: true,
+            soft_knee_noise_gate: true,
+            broadcast_limiter_minus_1db: true,
+            normalize_minus_14_lufs: true,
+            auto_ducking_minus_12db: true,
+            room_reverb_dampener: true,
+            mic_agc_auto_leveler: true,
+            echo_cancellation: true,
+        }
+    }
+}
+
+pub fn suppress_mechanical_keyboard_transients(samples: &mut [f32], sample_rate: u32) {
+    if samples.is_empty() || sample_rate == 0 {
+        return;
+    }
+    let window = ((sample_rate as usize) / 100).max(16);
+    let mut slow_env = 0.01_f32;
+    for chunk in samples.chunks_mut(window) {
+        let peak = chunk.iter().fold(0.0_f32, |a, s| a.max(s.abs()));
+        let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+        slow_env = 0.92 * slow_env + 0.08 * rms.max(0.001);
+        let crest = peak / rms.max(1e-4);
+        if crest > 4.2 && peak > slow_env * 3.0 {
+            let atten = (slow_env * 2.2 / peak).clamp(0.18, 1.0);
+            for s in chunk.iter_mut() {
+                *s *= atten;
+            }
+        }
+    }
+}
+
+pub fn apply_room_reverb_dampener(samples: &mut [f32]) {
+    let mut env = 0.0_f32;
+    for s in samples.iter_mut() {
+        let abs = s.abs();
+        if abs > env {
+            env = 0.7 * env + 0.3 * abs;
+        } else {
+            env = 0.996 * env + 0.004 * abs;
+        }
+        if abs < env * 0.38 && env < 0.15 {
+            *s *= 0.55;
+        }
+    }
+}
+
+pub fn apply_mic_agc_auto_leveler(samples: &mut [f32], sample_rate: u32) {
+    if samples.is_empty() || sample_rate == 0 {
+        return;
+    }
+    let block = ((sample_rate as usize) / 5).max(256);
+    let target_rms = 0.14_f32;
+    let mut current_gain = 1.0_f32;
+    for chunk in samples.chunks_mut(block) {
+        let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+        let desired = if rms > 0.008 {
+            (target_rms / rms).clamp(0.5, 3.2)
+        } else {
+            1.0
+        };
+        for s in chunk.iter_mut() {
+            current_gain = 0.9985 * current_gain + 0.0015 * desired;
+            *s = (*s * current_gain).clamp(-0.98, 0.98);
+        }
+    }
+}
+
+pub fn apply_headphone_free_echo_canceler(mic_samples: &mut [f32], reference_system: &[f32]) {
+    if mic_samples.is_empty() || reference_system.is_empty() {
+        return;
+    }
+    let len = mic_samples.len().min(reference_system.len());
+    let mut weight = 0.08_f32;
+    let mu = 0.015_f32;
+    for i in 0..len {
+        let ref_s = reference_system[i];
+        let est_echo = weight * ref_s;
+        let err = mic_samples[i] - est_echo;
+        weight = (weight + mu * err * ref_s).clamp(-0.65, 0.65);
+        mic_samples[i] = err.clamp(-1.0, 1.0);
+    }
+}
+
+pub fn normalize_lufs_minus_14(samples: &mut [f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let mean_sq = samples
+        .iter()
+        .filter(|s| s.is_finite())
+        .map(|s| f64::from(*s) * f64::from(*s))
+        .sum::<f64>()
+        / samples.len() as f64;
+    if mean_sq <= 1e-10 {
+        return 0.0;
+    }
+    let approx_lufs = (-0.691 + 10.0 * mean_sq.log10()) as f32;
+    let delta_db = (-14.0 - approx_lufs).clamp(-12.0, 16.0);
+    let gain = 10.0_f32.powf(delta_db / 20.0);
+    for s in samples.iter_mut() {
+        *s *= gain;
+    }
+    let _ = normalize_peak_gain(samples, -1.0);
+    delta_db
+}
+
+pub fn apply_studio_audio_pro_chain(
+    samples: &[f32],
+    channels: u16,
+    sample_rate: u32,
+    config: &StudioAudioProConfig,
+) -> Vec<f32> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+    let mut work = if config.ai_noise_shield || config.soft_knee_noise_gate {
+        apply_noise_gate_and_rnnoise(
+            samples,
+            channels,
+            if config.soft_knee_noise_gate {
+                -42.0
+            } else {
+                -68.0
+            },
+        )
+    } else {
+        samples.to_vec()
+    };
+
+    if config.keyboard_click_silencer {
+        suppress_mechanical_keyboard_transients(&mut work, sample_rate);
+    }
+    if config.room_reverb_dampener {
+        apply_room_reverb_dampener(&mut work);
+    }
+    if config.mic_agc_auto_leveler {
+        apply_mic_agc_auto_leveler(&mut work, sample_rate);
+    }
+    if config.normalize_minus_14_lufs {
+        let _ = normalize_lufs_minus_14(&mut work);
+    } else if config.broadcast_limiter_minus_1db {
+        let _ = normalize_peak_gain(&mut work, -1.0);
+    }
+    work
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,5 +619,19 @@ mod tests {
         assert_eq!(pcm.len(), 48_000);
         let metrics = measure_audio_levels(&pcm);
         assert!(metrics.peak_linear > 0.05 && metrics.peak_linear <= 0.5);
+    }
+
+    #[test]
+    fn studio_audio_pro_chain_eliminates_spikes_and_normalizes_cleanly() {
+        let mut raw: Vec<f32> = (0..9_600)
+            .map(|i| 0.08 * (2.0 * std::f32::consts::PI * 220.0 * (i as f32 / 48_000.0)).sin())
+            .collect();
+        raw[1_200] = 0.95;
+        let cfg = StudioAudioProConfig::default();
+        let processed = apply_studio_audio_pro_chain(&raw, 1, 48_000, &cfg);
+        assert_eq!(processed.len(), raw.len());
+        let metrics = measure_audio_levels(&processed);
+        assert!(!metrics.clipping_risk);
+        assert!(metrics.peak_dbfs <= -0.8);
     }
 }

@@ -3575,6 +3575,93 @@ impl SettingsWindow {
                         .into_any_element(),
                     ),
                     self.setting_row(
+                        "Pro Android Mirror & Screen-Off Stealth Mode",
+                        Some(
+                            "Turn off the physical Android display while mirroring and controlling \
+                             at 60 FPS on Mac (Scrcpy SET_DISPLAY_POWER).",
+                        ),
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "settings-open-android-hub",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Xs,
+                                )
+                                .label("Open Android Hub")
+                                .on_click(cx.listener(
+                                    |_, _, _, cx| {
+                                        crate::app_windows::open_android_window(cx);
+                                    },
+                                )),
+                            )
+                            .child(self.toggle(
+                                "android-stealth-default",
+                                store::android_screen_off_stealth_by_default(),
+                                cx,
+                                |_, cx| {
+                                    let next = !store::android_screen_off_stealth_by_default();
+                                    let _ = store::set_android_screen_off_stealth_by_default(next);
+                                    cx.notify();
+                                },
+                            ))
+                            .into_any_element(),
+                    ),
+                    self.setting_row(
+                        "Neural Gaze Auto-Center & Lip-Sync Smoothing",
+                        Some(
+                            "On-device Apple Silicon ANE pupil alignment for teleprompter reading \
+                             and smooth mouth interpolation across transcript cuts.",
+                        ),
+                        self.toggle(
+                            "neural-gaze-lip-sync-default",
+                            store::neural_persona_settings().gaze_auto_center,
+                            cx,
+                            |_, cx| {
+                                let cur = store::neural_persona_settings().gaze_auto_center;
+                                let _ = store::set_neural_persona_key(
+                                    "neuralGazeAutoCenter",
+                                    Value::Bool(!cur),
+                                );
+                                let _ = store::set_neural_persona_key(
+                                    "neuralAiLipSync",
+                                    Value::Bool(!cur),
+                                );
+                                cx.notify();
+                            },
+                        )
+                        .into_any_element(),
+                    ),
+                    self.setting_row(
+                        "Semantic Auto-Directing & Live Privacy Redaction Shield",
+                        Some(
+                            "Focus zoom on active terminal errors/dialogs and automatically redact \
+                             exposed API keys (sk-..., ghp_...) and passwords.",
+                        ),
+                        self.toggle(
+                            "neural-semantic-privacy-default",
+                            store::neural_persona_settings().semantic_auto_zoom,
+                            cx,
+                            |_, cx| {
+                                let cur = store::neural_persona_settings().semantic_auto_zoom;
+                                let _ = store::set_neural_persona_key(
+                                    "neuralSemanticAutoZoom",
+                                    Value::Bool(!cur),
+                                );
+                                let _ = store::set_neural_persona_key(
+                                    "neuralLivePrivacyShield",
+                                    Value::Bool(!cur),
+                                );
+                                cx.notify();
+                            },
+                        )
+                        .into_any_element(),
+                    ),
+                    self.setting_row(
                         "Main window when recording starts",
                         Some("What happens to the main window once a recording begins."),
                         self.select(

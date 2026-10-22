@@ -1525,6 +1525,7 @@ impl EditorWindow {
             )
             .child(self.render_camera_border_settings(cx))
             .child(self.render_camera_3d_tilt_presets(cx))
+            .child(self.render_neural_appearance_drawer(cx))
             // `<ColorCorrectionSection target="camera" />` (`:3324`).
             .children(
                 self.sidebar
@@ -1760,6 +1761,182 @@ impl EditorWindow {
 
         ui::Field::section(&theme, "3D Perspective Tilt")
             .child(row)
+            .into_any_element()
+    }
+
+    fn render_neural_appearance_drawer(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let persona = crate::store::neural_persona_settings();
+        let hair_options = [
+            "Original",
+            "Textured Crop",
+            "Modern Classic",
+            "Clean Buzz",
+            "Salt & Pepper",
+        ];
+        let eyewear_options = ["None", "Matte Acetate", "Titanium Rimless", "Studio Round"];
+
+        let mut hair_row = div().flex().flex_row().flex_wrap().gap(px(4.));
+        for (i, h) in hair_options.into_iter().enumerate() {
+            let active = persona.hair_preset == h;
+            hair_row = hair_row.child(
+                ui::Button::plain(
+                    &theme,
+                    ("neural-hair", i),
+                    if active {
+                        ui::ButtonVariant::Primary
+                    } else {
+                        ui::ButtonVariant::Gray
+                    },
+                    ui::ButtonSize::Xs,
+                )
+                .label(h)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    let _ = crate::store::set_neural_persona_key(
+                        "neuralHairPreset",
+                        serde_json::Value::String(h.to_string()),
+                    );
+                    this.show_notice(
+                        format!("Neural Hair Styling Preset: {h} (On-Device ANE)"),
+                        window,
+                        cx,
+                    );
+                    cx.notify();
+                })),
+            );
+        }
+
+        let mut eyewear_row = div().flex().flex_row().flex_wrap().gap(px(4.));
+        for (i, e) in eyewear_options.into_iter().enumerate() {
+            let active = persona.eyewear_preset == e;
+            eyewear_row = eyewear_row.child(
+                ui::Button::plain(
+                    &theme,
+                    ("neural-eyewear", i),
+                    if active {
+                        ui::ButtonVariant::Primary
+                    } else {
+                        ui::ButtonVariant::Gray
+                    },
+                    ui::ButtonSize::Xs,
+                )
+                .label(e)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    let _ = crate::store::set_neural_persona_key(
+                        "neuralEyewearPreset",
+                        serde_json::Value::String(e.to_string()),
+                    );
+                    this.show_notice(
+                        format!("Smart Eyewear Studio: {e} (Real-Time Lens Reflection)"),
+                        window,
+                        cx,
+                    );
+                    cx.notify();
+                })),
+            );
+        }
+
+        let glow = persona.studio_glow;
+        let gaze = persona.gaze_auto_center;
+        let lipsync = persona.ai_lip_sync;
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(10.))
+            .rounded(px(8.))
+            .bg(Hsla::from(theme.gray_2))
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(Hsla::from(theme.editor.text_1))
+                    .child("Neural Appearance, Lip-Sync & Gaze Studio (Apple ANE)"),
+            )
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .text_color(Hsla::from(theme.gray_11))
+                    .child("Hair Styling Preset:"),
+            )
+            .child(hair_row)
+            .child(
+                div()
+                    .text_size(px(10.5))
+                    .text_color(Hsla::from(theme.gray_11))
+                    .child("Smart Eyewear Studio:"),
+            )
+            .child(eyewear_row)
+            .child(
+                ui::Subfield::plain(&theme, "Studio Lighting & Skin Harmony Glow").child(
+                    ui::Toggle::plain(&theme, "neural-studio-glow", glow).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            let next = !glow;
+                            let _ = crate::store::set_neural_persona_key(
+                                "neuralStudioGlow",
+                                serde_json::Value::Bool(next),
+                            );
+                            if next {
+                                this.show_notice(
+                                    "Studio Lighting & Skin Harmony Glow ON (Apple ANE)",
+                                    window,
+                                    cx,
+                                );
+                            }
+                            cx.notify();
+                        },
+                    )),
+                ),
+            )
+            .child(
+                ui::Subfield::plain(&theme, "Gaze Auto-Center (Teleprompter Eye Contact)").child(
+                    ui::Toggle::plain(&theme, "neural-gaze-center", gaze).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            let next = !gaze;
+                            let _ = crate::store::set_neural_persona_key(
+                                "neuralGazeAutoCenter",
+                                serde_json::Value::Bool(next),
+                            );
+                            this.show_notice(
+                                if next {
+                                    "Gaze Auto-Center ON: Pupils aligned to camera lens."
+                                } else {
+                                    "Gaze Auto-Center OFF."
+                                },
+                                window,
+                                cx,
+                            );
+                            cx.notify();
+                        },
+                    )),
+                ),
+            )
+            .child(
+                ui::Subfield::plain(&theme, "AI Lip-Sync Jump-Cut Smoothing").child(
+                    ui::Toggle::plain(&theme, "neural-ai-lipsync", lipsync).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            let next = !lipsync;
+                            let _ = crate::store::set_neural_persona_key(
+                                "neuralAiLipSync",
+                                serde_json::Value::Bool(next),
+                            );
+                            this.show_notice(
+                            if next {
+                                "AI Lip-Sync Smoothing ON: Mouth frames interpolated across cuts."
+                            } else {
+                                "AI Lip-Sync Smoothing OFF."
+                            },
+                            window,
+                            cx,
+                        );
+                            cx.notify();
+                        },
+                    )),
+                ),
+            )
             .into_any_element()
     }
 
@@ -2339,6 +2516,76 @@ impl EditorWindow {
                                                 .on_click(cx.listener(|this, _, window, cx| {
                                                     this.normalize_and_clean_project_audio(
                                                         false, window, cx,
+                                                    );
+                                                })),
+                                            ),
+                                        ),
+                                )
+                                .child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "audio-pro-15-stage-master",
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("15-Stage Studio Master (-14 LUFS · Click Silencer · AGC · De-Reverb)")
+                                    .full_width()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.apply_studio_audio_pro_master(window, cx);
+                                    })),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(4.))
+                                        .child(
+                                            div().flex_1().child(
+                                                ui::Button::plain(
+                                                    &theme,
+                                                    "audio-export-mp3-320",
+                                                    ui::ButtonVariant::Gray,
+                                                    ui::ButtonSize::Xs,
+                                                )
+                                                .label("Export 320k MP3")
+                                                .full_width()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.export_mastered_audio_preset(
+                                                        "mp3", window, cx,
+                                                    );
+                                                })),
+                                            ),
+                                        )
+                                        .child(
+                                            div().flex_1().child(
+                                                ui::Button::plain(
+                                                    &theme,
+                                                    "audio-export-wav-24",
+                                                    ui::ButtonVariant::Gray,
+                                                    ui::ButtonSize::Xs,
+                                                )
+                                                .label("Export 24-bit WAV")
+                                                .full_width()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.export_mastered_audio_preset(
+                                                        "wav", window, cx,
+                                                    );
+                                                })),
+                                            ),
+                                        )
+                                        .child(
+                                            div().flex_1().child(
+                                                ui::Button::plain(
+                                                    &theme,
+                                                    "audio-export-aac",
+                                                    ui::ButtonVariant::Gray,
+                                                    ui::ButtonSize::Xs,
+                                                )
+                                                .label("Export AAC (.m4a)")
+                                                .full_width()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.export_mastered_audio_preset(
+                                                        "m4a", window, cx,
                                                     );
                                                 })),
                                             ),

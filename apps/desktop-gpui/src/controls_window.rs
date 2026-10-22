@@ -294,7 +294,13 @@ impl ControlsWindow {
                                 .top_0()
                                 .bottom_0()
                                 .w(gpui::relative(level as f32))
-                                .bg(theme.blue_9),
+                                .bg(if level > 0.92 {
+                                    theme.red_9
+                                } else if level > 0.78 {
+                                    theme.amber_6
+                                } else {
+                                    theme.blue_9
+                                }),
                         ),
                 )
             })
@@ -579,8 +585,26 @@ impl ControlsWindow {
                                     }))
                                 },
                             ))
-                            // TODO: the recording settings popover menu.
-                            .child(self.action_button("settings", "icons/settings.svg", true)),
+                            .child(
+                                self.action_button("settings", "icons/settings.svg", false)
+                                    .when(crate::store::studio_sound_by_default(), |this| {
+                                        this.bg(Theme::with_alpha(theme.blue_9, 0.16))
+                                    })
+                                    .tooltip(move |_, cx| {
+                                        let on = crate::store::studio_sound_by_default();
+                                        let label = if on {
+                                            "Studio Voice (AI Noise Shield): ON"
+                                        } else {
+                                            "Studio Voice (AI Noise Shield): OFF"
+                                        };
+                                        ui::Tooltip::new(&theme, label).view(cx)
+                                    })
+                                    .on_click(cx.listener(|_, _, _, cx| {
+                                        let next = !crate::store::studio_sound_by_default();
+                                        let _ = crate::store::set_studio_sound_by_default(next);
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
             .child(

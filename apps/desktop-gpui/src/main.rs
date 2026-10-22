@@ -3,6 +3,7 @@
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod android_window;
 mod app_sounds;
 mod app_windows;
 mod assets;

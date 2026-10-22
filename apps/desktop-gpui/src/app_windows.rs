@@ -3979,6 +3979,10 @@ pub fn toggle_camera_bubble(cx: &mut App) {
     }
 }
 
+pub fn open_android_window(cx: &mut App) {
+    let _ = crate::android_window::AndroidWindow::open(cx);
+}
+
 pub fn toggle_editor_spotlight_or_zoom(cx: &mut App) {
     if !cx.has_global::<AppWindows>() {
         return;

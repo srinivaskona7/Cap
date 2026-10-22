@@ -6680,6 +6680,21 @@ impl MainWindow {
                     ),
             )
             .child(
+                ui::Button::plain(
+                    &theme,
+                    "main-open-android-mirror-hub",
+                    ui::ButtonVariant::Gray,
+                    ui::ButtonSize::Sm,
+                )
+                .icon("icons/mobile.svg")
+                .label("Pro Android Mirror & Remote Hub (Screen-Off Stealth)")
+                .height(px(30.))
+                .full_width()
+                .on_click(cx.listener(|_, _, _window, cx| {
+                    app_windows::open_android_window(cx);
+                })),
+            )
+            .child(
                 div()
                     .px(px(4.))
                     .text_size(px(10.))

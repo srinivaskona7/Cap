@@ -964,6 +964,71 @@ pub fn set_click_and_keystroke_sfx_by_default(enabled: bool) -> bool {
     )
 }
 
+pub fn android_screen_off_stealth_by_default() -> bool {
+    bool_at(
+        &store_section(GENERAL_SETTINGS),
+        "androidScreenOffStealth",
+        true,
+    )
+}
+
+pub fn set_android_screen_off_stealth_by_default(enabled: bool) -> bool {
+    set_store_setting(
+        GENERAL_SETTINGS,
+        "androidScreenOffStealth",
+        Value::Bool(enabled),
+    )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeuralPersonaSettings {
+    pub hair_preset: String,
+    pub eyewear_preset: String,
+    pub studio_glow: bool,
+    pub gaze_auto_center: bool,
+    pub ai_lip_sync: bool,
+    pub semantic_auto_zoom: bool,
+    pub live_privacy_shield: bool,
+}
+
+impl Default for NeuralPersonaSettings {
+    fn default() -> Self {
+        Self {
+            hair_preset: "Original".to_string(),
+            eyewear_preset: "None".to_string(),
+            studio_glow: false,
+            gaze_auto_center: false,
+            ai_lip_sync: false,
+            semantic_auto_zoom: false,
+            live_privacy_shield: false,
+        }
+    }
+}
+
+pub fn neural_persona_settings() -> NeuralPersonaSettings {
+    let section = store_section(GENERAL_SETTINGS);
+    let str_at = |key: &str, default: &str| -> String {
+        section
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or(default)
+            .to_string()
+    };
+    NeuralPersonaSettings {
+        hair_preset: str_at("neuralHairPreset", "Original"),
+        eyewear_preset: str_at("neuralEyewearPreset", "None"),
+        studio_glow: bool_at(&section, "neuralStudioGlow", false),
+        gaze_auto_center: bool_at(&section, "neuralGazeAutoCenter", false),
+        ai_lip_sync: bool_at(&section, "neuralAiLipSync", false),
+        semantic_auto_zoom: bool_at(&section, "neuralSemanticAutoZoom", false),
+        live_privacy_shield: bool_at(&section, "neuralLivePrivacyShield", false),
+    }
+}
+
+pub fn set_neural_persona_key(key: &str, val: Value) -> bool {
+    set_store_setting(GENERAL_SETTINGS, key, val)
+}
+
 pub fn studio_sound_by_default() -> bool {
     bool_at(
         &store_section(AUDIO_ENHANCEMENT),

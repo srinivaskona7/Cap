@@ -6167,6 +6167,130 @@ impl EditorWindow {
         self.show_notice(msg, window, cx);
     }
 
+    pub(crate) fn apply_studio_audio_pro_master(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let cfg = cap_audio::StudioAudioProConfig::default();
+        let wav_paths: Vec<PathBuf> = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| {
+                tl.audio_segments
+                    .iter()
+                    .filter(|seg| seg.path.ends_with(".wav") && !seg.path.contains("sfx"))
+                    .map(|seg| self.project_path.join(&seg.path))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        for wav_path in wav_paths {
+            if let Ok(mut reader) = hound::WavReader::open(&wav_path) {
+                let spec = reader.spec();
+                if spec.sample_format == hound::SampleFormat::Float {
+                    let raw: Vec<f32> = reader.samples::<f32>().flatten().collect();
+                    let mastered = cap_audio::apply_studio_audio_pro_chain(
+                        &raw,
+                        spec.channels,
+                        spec.sample_rate,
+                        &cfg,
+                    );
+                    if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+                        for s in mastered {
+                            let _ = writer.write_sample(s);
+                        }
+                        let _ = writer.finalize();
+                    }
+                }
+            }
+        }
+
+        let metrics = self.compute_project_audio_levels();
+        let gain_delta = metrics.recommended_gain_db;
+        self.edit_project("studio-audio-pro-15-stage", window, cx, move |project| {
+            project.audio.mute = false;
+            project.audio.improve = true;
+            project.audio.mic_volume_db =
+                (project.audio.mic_volume_db + gain_delta).clamp(-8.0, 8.0);
+            if project.audio.system_volume_db > -12.0 {
+                project.audio.system_volume_db = -12.0;
+            }
+            true
+        });
+        self.show_notice(
+            "Applied 15-Stage Studio Audio Pro Master (-14 LUFS · RNNoise · Click Silencer · De-Reverb · AGC · -12dB Auto-Duck)!",
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn export_mastered_audio_preset(
+        &mut self,
+        ext: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let project_path = self.project_path.clone();
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let stem = self.summary().map_or_else(
+            || "sricap-audio".to_string(),
+            |s| s.pretty_name.replace(['/', '\\', ':', ' '], "-"),
+        );
+        let out_file = exports_dir.join(format!("{stem}-mastered.{ext}"));
+        let tmp_wav = exports_dir.join(format!("{stem}-tmp-master.wav"));
+        self.show_notice(
+            format!("Exporting mastered .{ext} audio to Exports/..."),
+            window,
+            cx,
+        );
+
+        cx.spawn_in(window, async move |this, cx| {
+            let ok = cx
+                .background_executor()
+                .spawn(async move {
+                    if crate::transcription::export_project_audio_wav(&project_path, &tmp_wav)
+                        .is_err()
+                    {
+                        return false;
+                    }
+                    if ext == "wav" {
+                        return std::fs::rename(&tmp_wav, &out_file).is_ok();
+                    }
+                    let mut cmd = std::process::Command::new("ffmpeg");
+                    cmd.arg("-y").arg("-i").arg(&tmp_wav);
+                    if ext == "mp3" {
+                        cmd.args(["-c:a", "libmp3lame", "-b:a", "320k"]);
+                    } else {
+                        cmd.args(["-c:a", "aac", "-b:a", "256k"]);
+                    }
+                    cmd.arg(&out_file);
+                    let status = cmd.status().map(|s| s.success()).unwrap_or(false);
+                    let _ = std::fs::remove_file(&tmp_wav);
+                    status
+                })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                if ok {
+                    this.show_notice(
+                        format!("Exported mastered .{ext} audio to Exports/!"),
+                        window,
+                        cx,
+                    );
+                } else {
+                    this.show_notice(
+                        format!("Could not export .{ext} audio (verify project has audio)."),
+                        window,
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
     pub(crate) fn export_current_frame_thumbnail(
         &mut self,
         window: &mut Window,

@@ -258,6 +258,60 @@ impl<T: AudioSampleSource> AudioSampleSource for VoiceSource<'_, T> {
     }
 }
 
+pub struct StudioVoiceFilter {
+    denoiser: Box<DenoiseState>,
+    frame_buf: [f32; FRAME_SIZE],
+    out_buf: [f32; FRAME_SIZE],
+    buf_pos: usize,
+    enabled: bool,
+}
+
+impl StudioVoiceFilter {
+    pub fn new(enabled: bool) -> Self {
+        Self {
+            denoiser: Box::new(DenoiseState::new()),
+            frame_buf: [0.0; FRAME_SIZE],
+            out_buf: [0.0; FRAME_SIZE],
+            buf_pos: 0,
+            enabled,
+        }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    pub fn process_samples(&mut self, samples: &mut [f32]) {
+        if !self.enabled {
+            return;
+        }
+        for sample in samples.iter_mut() {
+            let scaled = if sample.is_finite() {
+                sample.clamp(-1.0, 1.0) * 32_768.0
+            } else {
+                0.0
+            };
+            self.frame_buf[self.buf_pos] = scaled;
+            self.buf_pos += 1;
+
+            if self.buf_pos == FRAME_SIZE {
+                let _ = self
+                    .denoiser
+                    .process_frame(&mut self.out_buf, &self.frame_buf);
+                self.buf_pos = 0;
+            }
+
+            if self.buf_pos < FRAME_SIZE {
+                *sample = (self.out_buf[self.buf_pos] / 32_768.0).clamp(-1.0, 1.0);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
