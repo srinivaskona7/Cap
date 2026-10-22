@@ -5622,9 +5622,12 @@ impl MainWindow {
                             .windows
                             .iter()
                             .find(|w| w.app == tab.browser)
-                            .map(|w| target_thumbnails::TargetThumb {
-                                image: None,
-                                app_icon: self.thumbnails.window(&w.id).app_icon,
+                            .map(|w| {
+                                let win_thumb = self.thumbnails.window(&w.id);
+                                target_thumbnails::TargetThumb {
+                                    image: win_thumb.image,
+                                    app_icon: win_thumb.app_icon,
+                                }
                             })
                             .unwrap_or_default();
                         cards.push(
@@ -5767,21 +5770,54 @@ impl MainWindow {
                             ),
                     )
                     .child(
-                        ui::Button::plain(
-                            &theme,
-                            "window-picker-hover-screen",
-                            ui::ButtonVariant::Gray,
-                            ui::ButtonSize::Xs,
-                        )
-                        .label("Or Hover on Screen to Select Window")
-                        .icon("icons/cursor.svg")
-                        .full_width()
-                        .on_click(cx.listener(|this, _, _window, cx| {
-                            this.selected_window = None;
-                            this.target = Some(TargetType::Window);
-                            this.close_panel(cx);
-                            this.sync_overlays(cx);
-                        })),
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(6.))
+                            .w_full()
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "window-picker-hover-screen",
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("Hover on Screen")
+                                    .icon("icons/cursor.svg")
+                                    .full_width()
+                                    .on_click(cx.listener(
+                                        |this, _, _window, cx| {
+                                            this.selected_window = None;
+                                            this.target = Some(TargetType::Window);
+                                            this.close_panel(cx);
+                                            this.sync_overlays(cx);
+                                        },
+                                    )),
+                                ),
+                            )
+                            .child(
+                                div().flex_1().child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        "window-picker-fullscreen-display",
+                                        ui::ButtonVariant::Blue,
+                                        ui::ButtonSize::Xs,
+                                    )
+                                    .label("Full Screen Display")
+                                    .icon("icons/screen.svg")
+                                    .full_width()
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.open_panel(
+                                                Panel::Target(TargetType::Display),
+                                                window,
+                                                cx,
+                                            );
+                                        },
+                                    )),
+                                ),
+                            ),
                     ),
             )
         } else {

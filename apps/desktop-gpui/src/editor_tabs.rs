@@ -2762,24 +2762,6 @@ impl EditorWindow {
                                     div().flex_1().child(
                                         ui::Button::plain(
                                             &theme,
-                                            "audio-add-sfx-whoosh",
-                                            ui::ButtonVariant::Gray,
-                                            ui::ButtonSize::Sm,
-                                        )
-                                        .label("+ SFX Whoosh")
-                                        .icon("icons/music.svg")
-                                        .full_width()
-                                        .on_click(
-                                            cx.listener(|this, _, window, cx| {
-                                                this.add_sfx_cue_at_playhead(true, window, cx);
-                                            }),
-                                        ),
-                                    ),
-                                )
-                                .child(
-                                    div().flex_1().child(
-                                        ui::Button::plain(
-                                            &theme,
                                             "audio-add-sfx-ding",
                                             ui::ButtonVariant::Gray,
                                             ui::ButtonSize::Sm,
@@ -2789,7 +2771,7 @@ impl EditorWindow {
                                         .full_width()
                                         .on_click(
                                             cx.listener(|this, _, window, cx| {
-                                                this.add_sfx_cue_at_playhead(false, window, cx);
+                                                 this.add_sfx_cue_at_playhead(false, window, cx);
                                             }),
                                         ),
                                     ),

@@ -984,29 +984,28 @@ pub fn list_window_targets() -> Vec<(WindowOption, Window)> {
                 return None;
             }
 
-            let label = window.name().filter(|name| !name.trim().is_empty())?;
             let app = window.owner_name()?;
-
             if app == "Window Server" {
                 return None;
             }
 
-            // Our own windows never belong in the picker: the recording flow
-            // excludes them from the capture filter anyway
-            // (`app_windows::begin_recording`), so offering one as a target
-            // records a hole. Matched by owner pid rather than title or
-            // bundle id -- the dev binary is unbundled, and most of our
-            // windows carry no CG title at all. (The shared
-            // `screen_capture::list_windows` has no such filter; the Tauri
-            // main window only escapes it by being a level>0 panel.)
+            // Fallback to app name if window.name() is empty or untitled
+            let label = window
+                .name()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| app.clone());
+
+            // Our own windows never belong in the picker
             #[cfg(target_os = "macos")]
             if window.raw_handle().owner_pid() == Some(std::process::id() as i32) {
                 return None;
             }
 
             #[cfg(target_os = "macos")]
-            if window.raw_handle().level() != Some(0) {
-                return None;
+            if let Some(level) = window.raw_handle().level() {
+                if level < 0 || level > 5 {
+                    return None;
+                }
             }
 
             Some((
