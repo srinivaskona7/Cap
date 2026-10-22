@@ -601,6 +601,36 @@ impl WindowImpl {
             .map(|window| window.retained())
     }
 
+    pub fn as_content_filter(
+        &self,
+        content: arc::R<sc::ShareableContent>,
+    ) -> Option<arc::R<sc::ContentFilter>> {
+        let window = self.as_sc(content)?;
+        Some(sc::ContentFilter::with_desktop_independent_window(
+            window.as_ref(),
+        ))
+    }
+
+    pub fn bring_to_front(&self) -> bool {
+        use cocoa::base::{id, nil};
+        use objc::{class, msg_send, sel, sel_impl};
+
+        let Some(pid) = self.owner_pid() else {
+            return false;
+        };
+
+        objc::rc::autoreleasepool(|| unsafe {
+            let running_app_cls = class!(NSRunningApplication);
+            let app: id = msg_send![running_app_cls, runningApplicationWithProcessIdentifier: pid];
+            if app == nil {
+                return false;
+            }
+            let options: usize = (1 << 0) | (1 << 1);
+            let activated: objc::runtime::BOOL = msg_send![app, activateWithOptions: options];
+            activated == objc::runtime::YES
+        })
+    }
+
     pub fn display(&self) -> Option<DisplayImpl> {
         let descriptions = core_graphics::window::create_description_from_array(
             CFArray::from_copyable(&[self.0]),

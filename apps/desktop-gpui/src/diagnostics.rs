@@ -37,8 +37,6 @@ use crate::{permissions, store};
 /// either app's "newest log" lookup pick up the other's.
 pub const LOG_FILE_PREFIX: &str = "cap-gpui.log";
 
-/// `MAX_SIZE` in `src-tauri/src/logging.rs`.
-
 /// How much of the self-test's stderr is kept for a failure message.
 const STDERR_TAIL_BYTES: usize = 8 * 1024;
 

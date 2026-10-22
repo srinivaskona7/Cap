@@ -303,8 +303,7 @@ impl ControlsWindow {
     fn render_camera_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         let session = self.session.read(cx);
-        let has_camera =
-            session.has_camera() || Feeds::global(cx).read(cx).camera.is_some();
+        let has_camera = session.has_camera() || Feeds::global(cx).read(cx).camera.is_some();
         let camera_open = cx
             .try_global::<crate::app_windows::AppWindows>()
             .is_some_and(|windows| windows.camera.is_some());

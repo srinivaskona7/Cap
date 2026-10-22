@@ -219,16 +219,32 @@ impl ScreenCaptureConfig<CMSampleBufferCapture> {
         let display = Display::from_id(&self.config.display)
             .ok_or_else(|| SourceError::NoDisplay(self.config.display.clone()))?;
 
-        let excluded_sc_windows =
-            excluded_shareable_windows(&self.excluded_windows, &self.shareable_content, "initial");
+        let isolated_window_filter = self.config.window_id.as_ref().and_then(|win_id| {
+            let window = Window::from_id(win_id)?;
+            window.raw_handle().bring_to_front();
+            window
+                .raw_handle()
+                .as_content_filter(self.shareable_content.clone())
+        });
+        let using_isolated_window = isolated_window_filter.is_some();
 
-        let content_filter = display
-            .raw_handle()
-            .as_content_filter_excluding_windows(
-                self.shareable_content.clone(),
-                excluded_sc_windows,
-            )
-            .ok_or(SourceError::AsContentFilter)?;
+        let content_filter = if let Some(filter) = isolated_window_filter {
+            filter
+        } else {
+            let excluded_sc_windows = excluded_shareable_windows(
+                &self.excluded_windows,
+                &self.shareable_content,
+                "initial",
+            );
+
+            display
+                .raw_handle()
+                .as_content_filter_excluding_windows(
+                    self.shareable_content.clone(),
+                    excluded_sc_windows,
+                )
+                .ok_or(SourceError::AsContentFilter)?
+        };
 
         debug!("SCK content filter: {:?}", content_filter);
 
@@ -257,7 +273,7 @@ impl ScreenCaptureConfig<CMSampleBufferCapture> {
         settings.set_pixel_format(cv::PixelFormat::_420V);
         settings.set_color_space_name(cg::color_space::names::srgb());
 
-        if let Some(crop_bounds) = self.config.crop_bounds {
+        if !using_isolated_window && let Some(crop_bounds) = self.config.crop_bounds {
             debug!("crop bounds: {:?}", crop_bounds);
             settings.set_src_rect(cg::Rect::new(
                 crop_bounds.position().x(),
@@ -948,13 +964,24 @@ async fn rebuild_capturer(params: &CapturerRebuildParams) -> anyhow::Result<Capt
     let display = Display::from_id(&params.display_id)
         .ok_or_else(|| anyhow!("Display not found during restart: {:?}", params.display_id))?;
 
-    let excluded_sc_windows =
-        excluded_shareable_windows(&params.excluded_windows, &shareable_content, "restart");
+    let isolated_window_filter = params.config.window_id.as_ref().and_then(|win_id| {
+        Window::from_id(win_id)?
+            .raw_handle()
+            .as_content_filter(shareable_content.clone())
+    });
+    let using_isolated_window = isolated_window_filter.is_some();
 
-    let content_filter = display
-        .raw_handle()
-        .as_content_filter_excluding_windows(shareable_content, excluded_sc_windows)
-        .ok_or_else(|| anyhow!("Failed to create content filter during restart"))?;
+    let content_filter = if let Some(filter) = isolated_window_filter {
+        filter
+    } else {
+        let excluded_sc_windows =
+            excluded_shareable_windows(&params.excluded_windows, &shareable_content, "restart");
+
+        display
+            .raw_handle()
+            .as_content_filter_excluding_windows(shareable_content, excluded_sc_windows)
+            .ok_or_else(|| anyhow!("Failed to create content filter during restart"))?
+    };
 
     let size = PhysicalSize::new(
         params.video_info.width as f64,
@@ -977,7 +1004,7 @@ async fn rebuild_capturer(params: &CapturerRebuildParams) -> anyhow::Result<Capt
     settings.set_pixel_format(cv::PixelFormat::_420V);
     settings.set_color_space_name(cg::color_space::names::srgb());
 
-    if let Some(crop_bounds) = params.config.crop_bounds {
+    if !using_isolated_window && let Some(crop_bounds) = params.config.crop_bounds {
         settings.set_src_rect(cg::Rect::new(
             crop_bounds.position().x(),
             crop_bounds.position().y(),

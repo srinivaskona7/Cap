@@ -354,6 +354,164 @@ pub fn import_image_from_path(source_path: PathBuf, cx: &mut App) {
     spawn_import(cx, move |tx| run_image_import(&source_path, &tx));
 }
 
+pub fn open_studio_editor_directly(cx: &mut App) {
+    if let Some(item) = crate::library::list_recordings().into_iter().find(|item| {
+        item.mode == crate::library::RecordingMode::Studio && item.status.is_complete()
+    }) {
+        crate::app_windows::open_editor(item.path, cx);
+        return;
+    }
+    create_new_blank_studio_project_and_open(cx);
+}
+
+pub fn create_new_blank_studio_project_and_open(cx: &mut App) {
+    spawn_import(cx, move |tx| {
+        let recordings_dir = crate::recording::recordings_dir();
+        let now = chrono::Local::now();
+        let project_name = format!("Studio Canvas {}", now.format("%Y-%m-%d at %H.%M.%S"));
+        let project_path = unique_project_path(&recordings_dir, &sanitize_filename(&project_name));
+        let sink = ProgressSink {
+            tx: &tx,
+            kind: ImportKind::Video,
+            project_path: &project_path,
+            pretty_name: &project_name,
+        };
+        sink.send(ImportStage::Converting, 0.2, "Creating Studio workspace...");
+        match synthesize_blank_studio_project(&project_path, &project_name) {
+            Ok(()) => {
+                sink.send(ImportStage::Complete, 1.0, "Studio ready!");
+            }
+            Err(err) => {
+                sink.send(ImportStage::Failed, 0.0, &err);
+            }
+        }
+    });
+}
+
+fn synthesize_blank_studio_project(project_path: &Path, project_name: &str) -> Result<(), String> {
+    let segment_dir = project_path
+        .join("content")
+        .join("segments")
+        .join("segment-0");
+    std::fs::create_dir_all(&segment_dir)
+        .map_err(|e| format!("Failed to create studio directory: {e}"))?;
+    let output_video_path = segment_dir.join("display.mp4");
+    let width = 1920u32;
+    let height = 1080u32;
+    let fps = 30u32;
+    let duration_secs = 4u32;
+    let total_frames = fps * duration_secs;
+
+    let mut output = avformat::output(&output_video_path)
+        .map_err(|e| format!("Failed to create studio canvas video: {e}"))?;
+    let mut video_out = open_h264_encoder(
+        &mut output,
+        width,
+        height,
+        fps,
+        ffmpeg::Rational::new(1, fps as i32),
+    )?;
+    output
+        .write_header()
+        .map_err(|e| format!("Failed to write studio canvas header: {e}"))?;
+
+    let pix_fmt = video_out.pixel_format;
+    for idx in 0..total_frames {
+        let mut frame = ffmpeg::frame::Video::new(pix_fmt, width, height);
+        for b in frame.data_mut(0) {
+            *b = 24;
+        }
+        if frame.planes() > 1 {
+            for p in 1..frame.planes() {
+                for b in frame.data_mut(p) {
+                    *b = 128;
+                }
+            }
+        }
+        let ts = Duration::from_secs_f64(f64::from(idx) / f64::from(fps));
+        video_out.queue_frame(frame, ts, &mut output)?;
+    }
+    video_out.flush(&mut output)?;
+    output
+        .write_trailer()
+        .map_err(|e| format!("Failed to finalize studio canvas video: {e}"))?;
+
+    imported_video_meta(
+        project_path,
+        project_name,
+        fps,
+        false,
+        StudioRecordingStatus::Complete,
+    )
+    .save_for_project()
+    .map_err(|e| format!("Failed to save Studio metadata: {e:?}"))?;
+
+    ProjectConfiguration::default()
+        .write(project_path)
+        .map_err(|e| format!("Failed to save Studio config: {e}"))?;
+
+    let thumbnail = crate::library::bundle_thumbnail_path(project_path);
+    let _ = crate::library::create_screenshot(&output_video_path, &thumbnail, None);
+    Ok(())
+}
+
+pub(crate) fn transcode_camera_overlay_for_project(
+    source_path: &Path,
+    project_path: &Path,
+) -> Result<(), String> {
+    let mut meta = RecordingMeta::load_for_project(project_path)
+        .map_err(|e| format!("Failed to load project metadata: {e:?}"))?;
+    let segment_dir = project_path
+        .join("content")
+        .join("segments")
+        .join("segment-0");
+    std::fs::create_dir_all(&segment_dir)
+        .map_err(|e| format!("Failed to create segment directory: {e}"))?;
+    let camera_video_path = segment_dir.join("camera.mp4");
+    let (fps, _) = transcode_video(
+        source_path,
+        &camera_video_path,
+        None,
+        project_path,
+        &|_| {},
+        None,
+    )?;
+
+    match &mut meta.inner {
+        RecordingMetaInner::Studio(studio) => match studio.as_mut() {
+            StudioRecordingMeta::MultipleSegments { inner } => {
+                if let Some(first) = inner.segments.first_mut() {
+                    first.camera = Some(VideoMeta {
+                        path: "content/segments/segment-0/camera.mp4".into(),
+                        fps,
+                        start_time: Some(0.0),
+                        device_id: None,
+                    });
+                }
+            }
+            StudioRecordingMeta::SingleSegment { segment } => {
+                segment.camera = Some(VideoMeta {
+                    path: "content/segments/segment-0/camera.mp4".into(),
+                    fps,
+                    start_time: Some(0.0),
+                    device_id: None,
+                });
+            }
+        },
+        _ => return Err("Project is not a Studio recording".to_string()),
+    }
+
+    meta.save_for_project()
+        .map_err(|e| format!("Failed to save updated camera metadata: {e:?}"))?;
+
+    if let Ok(mut config) = ProjectConfiguration::load(project_path) {
+        config.camera.hide = false;
+        let _ = config.write(project_path);
+    }
+
+    Ok(())
+}
+
 /// One worker thread plus its foreground drain. A dedicated thread rather
 /// than the background executor because a transcode holds it for the whole
 /// conversion -- `tokio::task::spawn_blocking`'s role in the Tauri version.

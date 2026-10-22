@@ -167,8 +167,6 @@ pub const MINIMAP_HEIGHT: f32 = 10.;
 pub const MINIMAP_BAR_HEIGHT: f32 = 4.;
 pub const MINIMAP_MAX_WIDTH: f32 = 78.;
 
-/// The edge fade (`TL/index.tsx:1103-1106`).
-
 // ---------------------------------------------------------------------------
 // Colours
 // ---------------------------------------------------------------------------

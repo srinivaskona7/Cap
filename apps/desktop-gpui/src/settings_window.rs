@@ -2169,6 +2169,17 @@ impl SettingsWindow {
             )
             .child(
                 self.button(
+                    "recordings-open-studio-direct",
+                    (ui::ButtonVariant::Dark, Some("icons/film-cut.svg")),
+                    "Open Studio Editor",
+                    false,
+                    cx,
+                    |_, _, cx| cx.defer(crate::import::open_studio_editor_directly),
+                )
+                .height(px(36.)),
+            )
+            .child(
+                self.button(
                     "recordings-import",
                     (ui::ButtonVariant::Gray, Some("icons/import.svg")),
                     "Import",
@@ -3718,10 +3729,7 @@ impl SettingsWindow {
         let path = self.settings.recordings_path.clone();
         let is_custom = path.is_some();
         let display = path.unwrap_or_else(|| {
-            format!(
-                "Default ({})",
-                crate::recording::recordings_dir().display()
-            )
+            format!("Default ({})", crate::recording::recordings_dir().display())
         });
 
         let mut actions = div().flex().flex_row().justify_end().gap(px(8.));
@@ -3754,6 +3762,26 @@ impl SettingsWindow {
             false,
             cx,
             |this, window, cx| this.choose_recordings_folder(window, cx),
+        ));
+        actions = actions.child(self.button(
+            "storage-open-studio-direct",
+            (ui::ButtonVariant::Gray, Some("icons/film-cut.svg")),
+            "Open Studio Editor",
+            false,
+            cx,
+            |_, _, cx| cx.defer(crate::import::open_studio_editor_directly),
+        ));
+        actions = actions.child(self.button(
+            "storage-open-exports-dir",
+            (ui::ButtonVariant::Gray, Some("icons/folder.svg")),
+            "Open Exports Folder",
+            false,
+            cx,
+            |_, _, _| {
+                let exports_dir = crate::recording::recordings_dir().join("Exports");
+                let _ = std::fs::create_dir_all(&exports_dir);
+                crate::library::reveal_in_folder(&exports_dir);
+            },
         ));
         actions = actions.child(self.button(
             "storage-delete-all-recordings",

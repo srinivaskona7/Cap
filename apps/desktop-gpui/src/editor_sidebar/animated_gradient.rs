@@ -307,8 +307,7 @@ fn header_button(
     icon: &'static str,
     label: &'static str,
     tooltip: &'static str,
-    disabled: bool,
-    pressed: bool,
+    (disabled, pressed): (bool, bool),
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
     let theme = *theme;
@@ -857,8 +856,7 @@ impl EditorWindow {
                     "icons/save.svg",
                     "Save",
                     "Save the current gradient",
-                    save_disabled,
-                    save_open,
+                    (save_disabled, save_open),
                     cx.listener(move |this, _, window, cx| {
                         if save_open {
                             this.close_animated_gradient_save(cx);
@@ -1090,8 +1088,7 @@ impl EditorWindow {
                     "icons/plus.svg",
                     "Add",
                     "Add a colour",
-                    count >= MAX_STOPS,
-                    false,
+                    (count >= MAX_STOPS, false),
                     cx.listener(|this, _, window, cx| {
                         this.add_animated_gradient_stop(window, cx);
                     }),
@@ -1195,8 +1192,7 @@ impl EditorWindow {
                             "icons/rotate-ccw.svg",
                             "Reset",
                             "Reset fine-tune settings",
-                            false,
-                            false,
+                            (false, false),
                             cx.listener(|this, _, window, cx| {
                                 this.reset_animated_gradient_fine_tune(window, cx);
                             }),

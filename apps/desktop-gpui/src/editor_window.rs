@@ -4487,9 +4487,11 @@ impl EditorWindow {
             return;
         }
         let valid_target = self.lane_reorder_position_valid(current.source, x, y);
-        let target_index = valid_target
-            .then(|| self.lane_reorder_target_index(current.source, y))
-            .unwrap_or(current.target_index);
+        let target_index = if valid_target {
+            self.lane_reorder_target_index(current.source, y)
+        } else {
+            current.target_index
+        };
         if promote {
             self.history.pause();
         }
@@ -5708,11 +5710,7 @@ impl EditorWindow {
         self.toggle_voiceover_recording(window, cx);
     }
 
-    pub(crate) fn clear_all_audio_segments(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn clear_all_audio_segments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.edit_project("clear-all-audio-segments", window, cx, |project| {
             if let Some(tl) = project.timeline.as_mut()
                 && !tl.audio_segments.is_empty()
@@ -5725,11 +5723,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn add_text_at_playhead(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn add_text_at_playhead(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_track_kind(TrackKind::Text, window, cx);
     }
 
@@ -5980,11 +5974,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn toggle_cursor_halo_boost(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn toggle_cursor_halo_boost(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.edit_project("toggle-cursor-halo-boost", window, cx, |project| {
             project.cursor.hide = false;
             project.cursor.raw = false;
@@ -6134,7 +6124,13 @@ impl EditorWindow {
             let _ = std::fs::create_dir_all(&exports_dir);
             let safe_title: String = title
                 .chars()
-                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
                 .collect();
             let out_png = exports_dir.join(format!("{safe_title}-thumbnail.png"));
             if dyn_img
@@ -6179,7 +6175,13 @@ impl EditorWindow {
             .unwrap_or_else(|| "sricap-rec".to_string());
         let safe_title: String = title
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let exports_dir = crate::recording::recordings_dir().join("Exports");
         let _ = std::fs::create_dir_all(&exports_dir);
@@ -6361,11 +6363,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn add_code_snippet_callout(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn add_code_snippet_callout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let total = self.total_duration().max(1.0);
         let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
         let end = (start + 3.5).min(total);
@@ -6509,7 +6507,13 @@ impl EditorWindow {
             .unwrap_or_else(|| "sricap-rec".to_string());
         let safe_title: String = title
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let exports_dir = crate::recording::recordings_dir().join("Exports");
         if std::fs::create_dir_all(&exports_dir).is_err() {
@@ -6576,11 +6580,7 @@ impl EditorWindow {
         );
     }
 
-    pub(crate) fn add_quiz_challenge_card(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn add_quiz_challenge_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let total = self.total_duration().max(1.0);
         let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
         let end = (start + 3.0).min(total);
@@ -6613,11 +6613,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn add_custom_shortcut_pill(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn add_custom_shortcut_pill(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let total = self.total_duration().max(1.0);
         let start = self.playhead.clamp(0.0, (total - 0.5).max(0.0));
         let end = (start + 2.5).min(total);
@@ -6928,7 +6924,13 @@ impl EditorWindow {
             .unwrap_or_else(|| "sricap-rec".to_string());
         let safe_title: String = title
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let exports_dir = crate::recording::recordings_dir().join("Exports");
         let _ = std::fs::create_dir_all(&exports_dir);
@@ -6998,7 +7000,6 @@ impl EditorWindow {
             CameraXPosition, CameraYPosition, CornerStyle, KeyboardData,
         };
 
-        let clicks = load_recording_clicks(&self.project_path);
         let meta = cap_project::RecordingMeta::load_for_project(&self.project_path).ok();
 
         self.edit_project("preset-youtube-4k-devops", window, cx, move |project| {
@@ -7048,26 +7049,15 @@ impl EditorWindow {
             kb_settings.show_modifiers = true;
             let mut enable_kb = false;
 
-            if let Some(timeline) = project.timeline.as_mut() {
-                if !clicks.is_empty() && timeline.zoom_segments.is_empty() {
-                    let zooms =
-                        crate::editor_edits::generate_zoom_segments_for_timeline(&clicks, timeline, 1.40);
-                    if !zooms.is_empty() {
-                        timeline.zoom_segments = zooms;
-                    }
-                }
-                if timeline.keyboard_segments.is_empty()
-                    && let Some(meta) = meta.as_ref()
-                    && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
-                        meta,
-                        timeline,
-                        &kb_settings,
-                    )
-                    && !kb_segs.is_empty()
-                {
-                    timeline.keyboard_segments = kb_segs;
-                    enable_kb = true;
-                }
+            if let Some(timeline) = project.timeline.as_mut()
+                && timeline.keyboard_segments.is_empty()
+                && let Some(meta) = meta.as_ref()
+                && let Ok(kb_segs) =
+                    cap_project::generate_project_keyboard_segments(meta, timeline, &kb_settings)
+                && !kb_segs.is_empty()
+            {
+                timeline.keyboard_segments = kb_segs;
+                enable_kb = true;
             }
             if enable_kb {
                 let kb = project.keyboard.get_or_insert_with(KeyboardData::default);
@@ -7084,7 +7074,72 @@ impl EditorWindow {
             self.tracks.keyboard = true;
         }
         self.show_notice(
-            "Applied YouTube 4K DevOps/Coding Preset (98% Max Screen + Crisp Text + Smart Zoom)!",
+            "Applied YouTube 4K DevOps/Coding Preset (98% Max Screen + Crisp Text)!",
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_cursor_auto_zoom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let has_existing_zoom = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|tl| !tl.zoom_segments.is_empty());
+
+        if has_existing_zoom {
+            if matches!(
+                self.selection,
+                Some(Selection {
+                    track: TrackKind::Zoom,
+                    ..
+                })
+            ) {
+                self.set_selection(None, cx);
+            }
+            self.edit_project("disable-cursor-auto-zoom", window, cx, |project| {
+                if let Some(tl) = project.timeline.as_mut() {
+                    tl.zoom_segments.clear();
+                }
+                true
+            });
+            self.show_notice(
+                "Cursor Auto-Zoom: OFF (Steady Full-Screen View)",
+                window,
+                cx,
+            );
+            cx.notify();
+            return;
+        }
+
+        let clicks = load_recording_clicks(&self.project_path);
+        let zoom_amount = if self.project.aspect_ratio == Some(cap_project::AspectRatio::Vertical) {
+            1.45
+        } else {
+            1.38
+        };
+        self.edit_project("enable-cursor-auto-zoom", window, cx, move |project| {
+            let Some(timeline) = project.timeline.as_mut() else {
+                return false;
+            };
+            if !clicks.is_empty() {
+                let zooms = crate::editor_edits::generate_zoom_segments_for_timeline(
+                    &clicks,
+                    timeline,
+                    zoom_amount,
+                );
+                if !zooms.is_empty() {
+                    timeline.zoom_segments = zooms;
+                    return true;
+                }
+            }
+            let total = timeline.duration().max(1.0);
+            crate::editor_edits::insert_zoom_segment(timeline, 0.0, total, zoom_amount);
+            true
+        });
+        self.show_notice(
+            "Cursor Auto-Zoom: ON (Following Cursor & Clicks)!",
             window,
             cx,
         );
@@ -7108,11 +7163,7 @@ impl EditorWindow {
         }
     }
 
-    pub(crate) fn apply_saved_brand_kit(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn apply_saved_brand_kit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let kit_path = crate::store::app_data_dir().join("sricap-brand-kit.json");
         let Ok(raw) = std::fs::read_to_string(&kit_path) else {
             self.show_notice(
@@ -7190,32 +7241,37 @@ impl EditorWindow {
     ) {
         let total = self.total_duration().max(1.0);
         self.tracks.text = self.tracks.text.max(1);
-        self.edit_project("insert-chapter-cards-at-splits", window, cx, move |project| {
-            let Some(tl) = project.timeline.as_mut() else {
-                return false;
-            };
-            let mut starts = Vec::new();
-            let mut cursor = 0.0_f64;
-            for (i, seg) in tl.segments.iter().enumerate() {
-                let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.1);
-                starts.push((i + 1, cursor, (cursor + 1.8).min(total)));
-                cursor += dur;
-            }
-            for (part_num, s, e) in starts {
-                let mut card = crate::editor_edits::default_text_segment(s, e, 0);
-                card.content = format!("PART {part_num} · CHAPTER {part_num}");
-                card.center = cap_project::XY::new(0.5, 0.14);
-                card.size = cap_project::XY::new(0.62, 0.08);
-                card.font_size = 44.0;
-                card.font_weight = 800.0;
-                card.color = "#FFFFFF".to_string();
-                card.background_color = Some("#4F46E5".to_string());
-                card.stroke_width = 2.0;
-                card.stroke_color = "#000000".to_string();
-                crate::editor_edits::insert_text_segment(tl, card);
-            }
-            true
-        });
+        self.edit_project(
+            "insert-chapter-cards-at-splits",
+            window,
+            cx,
+            move |project| {
+                let Some(tl) = project.timeline.as_mut() else {
+                    return false;
+                };
+                let mut starts = Vec::new();
+                let mut cursor = 0.0_f64;
+                for (i, seg) in tl.segments.iter().enumerate() {
+                    let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.1);
+                    starts.push((i + 1, cursor, (cursor + 1.8).min(total)));
+                    cursor += dur;
+                }
+                for (part_num, s, e) in starts {
+                    let mut card = crate::editor_edits::default_text_segment(s, e, 0);
+                    card.content = format!("PART {part_num} · CHAPTER {part_num}");
+                    card.center = cap_project::XY::new(0.5, 0.14);
+                    card.size = cap_project::XY::new(0.62, 0.08);
+                    card.font_size = 44.0;
+                    card.font_weight = 800.0;
+                    card.color = "#FFFFFF".to_string();
+                    card.background_color = Some("#4F46E5".to_string());
+                    card.stroke_width = 2.0;
+                    card.stroke_color = "#000000".to_string();
+                    crate::editor_edits::insert_text_segment(tl, card);
+                }
+                true
+            },
+        );
         cx.notify();
     }
 
@@ -7401,11 +7457,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn make_seamless_reel_loop(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn make_seamless_reel_loop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let total = self.total_duration().max(2.0);
         let start = (total - 1.5).max(0.0);
         self.tracks.text = self.tracks.text.max(1);
@@ -7430,7 +7482,11 @@ impl EditorWindow {
             }
             true
         });
-        self.show_notice("Configured Seamless Reel Loop bridge & transitions!", window, cx);
+        self.show_notice(
+            "Configured Seamless Reel Loop bridge & transitions!",
+            window,
+            cx,
+        );
         cx.notify();
     }
 
@@ -7446,7 +7502,13 @@ impl EditorWindow {
             .unwrap_or_else(|| "sricap-rec".to_string());
         let safe_title: String = title
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let exports_dir = crate::recording::recordings_dir().join("Exports");
         let _ = std::fs::create_dir_all(&exports_dir);
@@ -7477,6 +7539,404 @@ impl EditorWindow {
                 cx,
             );
         }
+    }
+
+    pub(crate) fn apply_linkedin_square_preset(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use cap_project::{
+            AspectRatio, BackgroundSource, BorderConfiguration, CameraPosition, CameraShape,
+            CameraXPosition, CameraYPosition, CornerStyle,
+        };
+        self.edit_project("preset-linkedin-square-1x1", window, cx, move |project| {
+            project.aspect_ratio = Some(AspectRatio::Square);
+            project.background.source = BackgroundSource::Gradient {
+                from: [15, 23, 42],
+                to: [30, 41, 59],
+                angle: 135,
+                noise_intensity: Some(3.0),
+                noise_scale: Some(45.0),
+                animated: None,
+                animation_speed: None,
+            };
+            project.background.padding = 4.0;
+            project.background.rounding = 12.0;
+            project.background.rounding_type = CornerStyle::Squircle;
+            project.background.border = Some(BorderConfiguration {
+                enabled: true,
+                width: 1.5,
+                color: [56, 189, 248],
+                opacity: 40.0,
+            });
+            project.camera.hide = false;
+            project.camera.shape = CameraShape::Square;
+            project.camera.size = 24.0;
+            project.camera.rounding = 20.0;
+            project.camera.position = CameraPosition {
+                x: CameraXPosition::Right,
+                y: CameraYPosition::Bottom,
+            };
+            if let Some(captions) = project.captions.as_mut() {
+                captions.settings.enabled = true;
+                captions.settings.position = "bottom-center".to_string();
+                captions.settings.size = 30;
+            }
+            true
+        });
+        self.show_notice("Applied 1:1 LinkedIn / Feed Square Preset!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn add_process_link_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let start = self.playhead;
+        let total = self.total_duration().max(start + 4.0);
+        let end = (start + 4.0).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-process-link-card", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_text_segment(start, end, 0);
+                seg.content = "🔗 DOCS / REPO → github.com/your-org/project".to_string();
+                seg.center = cap_project::XY::new(0.74, 0.12);
+                seg.size = cap_project::XY::new(0.46, 0.08);
+                seg.font_family = "System Monospace".to_string();
+                seg.font_size = 28.0;
+                seg.font_weight = 700.0;
+                seg.color = "#38BDF8".to_string();
+                seg.background_color = Some("#0F172A".to_string());
+                seg.stroke_width = 1.5;
+                seg.stroke_color = "#0284C7".to_string();
+                crate::editor_edits::insert_text_segment(tl, seg);
+            }
+            true
+        });
+        if let Some(idx) = self
+            .project
+            .timeline
+            .as_ref()
+            .and_then(|tl| tl.text_segments.len().checked_sub(1))
+        {
+            self.set_selection(Some(Selection::single(TrackKind::Text, idx)), cx);
+            self.canvas_selection = Some(crate::editor_canvas::CanvasSelection::Text(idx));
+        }
+        self.show_notice(
+            "Added Interactive Process Link Card at playhead!",
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn add_qr_docs_callout_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let start = self.playhead;
+        let total = self.total_duration().max(start + 4.5);
+        let end = (start + 4.5).min(total);
+        self.tracks.text = self.tracks.text.max(1);
+        self.edit_project("add-qr-docs-card", window, cx, move |project| {
+            if let Some(tl) = project.timeline.as_mut() {
+                let mut seg = crate::editor_edits::default_text_segment(start, end, 0);
+                seg.content = "📱 SCAN / VISIT DOCS → docs.example.com/setup".to_string();
+                seg.center = cap_project::XY::new(0.74, 0.84);
+                seg.size = cap_project::XY::new(0.46, 0.08);
+                seg.font_size = 28.0;
+                seg.font_weight = 700.0;
+                seg.color = "#FACC15".to_string();
+                seg.background_color = Some("#1E1B4B".to_string());
+                seg.stroke_width = 1.5;
+                seg.stroke_color = "#6366F1".to_string();
+                crate::editor_edits::insert_text_segment(tl, seg);
+            }
+            true
+        });
+        self.show_notice("Added QR / Docs Callout Card at playhead!", window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn copy_clickable_chapter_links_md(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = self
+            .summary()
+            .map(|s| s.pretty_name.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Tutorial & Process Guide".to_string());
+        let mut md = format!(
+            "# {title} — Interactive Process Links & Timestamped SOP\n\n## 🔗 Clickable Process Chapters\n"
+        );
+        if let Some(tl) = self.project.timeline.as_ref() {
+            let mut cursor = 0.0_f64;
+            for (i, seg) in tl.segments.iter().enumerate() {
+                let dur = ((seg.end - seg.start) / seg.timescale.max(0.1)).max(0.1);
+                let mins = (cursor as u64) / 60;
+                let secs = (cursor as u64) % 60;
+                md.push_str(&format!(
+                    "- **[{mins:02}:{secs:02}](#t={:.0}s)** — Step {}: Process Segment ({:.1}s)\n",
+                    cursor,
+                    i + 1,
+                    dur
+                ));
+                cursor += dur;
+            }
+            if !tl.text_segments.is_empty() {
+                md.push_str("\n## 📌 Embedded Callouts & Resource Links\n");
+                for txt in &tl.text_segments {
+                    let mins = (txt.start as u64) / 60;
+                    let secs = (txt.start as u64) % 60;
+                    md.push_str(&format!(
+                        "- `[{mins:02}:{secs:02}]` {}\n",
+                        txt.content.replace('\n', " ")
+                    ));
+                }
+            }
+        }
+        let exports_dir = crate::recording::recordings_dir().join("Exports");
+        let _ = std::fs::create_dir_all(&exports_dir);
+        let _ = std::fs::write(exports_dir.join("process-links-and-chapters.md"), &md);
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(md));
+        self.show_notice(
+            "Copied Clickable Process Chapters & Links (.md) to Clipboard & Exports/!",
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn apply_studio_voice_profile(
+        &mut self,
+        profile_id: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let (mic_db, sys_db, bg_db, notice) = match profile_id {
+            "podcast" => (
+                2.5_f32,
+                -14.0_f32,
+                -15.0_f32,
+                "Applied Podcast Studio Profile (+2.5dB Warm Mic · 80Hz High-Pass · -14 LUFS · -14dB Ducking)!",
+            ),
+            "screencast" => (
+                1.5_f32,
+                -10.0_f32,
+                -14.0_f32,
+                "Applied Tech Screencast Profile (+1.5dB Crisp Mic · 5kHz Presence · -10dB App Audio)!",
+            ),
+            _ => (
+                3.0_f32,
+                -18.0_f32,
+                -16.0_f32,
+                "Applied Noisy Room Fixer Profile (AI Denoise + Adaptive Gate + 80Hz Rumble Cut)!",
+            ),
+        };
+        self.edit_project("apply-studio-voice-profile", window, cx, move |project| {
+            project.audio.mute = false;
+            project.audio.improve = true;
+            project.audio.mic_volume_db = mic_db;
+            project.audio.system_volume_db = sys_db;
+            if let Some(tl) = project.timeline.as_mut() {
+                for seg in &mut tl.audio_segments {
+                    if seg.volume_db > -10.0 {
+                        seg.volume_db = bg_db;
+                    }
+                    seg.fade_in = seg.fade_in.max(0.25);
+                    seg.fade_out = seg.fade_out.max(0.4);
+                }
+            }
+            true
+        });
+        self.show_notice(notice, window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn optimize_captions_caps_and_punctuation(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project(
+            "optimize-captions-caps-punctuation",
+            window,
+            cx,
+            move |project| {
+                let Some(captions) = project.captions.as_mut() else {
+                    return false;
+                };
+                captions.settings.uppercase = !captions.settings.uppercase;
+                let clean = |text: &str| -> String {
+                    text.trim()
+                        .trim_end_matches(['.', ',', ';', ':'])
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                for seg in &mut captions.segments {
+                    seg.text = clean(&seg.text);
+                    for word in &mut seg.words {
+                        word.text = clean(&word.text);
+                    }
+                }
+                if let Some(tl) = project.timeline.as_mut() {
+                    for seg in &mut tl.caption_segments {
+                        seg.text = clean(&seg.text);
+                        for word in &mut seg.words {
+                            word.text = clean(&word.text);
+                        }
+                    }
+                }
+                true
+            },
+        );
+        self.show_notice(
+            "Optimized Captions All-Caps & Viral Punctuation!",
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn apply_device_bezel_frame(
+        &mut self,
+        mobile: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use cap_project::{
+            BorderConfiguration, CornerStyle, FrameConfiguration, FrameStyle, FrameTheme,
+            NotchConfiguration,
+        };
+        self.edit_project("apply-device-bezel-frame", window, cx, move |project| {
+            if mobile {
+                project.background.rounding = 28.0;
+                project.background.rounding_type = CornerStyle::Squircle;
+                project.background.padding = project.background.padding.max(7.0);
+                project.background.border = Some(BorderConfiguration {
+                    enabled: true,
+                    width: 4.5,
+                    color: [148, 163, 184],
+                    opacity: 85.0,
+                });
+                project.background.notch = Some(NotchConfiguration {
+                    enabled: true,
+                    x: Some(0.36),
+                    width: Some(0.28),
+                    height: Some(0.032),
+                });
+                project.background.frame = None;
+            } else {
+                project.background.frame = Some(FrameConfiguration {
+                    style: FrameStyle::MacOS,
+                    theme: FrameTheme::Dark,
+                    url: "localhost:3000".to_string(),
+                    title: "sricap-rec Studio · Terminal / IDE".to_string(),
+                });
+                project.background.rounding = 14.0;
+                project.background.rounding_type = CornerStyle::Squircle;
+                project.background.border = Some(BorderConfiguration {
+                    enabled: true,
+                    width: 2.0,
+                    color: [100, 116, 139],
+                    opacity: 60.0,
+                });
+                project.background.notch = Some(NotchConfiguration {
+                    enabled: true,
+                    x: None,
+                    width: None,
+                    height: None,
+                });
+            }
+            true
+        });
+        self.show_notice(
+            if mobile {
+                "Applied iPhone / Mobile Simulator Bezel & Dynamic Island Frame!"
+            } else {
+                "Applied MacBook Pro Aluminum Bezel & macOS Window Chrome!"
+            },
+            window,
+            cx,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn record_new_clip_from_editor(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let project_path = self.project_path.clone();
+        let session = crate::session::RecordingSession::global(cx);
+        if session.read(cx).phase != crate::session::Phase::Idle
+            || crate::app_windows::clean_capture_owned(cx)
+        {
+            self.show_notice("A recording is already active.", window, cx);
+            return;
+        }
+        if self.playing {
+            self.stop_playback(cx);
+        }
+        self.pending_save().borrow_mut().flush();
+        let _ = self.project.write(&self.project_path);
+        session.update(cx, |session, cx| {
+            session.set_editor_recording_target(Some(project_path.clone()));
+            cx.notify();
+        });
+        cx.defer(move |cx| {
+            crate::app_windows::open_editor_recording_main(project_path, cx);
+        });
+    }
+
+    pub(crate) fn attach_camera_video_clicked(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.playing {
+            self.stop_playback(cx);
+        }
+        self.pending_save().borrow_mut().flush();
+        let _ = self.project.write(&self.project_path);
+        let project_path = self.project_path.clone();
+
+        cx.spawn_in(window, async move |this, cx| {
+            #[cfg(target_os = "macos")]
+            let picked = crate::platform::open_image_panel(crate::import::VIDEO_IMPORT_EXTENSIONS);
+            #[cfg(not(target_os = "macos"))]
+            let picked = rfd::FileDialog::new()
+                .add_filter("Video Files", crate::import::VIDEO_IMPORT_EXTENSIONS)
+                .pick_file();
+            let Some(source_path) = picked else {
+                return;
+            };
+            this.update_in(cx, |this, window, cx| {
+                this.show_notice("Attaching & syncing Camera video…", window, cx);
+            })
+            .ok();
+
+            let target = project_path.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::import::transcode_camera_overlay_for_project(&source_path, &target)
+                })
+                .await;
+
+            match result {
+                Ok(()) => {
+                    cx.update(|_window, cx| {
+                        crate::app_windows::reload_editor(&project_path, cx);
+                    })
+                    .ok();
+                }
+                Err(err) => {
+                    this.update_in(cx, |this, window, cx| {
+                        this.show_notice(format!("Camera import failed: {err}"), window, cx);
+                    })
+                    .ok();
+                }
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn save_project_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -7705,11 +8165,7 @@ impl EditorWindow {
         cx.notify();
     }
 
-    pub(crate) fn clear_all_overlay_tracks(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn clear_all_overlay_tracks(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.edit_project("clear-all-overlay-tracks", window, cx, |project| {
             let Some(tl) = project.timeline.as_mut() else {
                 return false;
@@ -11964,6 +12420,63 @@ impl EditorWindow {
                     )
                     .child(self.header_divider())
                     .child(
+                        ui::EditorButton::plain(&theme, "header-preset-16x9")
+                            .label("16:9 YouTube")
+                            .tooltip(
+                                &theme,
+                                "1-Click 16:9 YouTube 4K DevOps/Coding Max-Screen Preset",
+                            )
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.apply_youtube_4k_devops_preset(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "header-preset-9x16")
+                            .label("9:16 Reels")
+                            .tooltip(
+                                &theme,
+                                "1-Click 9:16 Instagram Reels / YouTube Shorts / TikTok Preset",
+                            )
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.apply_tech_reel_preset(true, window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "header-preset-1x1")
+                            .label("1:1 LinkedIn")
+                            .tooltip(&theme, "1-Click 1:1 Square LinkedIn / X Feed Preset")
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.apply_linkedin_square_preset(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "header-toggle-auto-zoom")
+                            .label(
+                                if self
+                                    .project
+                                    .timeline
+                                    .as_ref()
+                                    .is_some_and(|tl| !tl.zoom_segments.is_empty())
+                                {
+                                    "Auto-Zoom: ON"
+                                } else {
+                                    "Auto-Zoom: OFF"
+                                },
+                            )
+                            .tooltip(
+                                &theme,
+                                "Toggle Cursor-Following Auto-Zoom (Off by default; click to enable or clear)",
+                            )
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_cursor_auto_zoom(window, cx);
+                            })),
+                    )
+                    .child(self.header_divider())
+                    .child(
                         ui::EditorButton::plain(&theme, "presets")
                             .left_icon("icons/presets.svg")
                             .when(!compact, |button| button.label("Presets"))
@@ -11976,6 +12489,32 @@ impl EditorWindow {
                             })),
                     )
                     .child(self.render_clips_pill(compact, cx))
+                    .child(
+                        ui::EditorButton::plain(&theme, "header-add-mp4-direct")
+                            .left_icon("icons/circle-plus.svg")
+                            .label("+ Add .MP4")
+                            .tooltip(
+                                &theme,
+                                "Import and append an .mp4 / .mov video clip directly",
+                            )
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.pick_mp4(window, cx);
+                            })),
+                    )
+                    .child(
+                        ui::EditorButton::plain(&theme, "header-record-cam-clip")
+                            .left_icon("icons/video.svg")
+                            .label("+ Record Cam/Clip")
+                            .tooltip(
+                                &theme,
+                                "Record a new Camera / Screen clip directly into this Studio project",
+                            )
+                            .disabled(!self.project_ready())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.record_new_clip_from_editor(window, cx);
+                            })),
+                    )
                     // `<Show when={hasTranscript()}>`: the button only exists
                     // once a transcript with words does.
                     .children(

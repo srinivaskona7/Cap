@@ -96,10 +96,22 @@ pub const CURSOR_STYLES: [(CursorAnimationStyle, &str, &str); 4] = [
 ];
 
 /// `FONT_OPTIONS` (`text-style.tsx:12-16`).
-pub const FONT_OPTIONS: [&str; 3] = ["System Sans-Serif", "System Serif", "System Monospace"];
+pub const FONT_OPTIONS: [&str; 6] = [
+    "System Sans-Serif",
+    "System Serif",
+    "System Monospace",
+    "JetBrains Mono / SF Mono",
+    "Impact / Heavy Display",
+    "Inter / Crisp UI",
+];
 
 /// `TEXT_WEIGHT_OPTIONS` (`text-style.tsx:36-40`).
-pub const TEXT_WEIGHTS: [(u32, &str); 3] = [(400, "Normal"), (500, "Medium"), (700, "Bold")];
+pub const TEXT_WEIGHTS: [(u32, &str); 4] = [
+    (400, "Normal"),
+    (500, "Medium"),
+    (700, "Bold"),
+    (900, "Heavy Black"),
+];
 
 /// `KEYBOARD_POSITION_OPTIONS` (`text-style.tsx:28-35`).
 pub const KEYBOARD_POSITIONS: [(&str, &str); 6] = [
@@ -324,6 +336,96 @@ pub static CAPTION_PRESETS: &[CaptionPreset] = &[
         animation: "pop",
         uppercase: true,
         fade_duration: 0.15,
+    },
+    CaptionPreset {
+        id: "hormozi-fire",
+        label: "Hormozi Fire",
+        description: "Heavy uppercase impact with fiery red-orange active pill.",
+        font_weight: 900,
+        size: 58,
+        color: "#FFFFFF",
+        background_color: "#000000",
+        background_opacity: 0,
+        outline: true,
+        outline_color: "#000000",
+        highlight_color: "#FF3B30",
+        active_word_highlight: true,
+        highlight_style: "pill",
+        animation: "bounce",
+        uppercase: true,
+        fade_duration: 0.12,
+    },
+    CaptionPreset {
+        id: "terminal-cli",
+        label: "Terminal CLI",
+        description: "Monospace console badge with emerald prompt highlight for DevOps/coding.",
+        font_weight: 700,
+        size: 46,
+        color: "#34D399",
+        background_color: "#0F172A",
+        background_opacity: 92,
+        outline: false,
+        outline_color: "#000000",
+        highlight_color: "#38BDF8",
+        active_word_highlight: true,
+        highlight_style: "color",
+        animation: "none",
+        uppercase: false,
+        fade_duration: 0.10,
+    },
+    CaptionPreset {
+        id: "mrbeast-gold",
+        label: "MrBeast Gold",
+        description: "Massive outlined uppercase with electric gold word pop.",
+        font_weight: 900,
+        size: 60,
+        color: "#FFFFFF",
+        background_color: "#000000",
+        background_opacity: 0,
+        outline: true,
+        outline_color: "#000000",
+        highlight_color: "#FACC15",
+        active_word_highlight: true,
+        highlight_style: "color",
+        animation: "pop",
+        uppercase: true,
+        fade_duration: 0.14,
+    },
+    CaptionPreset {
+        id: "glass-pill",
+        label: "Glass Pill",
+        description: "Modern dark translucent pill with indigo active word badge.",
+        font_weight: 700,
+        size: 48,
+        color: "#F8FAFC",
+        background_color: "#1E293B",
+        background_opacity: 85,
+        outline: false,
+        outline_color: "#000000",
+        highlight_color: "#6366F1",
+        active_word_highlight: true,
+        highlight_style: "pill",
+        animation: "bounce",
+        uppercase: false,
+        fade_duration: 0.15,
+    },
+    CaptionPreset {
+        id: "editorial-serif",
+        label: "Editorial Serif",
+        description: "Warm narrative serif with dark studio backing for podcasts & essays.",
+        font_weight: 600,
+        size: 46,
+        color: "#FEF3C7",
+        background_color: "#1C1917",
+        background_opacity: 80,
+        outline: false,
+        outline_color: "#000000",
+        highlight_color: "#F59E0B",
+        active_word_highlight: true,
+        highlight_style: "color",
+        animation: "none",
+        uppercase: false,
+        fade_duration: 0.20,
     },
     CaptionPreset {
         id: "minimal",
@@ -1273,6 +1375,48 @@ impl EditorWindow {
             .flex_col()
             .gap(px(14.))
             .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "camera-attach-video-file",
+                                ui::ButtonVariant::Primary,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/camera.svg")
+                            .label("+ Attach Cam (.mp4)")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.attach_camera_video_clicked(window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "camera-record-new-clip",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/video.svg")
+                            .label("+ Record Cam/Clip")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.record_new_clip_from_editor(window, cx);
+                                },
+                            )),
+                        ),
+                    ),
+            )
+            .child(
                 ui::Field::section(&theme, "Camera").child(
                     div()
                         .flex()
@@ -1309,14 +1453,16 @@ impl EditorWindow {
                                 cx,
                             )),
                         ))
-                        .child(ui::Subfield::plain(&theme, "Shape").child(
-                            div().w(px(160.)).child(self.menu_select(
-                                SidebarMenu::CameraShape,
-                                "camera-shape",
-                                shape_label,
-                                cx,
+                        .child(
+                            ui::Subfield::plain(&theme, "Shape").child(div().w(px(160.)).child(
+                                self.menu_select(
+                                    SidebarMenu::CameraShape,
+                                    "camera-shape",
+                                    shape_label,
+                                    cx,
+                                ),
                             )),
-                        ))
+                        )
                         .child(self.render_camera_shape_presets(cx)),
                 ),
             )
@@ -1543,33 +1689,31 @@ impl EditorWindow {
             .flex()
             .flex_col()
             .gap(px(10.))
-            .child(
-                ui::Subfield::plain(&theme, "Camera Border").child(
-                    ui::Toggle::plain(&theme, "camera-border-toggle", enabled).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            let next = !this
-                                .style_control_project()
-                                .camera
-                                .border
-                                .as_ref()
-                                .is_some_and(|b| b.enabled);
-                            this.edit_project("camera-border-toggle", window, cx, move |p| {
-                                let mut border = p.camera.border.clone().unwrap_or(
-                                    cap_project::BorderConfiguration {
-                                        enabled: next,
-                                        width: 4.0,
-                                        color: [255, 255, 255],
-                                        opacity: 80.0,
-                                    },
-                                );
-                                border.enabled = next;
-                                p.camera.border = Some(border);
-                                true
-                            });
-                        }),
-                    ),
-                ),
-            )
+            .child(ui::Subfield::plain(&theme, "Camera Border").child(
+                ui::Toggle::plain(&theme, "camera-border-toggle", enabled).on_click(cx.listener(
+                    |this, _, window, cx| {
+                        let next = !this
+                            .style_control_project()
+                            .camera
+                            .border
+                            .as_ref()
+                            .is_some_and(|b| b.enabled);
+                        this.edit_project("camera-border-toggle", window, cx, move |p| {
+                            let mut border = p.camera.border.clone().unwrap_or(
+                                cap_project::BorderConfiguration {
+                                    enabled: next,
+                                    width: 4.0,
+                                    color: [255, 255, 255],
+                                    opacity: 80.0,
+                                },
+                            );
+                            border.enabled = next;
+                            p.camera.border = Some(border);
+                            true
+                        });
+                    },
+                )),
+            ))
             .children(enabled.then(|| {
                 div()
                     .flex()
@@ -1829,10 +1973,8 @@ impl EditorWindow {
             .as_ref()
             .and_then(|t| t.audio_segments.first())
             .is_some_and(|seg| seg.volume_db <= -10.0);
-        let auto_ducked =
-            (audio.system_volume_db <= -10.0 || bg_music_ducked) && !audio.mute;
-        let original_clip_muted =
-            audio.mic_volume_db <= -30.0 && audio.system_volume_db <= -30.0;
+        let auto_ducked = (audio.system_volume_db <= -10.0 || bg_music_ducked) && !audio.mute;
+        let original_clip_muted = audio.mic_volume_db <= -30.0 && audio.system_volume_db <= -30.0;
         let recording_voiceover = self.voiceover_recording.is_some();
         let audio_tracks_list: Vec<(usize, String, f64, f64)> = self
             .project
@@ -1885,20 +2027,22 @@ impl EditorWindow {
                                     "audio-mute-original-clip",
                                     original_clip_muted,
                                 )
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    let next_db = if original_clip_muted { 0.0 } else { -30.0 };
-                                    this.edit_project(
-                                        "audio-mute-original-clip",
-                                        window,
-                                        cx,
-                                        move |p| {
-                                            p.audio.mute = false;
-                                            p.audio.mic_volume_db = next_db;
-                                            p.audio.system_volume_db = next_db;
-                                            true
-                                        },
-                                    );
-                                })),
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        let next_db = if original_clip_muted { 0.0 } else { -30.0 };
+                                        this.edit_project(
+                                            "audio-mute-original-clip",
+                                            window,
+                                            cx,
+                                            move |p| {
+                                                p.audio.mute = false;
+                                                p.audio.mic_volume_db = next_db;
+                                                p.audio.system_volume_db = next_db;
+                                                true
+                                            },
+                                        );
+                                    },
+                                )),
                             ),
                         )
                         .child(
@@ -1919,9 +2063,11 @@ impl EditorWindow {
                             })
                             .icon("icons/microphone.svg")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.toggle_voiceover_recording(window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.toggle_voiceover_recording(window, cx);
+                                },
+                            )),
                         )
                         .child(
                             div()
@@ -1939,9 +2085,11 @@ impl EditorWindow {
                                         .label("+ Text at Playhead")
                                         .icon("icons/text.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.add_text_at_playhead(window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.add_text_at_playhead(window, cx);
+                                            }),
+                                        ),
                                     ),
                                 )
                                 .child(
@@ -1955,9 +2103,11 @@ impl EditorWindow {
                                         .label("Open Video in Studio")
                                         .icon("icons/import.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|_, _, _window, cx| {
-                                            cx.defer(crate::import::pick_and_import_video);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|_, _, _window, cx| {
+                                                cx.defer(crate::import::pick_and_import_video);
+                                            }),
+                                        ),
                                     ),
                                 ),
                         )
@@ -1977,9 +2127,11 @@ impl EditorWindow {
                                         .label("Import Audio (.mp3/.wav)")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.import_audio_from_picker(window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.import_audio_from_picker(window, cx);
+                                            }),
+                                        ),
                                     ),
                                 )
                                 .child(
@@ -1993,9 +2145,11 @@ impl EditorWindow {
                                         .label("Music Library")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, _window, cx| {
-                                            this.open_audio_picker(0, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, _window, cx| {
+                                                this.open_audio_picker(0, cx);
+                                            }),
+                                        ),
                                     ),
                                 ),
                         )
@@ -2009,9 +2163,78 @@ impl EditorWindow {
                             .label("Podcast Voice Master EQ (+2.5dB Mic · -14dB Duck)")
                             .icon("icons/microphone.svg")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.apply_podcast_voice_master(window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.apply_podcast_voice_master(window, cx);
+                                },
+                            )),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(4.))
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-profile-podcast",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Xs,
+                                        )
+                                        .label("Podcast Studio")
+                                        .full_width()
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.apply_studio_voice_profile(
+                                                    "podcast", window, cx,
+                                                );
+                                            }),
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-profile-screencast",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Xs,
+                                        )
+                                        .label("Tech Screencast")
+                                        .full_width()
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.apply_studio_voice_profile(
+                                                    "screencast",
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    div().flex_1().child(
+                                        ui::Button::plain(
+                                            &theme,
+                                            "audio-profile-noisy-room",
+                                            ui::ButtonVariant::Gray,
+                                            ui::ButtonSize::Xs,
+                                        )
+                                        .label("Noisy Room Fix")
+                                        .full_width()
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.apply_studio_voice_profile(
+                                                    "noisy-room",
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                        ),
+                                    ),
+                                ),
                         )
                         .child(
                             ui::Button::plain(
@@ -2023,9 +2246,11 @@ impl EditorWindow {
                             .label("+ Synthesize Click & Keystroke SFX Track")
                             .icon("icons/music.svg")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.generate_click_and_key_sfx_track(window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.generate_click_and_key_sfx_track(window, cx);
+                                },
+                            )),
                         )
                         .child(
                             div()
@@ -2043,9 +2268,11 @@ impl EditorWindow {
                                         .label("+ Lo-Fi Ambient Pad")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.generate_lofi_ambient_music_track(window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.generate_lofi_ambient_music_track(window, cx);
+                                            }),
+                                        ),
                                     ),
                                 )
                                 .child(
@@ -2059,9 +2286,11 @@ impl EditorWindow {
                                         .label("+ Censor Bleep (1s)")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.add_censor_bleep_at_playhead(window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.add_censor_bleep_at_playhead(window, cx);
+                                            }),
+                                        ),
                                     ),
                                 ),
                         )
@@ -2081,9 +2310,11 @@ impl EditorWindow {
                                         .label("+ SFX Whoosh")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.add_sfx_cue_at_playhead(true, window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.add_sfx_cue_at_playhead(true, window, cx);
+                                            }),
+                                        ),
                                     ),
                                 )
                                 .child(
@@ -2097,9 +2328,11 @@ impl EditorWindow {
                                         .label("+ SFX Ding Chime")
                                         .icon("icons/music.svg")
                                         .full_width()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.add_sfx_cue_at_playhead(false, window, cx);
-                                        })),
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.add_sfx_cue_at_playhead(false, window, cx);
+                                            }),
+                                        ),
                                     ),
                                 ),
                         )
@@ -2107,10 +2340,7 @@ impl EditorWindow {
                             let mut list = div().flex().flex_col().gap(px(6.));
                             for (idx, name, start_s, end_s) in &audio_tracks_list {
                                 let idx_copy = *idx;
-                                let label_str = format!(
-                                    "{name} ({:.1}s – {:.1}s)",
-                                    start_s, end_s
-                                );
+                                let label_str = format!("{name} ({:.1}s – {:.1}s)", start_s, end_s);
                                 list = list.child(
                                     div()
                                         .flex()
@@ -2210,17 +2440,16 @@ impl EditorWindow {
                                     .label("Delete All Voiceovers / Added Audio")
                                     .icon("icons/trash.svg")
                                     .full_width()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.clear_all_audio_segments(window, cx);
-                                    })),
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.clear_all_audio_segments(window, cx);
+                                        },
+                                    )),
                                 );
                             }
-                            ui::Field::section(
-                                &theme,
-                                "Recorded Voiceovers & Audio Tracks",
-                            )
-                            .child(list)
-                            .into_any_element()
+                            ui::Field::section(&theme, "Recorded Voiceovers & Audio Tracks")
+                                .child(list)
+                                .into_any_element()
                         }))
                         .children(has_bg_music.then(|| {
                             let mut vol_row = div().flex().flex_row().gap(px(6.));
@@ -2240,21 +2469,23 @@ impl EditorWindow {
                                         )
                                         .label(label)
                                         .full_width()
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            this.edit_project(
-                                                "bg-music-volume",
-                                                window,
-                                                cx,
-                                                move |p| {
-                                                    if let Some(tl) = p.timeline.as_mut() {
-                                                        for seg in &mut tl.audio_segments {
-                                                            seg.volume_db = db;
+                                        .on_click(
+                                            cx.listener(move |this, _, window, cx| {
+                                                this.edit_project(
+                                                    "bg-music-volume",
+                                                    window,
+                                                    cx,
+                                                    move |p| {
+                                                        if let Some(tl) = p.timeline.as_mut() {
+                                                            for seg in &mut tl.audio_segments {
+                                                                seg.volume_db = db;
+                                                            }
                                                         }
-                                                    }
-                                                    true
-                                                },
-                                            );
-                                        })),
+                                                        true
+                                                    },
+                                                );
+                                            }),
+                                        ),
                                     ),
                                 );
                             }
@@ -2262,25 +2493,32 @@ impl EditorWindow {
                                 .child(vol_row)
                                 .into_any_element()
                         }))
-                        .children((has_microphone && (has_system_audio || has_bg_music)).then(|| {
-                            ui::Subfield::plain(&theme, "Auto-Ducking (-12 dB under voice)")
-                                .child(
-                                    ui::Toggle::plain(&theme, "audio-auto-duck", auto_ducked)
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            let next_db = if auto_ducked { 0.0 } else { -12.0 };
-                                            this.edit_project("audio-auto-duck", window, cx, move |p| {
-                                                p.audio.system_volume_db = next_db;
-                                                if let Some(tl) = p.timeline.as_mut() {
-                                                    for seg in &mut tl.audio_segments {
-                                                        seg.volume_db = next_db;
-                                                    }
-                                                }
-                                                true
-                                            });
-                                        })),
-                                )
-                                .into_any_element()
-                        }))
+                        .children((has_microphone && (has_system_audio || has_bg_music)).then(
+                            || {
+                                ui::Subfield::plain(&theme, "Auto-Ducking (-12 dB under voice)")
+                                    .child(
+                                        ui::Toggle::plain(&theme, "audio-auto-duck", auto_ducked)
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                let next_db = if auto_ducked { 0.0 } else { -12.0 };
+                                                this.edit_project(
+                                                    "audio-auto-duck",
+                                                    window,
+                                                    cx,
+                                                    move |p| {
+                                                        p.audio.system_volume_db = next_db;
+                                                        if let Some(tl) = p.timeline.as_mut() {
+                                                            for seg in &mut tl.audio_segments {
+                                                                seg.volume_db = next_db;
+                                                            }
+                                                        }
+                                                        true
+                                                    },
+                                                );
+                                            })),
+                                    )
+                                    .into_any_element()
+                            },
+                        ))
                         .child(
                             ui::Button::plain(
                                 &theme,
@@ -2296,9 +2534,11 @@ impl EditorWindow {
                             .icon("icons/scissors.svg")
                             .full_width()
                             .disabled(silence_cuts.is_empty())
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.remove_silences_clicked(window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.remove_silences_clicked(window, cx);
+                                },
+                            )),
                         )
                         .children((has_microphone || has_system_audio).then(|| {
                             ui::Button::plain(
@@ -3659,8 +3899,7 @@ impl EditorWindow {
             .summary()
             .map(|s| s.clip_display_durations.clone())
             .unwrap_or_default();
-        let filler_cuts =
-            transcription::plan_filler_word_cuts(&self.project, &recording_durations);
+        let filler_cuts = transcription::plan_filler_word_cuts(&self.project, &recording_durations);
         let silence_cuts =
             transcription::plan_silence_cuts(&self.project, &recording_durations, 1.0);
         let pii_count = transcription::count_pii_tokens_in_captions(&self.project);
@@ -3687,9 +3926,7 @@ impl EditorWindow {
             let text_label = seg.text.clone();
             transcript_rows = transcript_rows.child(
                 div()
-                    .id(SharedString::from(format!(
-                        "transcript-cut-row-{seg_idx}"
-                    )))
+                    .id(SharedString::from(format!("transcript-cut-row-{seg_idx}")))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -3731,9 +3968,11 @@ impl EditorWindow {
                         )
                         .label("Cut")
                         .icon("icons/scissors.svg")
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.cut_transcript_range_clicked(cut_start, cut_end, window, cx);
-                        })),
+                        .on_click(cx.listener(
+                            move |this, _, window, cx| {
+                                this.cut_transcript_range_clicked(cut_start, cut_end, window, cx);
+                            },
+                        )),
                     ),
             );
         }
@@ -3759,12 +3998,17 @@ impl EditorWindow {
                                                 ui::ButtonVariant::Gray,
                                                 ui::ButtonSize::Sm,
                                             )
-                                            .label(format!("Remove Fillers ({})", filler_cuts.len()))
+                                            .label(format!(
+                                                "Remove Fillers ({})",
+                                                filler_cuts.len()
+                                            ))
                                             .full_width()
                                             .disabled(filler_cuts.is_empty())
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.remove_filler_words_clicked(window, cx);
-                                            })),
+                                            .on_click(
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.remove_filler_words_clicked(window, cx);
+                                                }),
+                                            ),
                                         ),
                                     )
                                     .child(
@@ -3781,9 +4025,11 @@ impl EditorWindow {
                                             ))
                                             .full_width()
                                             .disabled(silence_cuts.is_empty())
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.remove_silences_clicked(window, cx);
-                                            })),
+                                            .on_click(
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.remove_silences_clicked(window, cx);
+                                                }),
+                                            ),
                                         ),
                                     ),
                             )
@@ -3805,9 +4051,11 @@ impl EditorWindow {
                                                 "Auto-Redact PII (Blur)".to_string()
                                             })
                                             .full_width()
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.auto_redact_pii_clicked(window, cx);
-                                            })),
+                                            .on_click(
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.auto_redact_pii_clicked(window, cx);
+                                                }),
+                                            ),
                                         ),
                                     )
                                     .child(
@@ -3820,26 +4068,60 @@ impl EditorWindow {
                                             )
                                             .label("Copy SOP Guide")
                                             .full_width()
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.copy_studio_sop_clicked(window, cx);
-                                            })),
+                                            .on_click(
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.copy_studio_sop_clicked(window, cx);
+                                                }),
+                                            ),
                                         ),
                                     ),
-                                    )
-                                    .child(
-                                    ui::Button::plain(
+                            )
+                            .child(
+                                ui::Button::plain(
                                     &theme,
                                     "caption-copy-yt-social",
                                     ui::ButtonVariant::Gray,
                                     ui::ButtonSize::Sm,
-                                    )
-                                    .label("Copy YouTube Chapters & Social Post")
-                                    .full_width()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                    this.copy_youtube_chapters_clicked(window, cx);
-                                    })),
-                                    )
-                                    .children((!track_segments.is_empty()).then(|| {
+                                )
+                                .label("Copy YouTube Chapters & Social Post")
+                                .full_width()
+                                .on_click(cx.listener(
+                                    |this, _, window, cx| {
+                                        this.copy_youtube_chapters_clicked(window, cx);
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "caption-copy-clickable-sop-chapters",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("Copy Clickable SOP & Chapters (.MD)")
+                                .full_width()
+                                .on_click(cx.listener(
+                                    |this, _, window, cx| {
+                                        this.copy_clickable_chapter_links_md(window, cx);
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "caption-optimize-caps-punctuation",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("Auto All-Caps & Punctuation Optimizer")
+                                .full_width()
+                                .on_click(cx.listener(
+                                    |this, _, window, cx| {
+                                        this.optimize_captions_caps_and_punctuation(window, cx);
+                                    },
+                                )),
+                            )
+                            .children((!track_segments.is_empty()).then(|| {
                                 div()
                                     .flex()
                                     .flex_col()
@@ -4001,6 +4283,13 @@ impl EditorWindow {
             };
             let settings = &mut captions.settings;
             settings.preset = preset.id.to_string();
+            settings.font = match preset.id {
+                "terminal-cli" | "dev-neon" => "JetBrains Mono / SF Mono".to_string(),
+                "hormozi-fire" | "mrbeast-gold" => "Impact / Heavy Display".to_string(),
+                "editorial-serif" => "System Serif".to_string(),
+                "glass-pill" => "Inter / Crisp UI".to_string(),
+                _ => "System Sans-Serif".to_string(),
+            };
             settings.font_weight = preset.font_weight;
             settings.size = preset.size;
             settings.color = preset.color.to_string();
@@ -4296,10 +4585,8 @@ impl EditorWindow {
             .unwrap_or_default();
         let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
         self.edit_project("auto-redact-pii", window, cx, move |project| {
-            let pii_ranges = transcription::redact_pii_in_captions_and_plan_masks(
-                project,
-                &recording_durations,
-            );
+            let pii_ranges =
+                transcription::redact_pii_in_captions_and_plan_masks(project, &recording_durations);
             let Some(timeline) = project.timeline.as_mut() else {
                 return false;
             };
@@ -4346,7 +4633,6 @@ impl EditorWindow {
     }
 
     pub(crate) fn magic_polish_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
         let meta = RecordingMeta::load_for_project(&self.project_path).ok();
         let (recording_durations, has_mic, has_sys) = self.summary().map_or_else(
             || (Vec::new(), false, false),
@@ -4386,28 +4672,15 @@ impl EditorWindow {
             kb_settings.show_modifiers = true;
             let mut enable_kb = false;
 
-            if let Some(timeline) = project.timeline.as_mut() {
-                if timeline.zoom_segments.is_empty() && !clicks.is_empty() {
-                    let generated = crate::editor_edits::generate_zoom_segments_for_timeline(
-                        &clicks, timeline, 1.5,
-                    );
-                    if !generated.is_empty() {
-                        timeline.zoom_segments = generated;
-                    }
-                }
-
-                if timeline.keyboard_segments.is_empty()
-                    && let Some(meta) = meta.as_ref()
-                    && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
-                        meta,
-                        timeline,
-                        &kb_settings,
-                    )
-                    && !kb_segs.is_empty()
-                {
-                    timeline.keyboard_segments = kb_segs;
-                    enable_kb = true;
-                }
+            if let Some(timeline) = project.timeline.as_mut()
+                && timeline.keyboard_segments.is_empty()
+                && let Some(meta) = meta.as_ref()
+                && let Ok(kb_segs) =
+                    cap_project::generate_project_keyboard_segments(meta, timeline, &kb_settings)
+                && !kb_segs.is_empty()
+            {
+                timeline.keyboard_segments = kb_segs;
+                enable_kb = true;
             }
             if enable_kb {
                 let kb = project.keyboard.get_or_insert_with(KeyboardData::default);
@@ -4689,13 +4962,13 @@ mod tests {
 
     #[test]
     fn the_catalogues_match_the_source() {
-        assert_eq!(CAPTION_PRESETS.len(), 5);
+        assert_eq!(CAPTION_PRESETS.len(), 11);
         assert_eq!(CAPTION_PRESETS[0].id, "classic");
         assert_eq!(CAPTION_PRESETS[2].highlight_style, "pill");
         assert_eq!(CAPTION_POSITIONS[0].0, "manual");
         assert_eq!(KEYBOARD_POSITIONS.len(), 6);
-        assert_eq!(FONT_OPTIONS.len(), 3);
-        assert_eq!(TEXT_WEIGHTS.len(), 3);
+        assert_eq!(FONT_OPTIONS.len(), 6);
+        assert_eq!(TEXT_WEIGHTS.len(), 4);
         assert_eq!(
             CAMERA_BLUR_MODES.len(),
             if cfg!(target_os = "macos") { 4 } else { 3 }

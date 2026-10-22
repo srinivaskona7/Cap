@@ -1360,6 +1360,8 @@ async fn build_instant_recording_actor(
             )
             .await
             .context("screen capture init")?;
+            #[cfg(target_os = "macos")]
+            let screen_source = screen_source.with_macos_window_id(inputs.capture_target.window());
 
             debug!("screen capture: {screen_source:#?}");
 

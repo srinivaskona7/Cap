@@ -1795,9 +1795,7 @@ pub fn teleprompter_closed(cx: &mut App) {
 
 pub fn close_teleprompter(cx: &mut App) {
     if let Some(handle) = cx.global_mut::<AppWindows>().teleprompter.take() {
-        handle
-            .update(cx, |view, window, _| view.close(window))
-            .ok();
+        handle.update(cx, |view, window, _| view.close(window)).ok();
     }
 }
 

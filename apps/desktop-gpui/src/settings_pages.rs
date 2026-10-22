@@ -20,12 +20,12 @@ use std::{
     time::Duration,
 };
 
+use cap_cli_install as cli_install;
 use gpui::{
     AppContext as _, Context, Entity, FontWeight, Hsla, InteractiveElement, IntoElement,
     MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, div,
     prelude::FluentBuilder, px, rgb, svg,
 };
-use cap_cli_install as cli_install;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -1185,7 +1185,7 @@ fn is_function_key(code: &str) -> bool {
 /// Bare letters, digits and Shift-only combos would fire while typing in any
 /// app, so a shortcut needs ⌘, ⌃ or ⌥ unless it is a function key.
 fn shortcut_needs_modifier(hotkey: &Hotkey) -> bool {
-    !(hotkey.meta || hotkey.ctrl || hotkey.alt) && !is_function_key(&hotkey.code)
+    !(hotkey.meta || hotkey.ctrl || hotkey.alt || is_function_key(&hotkey.code))
 }
 
 const NEEDS_MODIFIER: &str = if cfg!(target_os = "macos") {

@@ -313,7 +313,7 @@ pub(crate) fn schedule_startup_check(cx: &mut App) {
             if let Some(next_channel) = request.channel {
                 channel = next_channel;
                 ignored_version = None;
-                let _ = cx.update(drop_pending_update_from_previous_channel);
+                cx.update(drop_pending_update_from_previous_channel);
             }
 
             let manual = request.manual;
@@ -410,13 +410,21 @@ pub(crate) fn schedule_startup_check(cx: &mut App) {
             }
 
             crate::platform::activate_app();
+            let notes_preview = release
+                .notes
+                .as_deref()
+                .map(|n| {
+                    let snippet: String = n.lines().take(5).collect::<Vec<_>>().join("\n");
+                    format!("\n\nRelease Notes:\n{snippet}")
+                })
+                .unwrap_or_default();
             let accepted = crate::platform::confirm_dialog(
-                "Update Cap",
+                "Update sricap-rec",
                 &format!(
-                    "Version {} of Cap is available. Cap will download it in the background and let you know when it's ready to install.",
+                    "Version {} of sricap-rec is available on GitHub Releases. sricap-rec will download it in the background and let you know when it's ready to install.{notes_preview}",
                     release.version
                 ),
-                "Download",
+                "Download Update",
                 "Not Now",
                 false,
             );
@@ -519,11 +527,12 @@ fn start_download(release: Release, cx: &mut App) {
 
 fn update_failed(message: &str, cx: &mut App) {
     set_status(UpdateStatus::Idle, cx);
-    let message =
-        format!("{message}\n\nYou can always download the latest version from cap.so/download.");
+    let message = format!(
+        "{message}\n\nYou can always download the latest DMG or ZIP from https://github.com/srinivaskona7/Cap/releases."
+    );
     cx.spawn(async move |_| {
         crate::platform::activate_app();
-        crate::platform::alert_dialog("Update Cap", &message);
+        crate::platform::alert_dialog("Update sricap-rec", &message);
     })
     .detach();
 }

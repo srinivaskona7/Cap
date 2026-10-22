@@ -52,7 +52,7 @@ All notable features, presets, UI options, and architectural customizations buil
     - **Per-Image Duration Presets**: Set any image's visibility duration in 1 click (**`1s`**, **`2s` (Default)**, **`3s`**, **`5s`**, **`Full`**) or drag its start/end handles on the **Image** timeline track.
     - **Position Presets**: **`Center`**, **`TL`**, **`TR`**, **`BL`**, **`BR`** + **`Del`** to remove any image.
   - **`Add Reel Hook Banner`**: Inserts a bold top-anchored headline pill (`"HOW TO BUILD THIS IN 30s"`, `#4F46E5` pill backdrop, `800` weight, `2px` outline) on the Text track.
-- **20-Tool Creator Studio Suite (`Background → Layout`, `Audio`, & `Export`)**:
+- **40-Tool Creator Studio Suite (`Background → Layout`, `Audio`, & `Export`)**:
   1. **`+ Intro (2s)` Card Generator**: Branded 2-second Intro Title Card at `0:00`.
   2. **`+ Outro CTA` Card Generator**: 2.5-second `"FOLLOW FOR PART 2 · LIKE & SUBSCRIBE"` End Screen.
   3. **`+ Lower-Third` Speaker Badge**: Animated speaker name & handle pill (`0.4s – 3.9s`).
@@ -94,17 +94,33 @@ All notable features, presets, UI options, and architectural customizations buil
   38. **`Loop Reel ↺` Seamless Ending-to-Intro Bridge (`Background → Layout`)**: Adds crossfade transitions and a `"↺ REWATCH FROM STEP 1"` bridge card at the end of the Reel.
   39. **`+ SFX Whoosh` & `+ SFX Ding Chime` (`Audio` Tab) + `Spread Across Video` (`Image Sequence Manager`)**: Synthesizes transition whoosh and notification chime cues at the playhead, and evenly spreads uploaded slide images across the timeline.
   40. **`Export CLI & Shortcut Cheat-Sheet (.MD)` (`Export` Drawer)**: Extracts all recorded shortcuts and callout cards into `<title>-cheatsheet.md` in `Exports/` and copies it to the macOS Clipboard.
-  21. **Top Header `Save`, `Discard Edits`, `Discard & Close`, and `Quit App` Controls**:
+  41. **Top Header `Save`, `Discard Edits`, `Discard & Close`, and `Quit App` Controls**:
       - **`Save`**: Writes project changes to disk immediately and updates the restore checkpoint.
       - **`Discard Edits`**: Reverts all unsaved experimental edits back to the last saved checkpoint without closing the window.
       - **`Discard & Close`**: Ignores unsaved edits, restores the last saved state on disk, closes the Studio Editor, and returns to the Main Window.
       - **`Quit App`**: Cleanly exits `sricap-rec` in 1 click.
-  22. **`Trim Start [` & `Trim End ]` (`Background → Layout`)**: 1-click ripple-trim of dead air before or after the current playhead on the active clip.
-  23. **`Duplicate` Selected Segment (`Background → Layout`)**: Duplicates the selected `Text`, `Image`, `Mask`, or `Zoom` segment and places the copy right after it.
-  24. **`+ Pixelate` Sensitive Area Mask (`Background → Layout`)**: Inserts a `MaskKind::Sensitive` pixelation box (`24px` blocks, `3.0s` duration) at the playhead and activates its canvas drag/resize handles.
-  25. **`Split Scene` & `Floating Dual` (`Background → Layout`)**: Inserts a `SceneMode::SplitScreen` or `SceneMode::Floating` dual-card layout (`3.0s` duration) at the playhead.
-  26. **`Clear Overlays` (`Background → Layout`)**: Clears all added Text, Mask, Scene, and 3D overlays in 1 click while preserving video clips.
-  27. **`Exports Dir` (`Background → Layout`)**: Opens `<recordings_dir>/Exports/` directly in macOS Finder.
+  42. **Top Header 1-Click Platform Aspect Ratio Switcher (`16:9 YouTube` | `9:16 Reels` | `1:1 LinkedIn`)**:
+      - **`16:9 YouTube`**: Applies the 4K DevOps/Coding Max-Screen preset (`padding = 2.0%`, `rounding = 10.0`, bottom-right 20% webcam, +0.22 code contrast).
+      - **`9:16 Reels`**: Applies the 3-zone 1080×1920 vertical teaching layout for Instagram Reels, YouTube Shorts, and TikTok.
+      - **`1:1 LinkedIn`**: Applies the 1:1 Square feed layout (`AspectRatio::Square`, tight `4%` padding, bottom-right square webcam, centered captions).
+  43. **`Trim Start [` & `Trim End ]` (`Background → Layout`)**: 1-click ripple-trim of dead air before or after the current playhead on the active clip.
+  44. **`Duplicate` Selected Segment (`Background → Layout`)**: Duplicates the selected `Text`, `Image`, `Mask`, or `Zoom` segment and places the copy right after it.
+  45. **`+ Pixelate` Sensitive Area Mask (`Background → Layout`)**: Inserts a `MaskKind::Sensitive` pixelation box (`24px` blocks, `3.0s` duration) at the playhead and activates its canvas drag/resize handles.
+  46. **`Split Scene` & `Floating Dual` (`Background → Layout`)**: Inserts a `SceneMode::SplitScreen` or `SceneMode::Floating` dual-card layout (`3.0s` duration) at the playhead.
+  47. **`Clear Overlays` (`Background → Layout`)**: Clears all added Text, Mask, Scene, and 3D overlays in 1 click while preserving video clips.
+  48. **`Exports Dir` (`Background → Layout`)**: Opens `<recordings_dir>/Exports/` directly in macOS Finder.
+  49. **`+ Link Card 🔗` & `+ QR / Docs 📱` + `Copy Clickable SOP & Chapters (.MD)`**: Inserts floating process link / QR callout cards at the playhead and exports clickable Markdown chapters (`[MM:SS](#t=Xs)`).
+  50. **Viral & Coding Caption Typography & Presets (`Hormozi Fire`, `Terminal CLI`, `MrBeast Gold`, `Glass Pill`, `Editorial Serif`, `Dev Green`, `JetBrains Mono / SF Mono`, `Impact / Heavy Display`, `Inter / Crisp UI`) + `Auto All-Caps & Punctuation Optimizer` + Strict Single-Window `SCContentFilter` Isolation**:
+      - True macOS `SCContentFilter::with_desktop_independent_window` single-window & browser-tab isolation so overlapping terminals or notifications never leak into window recordings.
+  51. **Opt-In Cursor Auto-Zoom Toggle (`Auto-Zoom: OFF` / `Auto-Zoom: ON`)**:
+      - Cursor Auto-Zoom is **OFF by default** across all presets (`16:9 YouTube`, `9:16 Reels`, `DevOps Reel`, `Web Reel`, `Magic Polish`) so screen recordings stay at a steady 100% view unless explicitly enabled via the 1-click **`Auto-Zoom: OFF / ON`** toggle in the Studio Editor Header Bar or `Background → Layout` sidebar.
+  52. **Direct `Open Studio Editor` & `Import .MP4 / Video` on Main Page + In-Editor `+ Add .MP4`, `+ Attach Cam (.mp4)`, & `+ Record Cam/Clip`**:
+      - Prominent **`Open Studio Editor`** and **`Import .MP4 / Video`** buttons on the Main Page (`main_window.rs` & `import.rs`) that open the Studio Editor directly (auto-creating a blank `Studio Canvas` project if none exists).
+      - Top Header Bar **`+ Add .MP4`** and **`+ Record Cam/Clip`** buttons inside Studio Editor.
+      - Always-enabled **`Camera`** sidebar tab with **`+ Attach Cam (.mp4)`** (`attach_camera_video_clicked`) to attach any external `.mp4`/`.mov` webcam video onto an imported MP4 or screen recording, plus **`+ Record Cam/Clip`**.
+  53. **6-Stage Audacity-Grade Audio DSP & 1-Click Studio Voice Profiles + `iPhone Bezel` / `MacBook Bezel` Frames + Teleprompter `Slow`/`Med`/`Fast` Presets**:
+      - `Podcast Studio`, `Tech Screencast`, and `Noisy Room Fix` 1-click profiles in the `Audio` tab (`crates/audio/src/voice_level.rs` + `editor_tabs.rs`).
+      - `iPhone Bezel` (Dynamic Island + squircle bezel) and `MacBook Bezel` (`FrameStyle::MacOS` dark window chrome) buttons in `Background → Layout`.
 
 ---
 
@@ -155,3 +171,7 @@ All notable features, presets, UI options, and architectural customizations buil
 - **Fast Incremental Dev Launch (`./start.sh` & `./stop.sh`)**:
   - Caches GPUI patch hashes in `target/.cap-gpui-patch-stamp` to skip redundant `prepare-gpui-dependency.sh` runs.
   - Uses `split-debuginfo = "unpacked"` and `codegen-units = 256` on `[profile.dev.package.cap-desktop-gpui]` for 2–5 second incremental rebuilds.
+- **In-App Auto-Updater via GitHub Releases (`apps/desktop-gpui/src/installer.rs` & `src/updates.rs`)**:
+  - Queries `https://api.github.com/repos/srinivaskona7/Cap/releases/latest` (`parse_github_release`), displays the release changelog preview, downloads `sricap-rec-macos-arm64.zip` in the background, unpacks with `/usr/bin/ditto -x -k`, and hot-replaces `/Applications/sricap-rec.app`.
+- **Fast `sccache` Parallel CI & Polished macOS DMG (`.github/workflows/release-sricap-mac.yml`)**:
+  - Uses `mozilla-actions/sccache-action@v0.0.7` (`RUSTC_WRAPPER=sccache`), compiles `cap-muxer`/`cap-cli` sidecars and `sricap-rec` GPUI binary in parallel, and builds a polished `.dmg` with custom `.VolumeIcon.icns` and Finder-positioned `sricap-rec.app` (`{175, 190}`) + `/Applications` drag-and-drop shortcut (`{425, 190}`).

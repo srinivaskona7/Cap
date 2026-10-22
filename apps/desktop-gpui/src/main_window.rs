@@ -3467,6 +3467,7 @@ impl MainWindow {
                 "help" => "Help & Tour",
                 "settings" => "Settings",
                 "screenshots" => "Screenshots",
+                "open-studio-direct" => "Open Studio Editor Directly",
                 "import-video-studio" => "Import Video (.mp4)",
                 "recordings" => "Recordings",
                 "teleprompter" => "Teleprompter",
@@ -3549,6 +3550,13 @@ impl MainWindow {
                             this.open_panel(Panel::Library(LibraryKind::Screenshots), window, cx);
                         }),
                     ))
+                    .child(
+                        icon_button("open-studio-direct", "icons/film-cut.svg", 16.).on_click(
+                            cx.listener(|_, _, _window, cx| {
+                                cx.defer(crate::import::open_studio_editor_directly);
+                            }),
+                        ),
+                    )
                     .child(
                         icon_button("import-video-studio", "icons/import.svg", 16.).on_click(
                             cx.listener(|this, _, window, cx| {
@@ -4102,6 +4110,20 @@ impl MainWindow {
             .gap(px(8.))
             .items_center()
             .child(self.render_search_field(cx))
+            .children((kind == LibraryKind::Recordings).then(|| {
+                ui::Button::plain(
+                    &theme,
+                    "library-open-studio-direct",
+                    ui::ButtonVariant::Blue,
+                    ui::ButtonSize::Sm,
+                )
+                .label("Open Studio")
+                .icon("icons/film-cut.svg")
+                .height(px(36.))
+                .on_click(cx.listener(|_, _, _window, cx| {
+                    cx.defer(crate::import::open_studio_editor_directly);
+                }))
+            }))
             .child(
                 ui::Button::plain(
                     &theme,
@@ -5625,11 +5647,10 @@ impl MainWindow {
                         );
                     }
                 } else {
-                    for window in self
-                        .devices
-                        .windows
-                        .iter()
-                        .filter(|w| self.matches_search(&w.label) || self.matches_search(&w.app))
+                    for window in
+                        self.devices.windows.iter().filter(|w| {
+                            self.matches_search(&w.label) || self.matches_search(&w.app)
+                        })
                     {
                         let selected = self
                             .selected_window
@@ -5694,10 +5715,12 @@ impl MainWindow {
                                     .label(format!("All Windows ({win_count})"))
                                     .icon("icons/window.svg")
                                     .full_width()
-                                    .on_click(cx.listener(|this, _, _window, cx| {
-                                        this.browser_tabs_mode = false;
-                                        cx.notify();
-                                    })),
+                                    .on_click(cx.listener(
+                                        |this, _, _window, cx| {
+                                            this.browser_tabs_mode = false;
+                                            cx.notify();
+                                        },
+                                    )),
                                 ),
                             )
                             .child(
@@ -5715,10 +5738,12 @@ impl MainWindow {
                                     .label(format!("Browser Tabs ({tab_count})"))
                                     .icon("icons/globe.svg")
                                     .full_width()
-                                    .on_click(cx.listener(|this, _, _window, cx| {
-                                        this.browser_tabs_mode = true;
-                                        cx.notify();
-                                    })),
+                                    .on_click(cx.listener(
+                                        |this, _, _window, cx| {
+                                            this.browser_tabs_mode = true;
+                                            cx.notify();
+                                        },
+                                    )),
                                 ),
                             ),
                     )
@@ -5745,16 +5770,16 @@ impl MainWindow {
         };
 
         if cards.is_empty() {
-            return grid.child(
-                self.render_empty_state(match (target, self.browser_tabs_mode, self.search.is_empty()) {
+            return grid.child(self.render_empty_state(
+                match (target, self.browser_tabs_mode, self.search.is_empty()) {
                     (TargetType::Display, _, true) => "No displays found",
                     (TargetType::Display, _, false) => "No matching displays",
                     (TargetType::Window, true, true) => "No open Chrome / Safari / Arc tabs found",
                     (TargetType::Window, true, false) => "No matching browser tabs",
                     (_, _, true) => "No windows found",
                     (_, _, false) => "No matching windows",
-                }),
-            );
+                },
+            ));
         }
 
         // Two columns, laid out as rows of two. The cards carry their own
@@ -6598,11 +6623,62 @@ impl MainWindow {
 
     /// `BaseControls`: camera, microphone, system audio.
     fn render_base_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = self.theme;
         div()
             .flex()
             .flex_col()
             .gap(px(8.))
             .w_full()
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .w_full()
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-open-studio-editor-direct",
+                                ui::ButtonVariant::Blue,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/film-cut.svg")
+                            .label("Open Studio Editor")
+                            .height(px(34.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |_, _, _window, cx| {
+                                    cx.defer(crate::import::open_studio_editor_directly);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-import-mp4-to-studio",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/import.svg")
+                            .label("Import .MP4 / Video")
+                            .height(px(34.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.open_panel(
+                                        Panel::Library(LibraryKind::Recordings),
+                                        window,
+                                        cx,
+                                    );
+                                    cx.defer(crate::import::pick_and_import_video);
+                                },
+                            )),
+                        ),
+                    ),
+            )
             .child(
                 div()
                     .px(px(4.))

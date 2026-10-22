@@ -1232,9 +1232,9 @@ fn ripple_relative_keyframes<T>(
     new_end: f64,
     cut_start: f64,
     cut_end: f64,
-    shift: f64,
     time: impl for<'a> Fn(&'a mut T) -> &'a mut f64,
 ) {
+    let shift = cut_end - cut_start;
     keyframes.retain_mut(|keyframe| {
         let value = time(keyframe);
         let absolute = old_start + *value;
@@ -1271,7 +1271,6 @@ fn ripple_delete_mask_track(
             new_end,
             cut_start,
             cut_end,
-            shift,
             |keyframe| &mut keyframe.time,
         );
         ripple_relative_keyframes(
@@ -1281,7 +1280,6 @@ fn ripple_delete_mask_track(
             new_end,
             cut_start,
             cut_end,
-            shift,
             |keyframe| &mut keyframe.time,
         );
         ripple_relative_keyframes(
@@ -1291,7 +1289,6 @@ fn ripple_delete_mask_track(
             new_end,
             cut_start,
             cut_end,
-            shift,
             |keyframe| &mut keyframe.time,
         );
         segment.start = new_start;
@@ -2842,7 +2839,7 @@ pub fn insert_auto_pii_masks(
     }
 
     let target_ranges: Vec<(f64, f64)> = if ranges.is_empty() {
-        vec![(0.0, total.min(5.0).max(1.0))]
+        vec![(0.0, total.clamp(1.0, 5.0))]
     } else {
         ranges.to_vec()
     };

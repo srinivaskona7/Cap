@@ -378,6 +378,8 @@ pub struct Config {
     crop_bounds: Option<CropBounds>,
     fps: u32,
     show_cursor: bool,
+    #[cfg(target_os = "macos")]
+    window_id: Option<WindowId>,
     #[cfg(target_os = "linux")]
     linux_source: LinuxCaptureSource,
 }
@@ -531,6 +533,8 @@ impl<TCaptureFormat: ScreenCaptureFormat> ScreenCaptureConfig<TCaptureFormat> {
                 crop_bounds,
                 fps,
                 show_cursor,
+                #[cfg(target_os = "macos")]
+                window_id: None,
                 #[cfg(target_os = "linux")]
                 linux_source,
             },
@@ -550,6 +554,12 @@ impl<TCaptureFormat: ScreenCaptureFormat> ScreenCaptureConfig<TCaptureFormat> {
             #[cfg(target_os = "macos")]
             excluded_windows,
         })
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn with_macos_window_id(mut self, window_id: Option<WindowId>) -> Self {
+        self.config.window_id = window_id;
+        self
     }
 
     #[cfg(windows)]

@@ -5003,12 +5003,7 @@ impl ProjectUniforms {
                     // The bubble yields to a text takeover so it can never
                     // collide with the text's half of the frame.
                     opacity: scene.regular_camera_transition_opacity() as f32 * takeover_fade,
-                    border_enabled: if project
-                        .camera
-                        .border
-                        .as_ref()
-                        .is_some_and(|b| b.enabled)
-                    {
+                    border_enabled: if project.camera.border.as_ref().is_some_and(|b| b.enabled) {
                         1.0
                     } else {
                         0.0

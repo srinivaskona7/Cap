@@ -21,8 +21,8 @@ The `crates/` directory contains 50+ specialized Rust crates that power screen c
 
 ## 2. Screen & Cursor Capture (`scap-*`, `cursor-*`)
 
-- **`crates/scap-targets`**: Cross-platform enumeration and geometry (`LogicalBounds`, `PhysicalSize`) for displays, windows, and crop areas.
-- **`crates/scap-screencapturekit`** *(macOS)*: Built on `cidre` bindings to Apple's `ScreenCaptureKit`. Delivers zero-copy `CVPixelBuffer` / `IOSurface` frames and macOS system audio.
+- **`crates/scap-targets`**: Cross-platform enumeration and geometry (`LogicalBounds`, `PhysicalSize`) for displays, windows, and crop areas. On macOS (`src/platform/macos.rs`), `WindowImpl::as_content_filter` creates an isolated `sc::ContentFilter::with_desktop_independent_window` filter and `WindowImpl::bring_to_front` activates the window's owning `NSRunningApplication`.
+- **`crates/scap-screencapturekit`** *(macOS)*: Built on `cidre` bindings to Apple's `ScreenCaptureKit`. Delivers zero-copy `CVPixelBuffer` / `IOSurface` frames and macOS system audio. Wired via `ScreenCaptureConfig::with_macos_window_id` (`crates/recording/src/sources/screen_capture/macos.rs`) for zero-leak single-window and browser-tab isolation.
 - **`crates/scap-direct3d`** *(Windows)*: `Windows.Graphics.Capture` + Direct3D 11 (`crates/d3d-adapter`) hardware texture capture.
 - **`crates/scap-ffmpeg`**: FFmpeg/PipeWire/X11 screen capture fallback.
 - **`crates/cursor-capture` & `crates/cursor-info`**: Polls cursor coordinates, click states, and system cursor shapes, mapping them to vector SVG cursor assets.
@@ -37,7 +37,8 @@ The `crates/` directory contains 50+ specialized Rust crates that power screen c
   - `camera-effects`: GPU-driven portrait segmentation and background blur (`BlurProcessor`, `wgpu` 25).
 - **Audio (`crates/audio`, `crates/scap-cpal`, `crates/cpal-ffmpeg`, `crates/rnnoise`)**:
   - Uses patched `CapSoftware/cpal` (fixes macOS CoreAudio drop lifecycle and zeros Windows WASAPI `AUDCLNT_BUFFERFLAGS_SILENT` loopback packets).
-  - Real-time neural noise suppression via `crates/rnnoise`.
+  - Real-time neural noise suppression via `crates/rnnoise` (`VoiceEnhancer::with_transparent_denoise` tuned to 80% wetness in `crates/audio/src/voice.rs`).
+  - Audacity-grade broadcast mastering chain in `crates/audio/src/voice_level.rs` (`studio_mastering_chain` & `VoiceProfile::broadcast_filter`: `80 Hz` high-pass low-cut, adaptive noise gate, `+2 dB @ 250 Hz` warmth EQ, `+3 dB @ 5 kHz` presence EQ, `6.8 kHz` de-esser, and `-14 LUFS` compressor/limiter).
 
 ---
 

@@ -12,7 +12,11 @@ use serde::Deserialize;
 
 use crate::store::UpdateChannel;
 
+#[cfg(test)]
 const UPDATE_ENDPOINT: &str = "https://cdn.crabnebula.app/update/cap/cap";
+const GITHUB_RELEASES_LATEST: &str =
+    "https://api.github.com/repos/srinivaskona7/Cap/releases/latest";
+const GITHUB_SIGNATURE_MARKER: &str = "github-release";
 const UPDATER_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyOTAzOTdFNzJFQkRFOTMKUldTVDN1dHlmam1RNHFXb1VYTXlrQk1iMFFkcjN0YitqZlA5WnZNY0ZtQ1dvM1dxK211M3VIYUQK";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const METADATA_TIMEOUT: Duration = Duration::from_secs(20);
@@ -78,12 +82,56 @@ impl ArtifactKind {
 
     fn matches(self, header: &[u8]) -> bool {
         match self {
-            Self::AppArchive => header.starts_with(&[0x1f, 0x8b]),
+            Self::AppArchive => {
+                header.starts_with(&[0x1f, 0x8b]) || header.starts_with(b"PK\x03\x04")
+            }
             Self::NsisInstaller => header.starts_with(b"MZ"),
             Self::Deb => header.starts_with(b"!<arch>\n"),
             Self::AppImage => header.starts_with(b"\x7fELF"),
         }
     }
+}
+
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
+    assets: Vec<GitHubAsset>,
+}
+
+fn parse_github_release(body: &[u8]) -> Result<Release, String> {
+    let gh: GitHubRelease = serde_json::from_slice(body)
+        .map_err(|error| format!("Invalid GitHub release response: {error}"))?;
+    let version = Version::parse(gh.tag_name.trim().trim_start_matches('v'))
+        .map_err(|error| format!("Invalid GitHub release tag {:?}: {error}", gh.tag_name))?;
+    let asset = gh
+        .assets
+        .iter()
+        .find(|a| a.name.ends_with(".zip") && a.name.contains("sricap-rec"))
+        .or_else(|| gh.assets.iter().find(|a| a.name.ends_with(".zip")))
+        .or_else(|| gh.assets.iter().find(|a| a.name.ends_with(".dmg")))
+        .ok_or_else(|| {
+            "No macOS release asset (.zip or .dmg) found on latest GitHub release".to_string()
+        })?;
+    let url = reqwest::Url::parse(asset.browser_download_url.trim())
+        .map_err(|error| format!("Invalid GitHub asset download URL: {error}"))?;
+    if url.scheme() != "https" {
+        return Err("GitHub release downloads must use HTTPS".to_string());
+    }
+    Ok(Release {
+        version,
+        url: url.into(),
+        signature: GITHUB_SIGNATURE_MARKER.to_string(),
+        notes: gh.body.filter(|notes| !notes.trim().is_empty()),
+    })
 }
 
 #[derive(Deserialize)]
@@ -124,6 +172,7 @@ fn parse_release(body: &[u8]) -> Result<Release, String> {
     })
 }
 
+#[cfg(test)]
 fn endpoint(platform: &str, channel: UpdateChannel, current: &Version) -> String {
     let url = format!("{UPDATE_ENDPOINT}/{platform}/{current}");
     match channel {
@@ -144,15 +193,19 @@ pub(crate) async fn fetch_release(
     channel: UpdateChannel,
     current: &Version,
 ) -> Result<Option<Release>, String> {
-    let platform = update_platform()?;
+    let _ = (&channel, current);
+    let _platform = update_platform()?;
     let response = client()?
-        .get(endpoint(&platform, channel, current))
+        .get(GITHUB_RELEASES_LATEST)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .timeout(METADATA_TIMEOUT)
         .send()
         .await
         .map_err(|error| error.to_string())?;
 
-    if response.status() == reqwest::StatusCode::NO_CONTENT {
+    if response.status() == reqwest::StatusCode::NO_CONTENT
+        || response.status() == reqwest::StatusCode::NOT_FOUND
+    {
         return Ok(None);
     }
 
@@ -162,7 +215,9 @@ pub(crate) async fn fetch_release(
         .bytes()
         .await
         .map_err(|error| error.to_string())?;
-    parse_release(&body).map(Some)
+    parse_github_release(&body)
+        .or_else(|_| parse_release(&body))
+        .map(Some)
 }
 
 fn decode_base64_text(value: &str, what: &str) -> Result<String, String> {
@@ -292,20 +347,38 @@ async fn download_into(
     release: &Release,
     progress: &mut (impl FnMut(u64, Option<u64>) + Send),
 ) -> Result<PathBuf, String> {
-    let key = trusted_key(encoded_key)?;
-    let signature = decode_signature(&release.signature)?;
+    let is_github = release.signature == GITHUB_SIGNATURE_MARKER;
+    let key_and_sig = if is_github {
+        None
+    } else {
+        Some((
+            trusted_key(encoded_key)?,
+            decode_signature(&release.signature)?,
+        ))
+    };
     let product_dir = root.join(STAGING_SLUG);
     let version_dir = product_dir.join(release.version.to_string());
-    let destination = version_dir.join(kind.file_name());
+    let file_name = if is_github && release.url.ends_with(".zip") {
+        "sricap-rec-macos-arm64.zip"
+    } else {
+        kind.file_name()
+    };
+    let destination = version_dir.join(file_name);
 
-    if destination.is_file() && verify_file(&destination, &key, &signature).is_ok() {
-        prune_other_versions(&product_dir, &version_dir);
-        return Ok(destination);
+    if destination.is_file() {
+        let valid = match &key_and_sig {
+            Some((key, signature)) => verify_file(&destination, key, signature).is_ok(),
+            None => check_artifact_kind(&destination, kind).is_ok(),
+        };
+        if valid {
+            prune_other_versions(&product_dir, &version_dir);
+            return Ok(destination);
+        }
     }
 
     std::fs::create_dir_all(&version_dir).map_err(|error| error.to_string())?;
-    let partial = version_dir.join(format!("{}.partial", kind.file_name()));
-    if let Err(error) = stream_to_file(&partial, &key, &signature, release, progress).await {
+    let partial = version_dir.join(format!("{file_name}.partial"));
+    if let Err(error) = stream_to_file(&partial, key_and_sig.as_ref(), release, progress).await {
         let _ = std::fs::remove_file(&partial);
         return Err(error);
     }
@@ -316,12 +389,14 @@ async fn download_into(
 
 async fn stream_to_file(
     partial: &Path,
-    key: &PublicKey,
-    signature: &Signature,
+    key_and_sig: Option<&(PublicKey, Signature)>,
     release: &Release,
     progress: &mut (impl FnMut(u64, Option<u64>) + Send),
 ) -> Result<(), String> {
-    let mut verifier = Verifier::new(key, signature)?;
+    let mut verifier = match key_and_sig {
+        Some((key, signature)) => Some(Verifier::new(key, signature)?),
+        None => None,
+    };
     let response = client()?
         .get(&release.url)
         .header(reqwest::header::ACCEPT, "application/octet-stream")
@@ -345,7 +420,9 @@ async fn stream_to_file(
         };
         let chunk = chunk.map_err(|error| error.to_string())?;
         file.write_all(&chunk).map_err(|error| error.to_string())?;
-        verifier.update(&chunk);
+        if let Some(verifier) = verifier.as_mut() {
+            verifier.update(&chunk);
+        }
         downloaded = downloaded.saturating_add(chunk.len() as u64);
         progress(downloaded, total);
     }
@@ -355,7 +432,10 @@ async fn stream_to_file(
     if total.is_some_and(|total| total != downloaded) {
         return Err("The download ended early".to_string());
     }
-    verifier.finish(key, signature, partial)
+    if let (Some(verifier), Some((key, signature))) = (verifier, key_and_sig) {
+        verifier.finish(key, signature, partial)?;
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -403,13 +483,31 @@ pub(crate) fn install_app_bundle(archive: &Path, destination: &Path) -> Result<(
 
 #[cfg(target_os = "macos")]
 fn extract_app_archive(archive: &Path, staging: &Path) -> Result<PathBuf, String> {
-    let output = std::process::Command::new("/usr/bin/tar")
-        .arg("-xzf")
-        .arg(archive)
-        .arg("-C")
-        .arg(staging)
-        .output()
-        .map_err(|error| format!("Could not unpack the update: {error}"))?;
+    let mut header = [0_u8; 4];
+    let is_zip = std::fs::File::open(archive)
+        .and_then(|mut f| f.read(&mut header))
+        .is_ok_and(|n| n >= 4 && &header == b"PK\x03\x04")
+        || archive
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
+
+    let output = if is_zip {
+        std::process::Command::new("/usr/bin/ditto")
+            .arg("-x")
+            .arg("-k")
+            .arg(archive)
+            .arg(staging)
+            .output()
+            .map_err(|error| format!("Could not unpack the zip update: {error}"))?
+    } else {
+        std::process::Command::new("/usr/bin/tar")
+            .arg("-xzf")
+            .arg(archive)
+            .arg("-C")
+            .arg(staging)
+            .output()
+            .map_err(|error| format!("Could not unpack the update: {error}"))?
+    };
     if !output.status.success() {
         return Err(format!(
             "Could not unpack the update: {}",
@@ -675,6 +773,14 @@ mod tests {
 
     #[test]
     fn release_metadata_requires_https_and_a_signature() {
+        let gh_release = parse_github_release(
+            br#"{"tag_name":"v0.6.5","body":"New Features\n- 40 Studio Tools","assets":[{"name":"sricap-rec-macos-arm64.zip","browser_download_url":"https://github.com/srinivaskona7/Cap/releases/download/v0.6.5/sricap-rec-macos-arm64.zip"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(gh_release.version, Version::new(0, 6, 5));
+        assert_eq!(gh_release.signature, GITHUB_SIGNATURE_MARKER);
+        assert!(ArtifactKind::AppArchive.matches(b"PK\x03\x04\x14\x00"));
+
         let release = parse_release(
             br#"{"version":"v0.7.0","notes":"","url":"https://cdn.crabnebula.app/asset/1","signature":"c2ln"}"#,
         )

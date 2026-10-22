@@ -2408,7 +2408,7 @@ impl ScreenshotEditorWindow {
         let Some((next, _)) = Self::ASPECT_OPTIONS.get(index) else {
             return;
         };
-        let next = next.clone();
+        let next = *next;
         self.edit_project(
             move |project| {
                 if aspect_eq(&project.aspect_ratio, &next) {

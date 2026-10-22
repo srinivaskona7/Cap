@@ -411,13 +411,16 @@ impl KeyboardLayer {
         let font_size = font_size_base * (height as f32 / 1080.0);
         let wrap_width = (width as f32 - margin * 2.0).max(font_size);
 
-        let font_family = match settings.font.as_str() {
+        let font_family: Family<'static> = match settings.font.as_str() {
             "System Serif" => Family::Serif,
-            "System Monospace" => Family::Monospace,
+            "System Monospace" | "JetBrains Mono / SF Mono" | "Monospace" => Family::Monospace,
+            "Impact / Heavy Display" => Family::Name("Impact"),
             _ => Family::SansSerif,
         };
 
-        let weight = if settings.font_weight >= 700 {
+        let weight = if settings.font_weight >= 850 {
+            Weight::BLACK
+        } else if settings.font_weight >= 700 {
             Weight::BOLD
         } else if settings.font_weight >= 500 {
             Weight::MEDIUM

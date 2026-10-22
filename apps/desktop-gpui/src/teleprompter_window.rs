@@ -1027,6 +1027,50 @@ impl TeleprompterWindow {
             ui::Popover::glass(&theme, px(192.))
                 .bottom(px(48.))
                 .right(px(8.))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(4.))
+                        .px(px(6.))
+                        .py(px(4.))
+                        .children(
+                            [(110_u32, "Slow"), (160_u32, "Med"), (220_u32, "Fast")]
+                                .into_iter()
+                                .map(|(wpm, label)| {
+                                    let selected = self.state.words_per_minute == wpm;
+                                    div()
+                                        .id(SharedString::from(format!(
+                                            "teleprompter-speed-{label}"
+                                        )))
+                                        .flex_1()
+                                        .py(px(3.))
+                                        .rounded(px(6.))
+                                        .text_center()
+                                        .text_size(px(11.))
+                                        .text_color(Hsla::from(if selected {
+                                            theme.gray_12
+                                        } else {
+                                            theme.gray_10
+                                        }))
+                                        .bg(Theme::with_alpha(
+                                            theme.gray_12,
+                                            if selected { 0.16 } else { 0.06 },
+                                        ))
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.state.words_per_minute = wpm;
+                                            this.touch(
+                                                TeleprompterState::WORDS_PER_MINUTE,
+                                                window,
+                                                cx,
+                                            );
+                                            cx.notify();
+                                        }))
+                                        .child(label)
+                                }),
+                        ),
+                )
                 .child(self.render_setting_toggle(
                     "cue-markers",
                     "icons/chevron-right.svg",

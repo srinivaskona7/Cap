@@ -2296,7 +2296,20 @@ pub fn is_pii_or_secret_token(text: &str) -> bool {
     let cleaned = text.trim().trim_matches(|ch: char| {
         matches!(
             ch,
-            ',' | '.' | ';' | ':' | '!' | '?' | '(' | ')' | '"' | '\'' | '`' | '[' | ']' | '{' | '}'
+            ',' | '.'
+                | ';'
+                | ':'
+                | '!'
+                | '?'
+                | '('
+                | ')'
+                | '"'
+                | '\''
+                | '`'
+                | '['
+                | ']'
+                | '{'
+                | '}'
         )
     });
     if cleaned.len() < 5 {
@@ -2806,7 +2819,8 @@ pub fn generate_youtube_chapters_and_social_post(
                             .max(0.0)
                             .floor() as u64;
                         if out_sec >= last_chapter_sec + 10 {
-                            chapters.push((out_sec, format!("Walkthrough Step {}", chapters.len())));
+                            chapters
+                                .push((out_sec, format!("Walkthrough Step {}", chapters.len())));
                             last_chapter_sec = out_sec;
                         }
                     }
@@ -3359,11 +3373,7 @@ mod tests {
         let pii_masks = redact_pii_in_captions_and_plan_masks(&mut project, &[12.0]);
         assert_eq!(pii_masks.len(), 1);
         assert!(
-            project
-                .captions
-                .as_ref()
-                .unwrap()
-                .segments[0]
+            project.captions.as_ref().unwrap().segments[0]
                 .text
                 .contains("[REDACTED]")
         );

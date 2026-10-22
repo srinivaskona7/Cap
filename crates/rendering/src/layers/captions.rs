@@ -625,13 +625,16 @@ impl CaptionsLayer {
             buffer
         };
 
-        let font_family = match caption_data.settings.font.as_str() {
+        let font_family: Family<'static> = match caption_data.settings.font.as_str() {
             "System Serif" => Family::Serif,
-            "System Monospace" => Family::Monospace,
+            "System Monospace" | "JetBrains Mono / SF Mono" | "Monospace" => Family::Monospace,
+            "Impact / Heavy Display" => Family::Name("Impact"),
             _ => Family::SansSerif,
         };
 
-        let weight = if caption_data.settings.font_weight >= 700 {
+        let weight = if caption_data.settings.font_weight >= 850 {
+            Weight::BLACK
+        } else if caption_data.settings.font_weight >= 700 {
             Weight::BOLD
         } else if caption_data.settings.font_weight >= 500 {
             Weight::MEDIUM

@@ -40,12 +40,16 @@ impl VoiceEnhancer {
         }
     }
 
+    pub fn with_transparent_denoise(channels: u16, profile: VoiceProfile) -> Self {
+        Self::with_settings(channels, 0.8, profile)
+    }
+
     pub fn with_settings(channels: u16, wet: f32, profile: VoiceProfile) -> Self {
         let mut enhancer = Self::new(channels);
         enhancer.wet = if wet.is_finite() {
             wet.clamp(0.0, 1.0)
         } else {
-            0.9
+            0.8
         };
         enhancer.profile = Some(profile);
         enhancer

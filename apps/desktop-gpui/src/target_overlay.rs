@@ -1961,7 +1961,7 @@ impl OverlayWindow {
             Some(crop) => format!("{} × {}", crop.width.round(), crop.height.round()),
             None => "Draw an area".to_string(),
         };
-        let presets: [(&'static str, &'static str, Option<(f32, f32)>); 4] = [
+        let presets = [
             ("area-preset-16-9", "16:9", Some((16., 9.))),
             ("area-preset-9-16", "9:16", Some((9., 16.))),
             ("area-preset-1-1", "1:1", Some((1., 1.))),
@@ -2017,11 +2017,7 @@ impl OverlayWindow {
             )
     }
 
-    fn apply_area_aspect_preset(
-        &mut self,
-        ratio: Option<(f32, f32)>,
-        cx: &mut Context<Self>,
-    ) {
+    fn apply_area_aspect_preset(&mut self, ratio: Option<(f32, f32)>, cx: &mut Context<Self>) {
         let (dw, dh) = self.display_size;
         if dw <= 0. || dh <= 0. {
             return;

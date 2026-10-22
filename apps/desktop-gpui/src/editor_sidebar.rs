@@ -2463,7 +2463,7 @@ impl EditorWindow {
             .into_iter()
             .map(|tab| {
                 let disabled = match tab {
-                    SidebarTab::Camera => !summary.is_some_and(|summary| summary.has_camera),
+                    SidebarTab::Camera => false,
                     SidebarTab::Cursor => !summary.is_some_and(|summary| summary.has_cursor_data),
                     _ => false,
                 };
@@ -2690,8 +2690,16 @@ impl EditorWindow {
         let theme = self.theme;
         let current = self.project.aspect_ratio;
         let presets: [(&'static str, &'static str, Option<AspectRatio>); 3] = [
-            ("layout-16-9-desktop", "16:9 Desktop", Some(AspectRatio::Wide)),
-            ("layout-9-16-reels", "9:16 Shorts & Reels", Some(AspectRatio::Vertical)),
+            (
+                "layout-16-9-desktop",
+                "16:9 Desktop",
+                Some(AspectRatio::Wide),
+            ),
+            (
+                "layout-9-16-reels",
+                "9:16 Shorts & Reels",
+                Some(AspectRatio::Vertical),
+            ),
             ("layout-1-1-post", "1:1 Post", Some(AspectRatio::Square)),
         ];
 
@@ -2712,21 +2720,32 @@ impl EditorWindow {
                             if aspect == Some(AspectRatio::Vertical) {
                                 this.apply_tech_reel_preset(false, window, cx);
                             } else {
-                                this.edit_project("social-layout-preset", window, cx, move |project| {
-                                    project.aspect_ratio = aspect;
-                                    project.background.display_position = None;
-                                    project.camera.position = CameraPosition {
-                                        x: CameraXPosition::Right,
-                                        y: CameraYPosition::Bottom,
-                                    };
-                                    project.camera.manual_position = None;
-                                    true
-                                });
+                                this.edit_project(
+                                    "social-layout-preset",
+                                    window,
+                                    cx,
+                                    move |project| {
+                                        project.aspect_ratio = aspect;
+                                        project.background.display_position = None;
+                                        project.camera.position = CameraPosition {
+                                            x: CameraXPosition::Right,
+                                            y: CameraYPosition::Bottom,
+                                        };
+                                        project.camera.manual_position = None;
+                                        true
+                                    },
+                                );
                             }
                         })),
                 ),
             );
         }
+
+        let has_auto_zoom = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|tl| !tl.zoom_segments.is_empty());
 
         let creator_row = div()
             .flex()
@@ -2777,6 +2796,29 @@ impl EditorWindow {
                     .full_width()
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.apply_tech_reel_preset(false, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-toggle-cursor-auto-zoom",
+                        if has_auto_zoom {
+                            ui::ButtonVariant::Primary
+                        } else {
+                            ui::ButtonVariant::Gray
+                        },
+                        ui::ButtonSize::Xs,
+                    )
+                    .label(if has_auto_zoom {
+                        "Auto-Zoom: ON"
+                    } else {
+                        "Auto-Zoom: OFF"
+                    })
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_cursor_auto_zoom(window, cx);
                     })),
                 ),
             );
@@ -2856,9 +2898,11 @@ impl EditorWindow {
                             )
                             .label("Sequence All (2s Each)")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.auto_sequence_images(2.0, window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.auto_sequence_images(2.0, window, cx);
+                                },
+                            )),
                         ),
                     )
                     .child(
@@ -2871,9 +2915,11 @@ impl EditorWindow {
                             )
                             .label("Sequence All (3s Each)")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.auto_sequence_images(3.0, window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.auto_sequence_images(3.0, window, cx);
+                                },
+                            )),
                         ),
                     )
                     .child(
@@ -2886,9 +2932,11 @@ impl EditorWindow {
                             )
                             .label("Spread Across Video")
                             .full_width()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.distribute_images_across_timeline(window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.distribute_images_across_timeline(window, cx);
+                                },
+                            )),
                         ),
                     ),
             );
@@ -2929,9 +2977,13 @@ impl EditorWindow {
                             )
                             .label(lbl)
                             .full_width()
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.set_image_segment_duration(idx_copy, target_dur, window, cx);
-                            })),
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    this.set_image_segment_duration(
+                                        idx_copy, target_dur, window, cx,
+                                    );
+                                },
+                            )),
                         ),
                     );
                 }
@@ -2948,11 +3000,13 @@ impl EditorWindow {
                             )
                             .label(nudge_lbl)
                             .full_width()
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.adjust_image_segment_duration_delta(
-                                    idx_copy, delta, window, cx,
-                                );
-                            })),
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    this.adjust_image_segment_duration_delta(
+                                        idx_copy, delta, window, cx,
+                                    );
+                                },
+                            )),
                         ),
                     );
                 }
@@ -2976,17 +3030,19 @@ impl EditorWindow {
                             )
                             .label(pos_lbl)
                             .full_width()
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.edit_project("image-preset-pos", window, cx, move |p| {
-                                    if let Some(tl) = p.timeline.as_mut()
-                                        && let Some(img) = tl.image_segments.get_mut(idx_copy)
-                                    {
-                                        img.center = cap_project::XY::new(cx_pos, cy_pos);
-                                        img.size = cap_project::XY::new(sx, sy);
-                                    }
-                                    true
-                                });
-                            })),
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    this.edit_project("image-preset-pos", window, cx, move |p| {
+                                        if let Some(tl) = p.timeline.as_mut()
+                                            && let Some(img) = tl.image_segments.get_mut(idx_copy)
+                                        {
+                                            img.center = cap_project::XY::new(cx_pos, cy_pos);
+                                            img.size = cap_project::XY::new(sx, sy);
+                                        }
+                                        true
+                                    });
+                                },
+                            )),
                         ),
                     );
                 }
@@ -3014,9 +3070,11 @@ impl EditorWindow {
                                         ui::ButtonSize::Xs,
                                     )
                                     .label(header_label)
-                                    .on_click(cx.listener(move |this, _, _window, cx| {
-                                        this.select_and_focus_image(idx_copy, cx);
-                                    })),
+                                    .on_click(cx.listener(
+                                        move |this, _, _window, cx| {
+                                            this.select_and_focus_image(idx_copy, cx);
+                                        },
+                                    )),
                                 )
                                 .child(
                                     div()
@@ -3031,11 +3089,13 @@ impl EditorWindow {
                                                 ui::ButtonSize::Xs,
                                             )
                                             .label("↑")
-                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                this.move_image_segment_order(
-                                                    idx_copy, true, window, cx,
-                                                );
-                                            })),
+                                            .on_click(
+                                                cx.listener(move |this, _, window, cx| {
+                                                    this.move_image_segment_order(
+                                                        idx_copy, true, window, cx,
+                                                    );
+                                                }),
+                                            ),
                                         )
                                         .child(
                                             ui::Button::plain(
@@ -3045,11 +3105,13 @@ impl EditorWindow {
                                                 ui::ButtonSize::Xs,
                                             )
                                             .label("↓")
-                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                this.move_image_segment_order(
-                                                    idx_copy, false, window, cx,
-                                                );
-                                            })),
+                                            .on_click(
+                                                cx.listener(move |this, _, window, cx| {
+                                                    this.move_image_segment_order(
+                                                        idx_copy, false, window, cx,
+                                                    );
+                                                }),
+                                            ),
                                         )
                                         .child(
                                             ui::Button::plain(
@@ -3059,9 +3121,13 @@ impl EditorWindow {
                                                 ui::ButtonSize::Xs,
                                             )
                                             .label("Del")
-                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                this.delete_image_segment_at(idx_copy, window, cx);
-                                            })),
+                                            .on_click(
+                                                cx.listener(move |this, _, window, cx| {
+                                                    this.delete_image_segment_at(
+                                                        idx_copy, window, cx,
+                                                    );
+                                                }),
+                                            ),
                                         ),
                                 ),
                         )
@@ -3138,7 +3204,7 @@ impl EditorWindow {
                         .label(spd_lbl)
                         .full_width()
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            this.set_active_clip_speed(f64::from(rate), window, cx);
+                            this.set_active_clip_speed(rate, window, cx);
                         })),
                 ),
             );
@@ -3841,6 +3907,71 @@ impl EditorWindow {
                 ),
             );
 
+        let link_and_qr_row = div()
+            .flex()
+            .flex_row()
+            .gap(px(4.))
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-process-link-card",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ Link Card 🔗")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_process_link_card(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-add-qr-docs-card",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("+ QR / Docs 📱")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_qr_docs_callout_card(window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-bezel-mobile",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("iPhone Bezel")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_device_bezel_frame(true, window, cx);
+                    })),
+                ),
+            )
+            .child(
+                div().flex_1().child(
+                    ui::Button::plain(
+                        &theme,
+                        "studio-bezel-macbook",
+                        ui::ButtonVariant::Gray,
+                        ui::ButtonSize::Xs,
+                    )
+                    .label("MacBook Bezel")
+                    .full_width()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.apply_device_bezel_frame(false, window, cx);
+                    })),
+                ),
+            );
+
         div()
             .flex()
             .flex_col()
@@ -3859,6 +3990,7 @@ impl EditorWindow {
             .child(focus_and_steps_row)
             .child(code_and_retention_row)
             .child(interactive_cards_row)
+            .child(link_and_qr_row)
             .child(brand_kit_and_ai_row)
             .child(pro_polish_row)
             .child(color_looks_row)
@@ -3903,7 +4035,6 @@ impl EditorWindow {
             FrameTheme, KeyboardData, XY,
         };
 
-        let clicks = crate::editor_window::load_recording_clicks(&self.project_path);
         let meta = cap_project::RecordingMeta::load_for_project(&self.project_path).ok();
         let recording_durations = self
             .summary()
@@ -4020,40 +4151,24 @@ impl EditorWindow {
                     captions.settings.manual_position = Some(XY::new(0.5, 0.80));
                 }
 
-                let zoom_amount = if terminal_mode { 1.35 } else { 1.55 };
                 let mut kb_settings = crate::editor_tabs::keyboard_settings(project);
                 kb_settings.enabled = true;
                 kb_settings.show_modifiers = true;
                 let mut enable_kb = false;
 
-                if let Some(timeline) = project.timeline.as_mut() {
-                    if !clicks.is_empty() {
-                        let zooms = crate::editor_edits::generate_zoom_segments_for_timeline(
-                            &clicks,
-                            timeline,
-                            zoom_amount,
-                        );
-                        if !zooms.is_empty() {
-                            timeline.zoom_segments = zooms;
-                        }
-                    } else if timeline.zoom_segments.is_empty() {
-                        let total = timeline.duration().max(1.0);
-                        crate::editor_edits::insert_zoom_segment(timeline, 0.0, total, zoom_amount);
-                    }
-
-                    if terminal_mode
-                        && timeline.keyboard_segments.is_empty()
-                        && let Some(meta) = meta.as_ref()
-                        && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
-                            meta,
-                            timeline,
-                            &kb_settings,
-                        )
-                        && !kb_segs.is_empty()
-                    {
-                        timeline.keyboard_segments = kb_segs;
-                        enable_kb = true;
-                    }
+                if let Some(timeline) = project.timeline.as_mut()
+                    && terminal_mode
+                    && timeline.keyboard_segments.is_empty()
+                    && let Some(meta) = meta.as_ref()
+                    && let Ok(kb_segs) = cap_project::generate_project_keyboard_segments(
+                        meta,
+                        timeline,
+                        &kb_settings,
+                    )
+                    && !kb_segs.is_empty()
+                {
+                    timeline.keyboard_segments = kb_segs;
+                    enable_kb = true;
                 }
                 if enable_kb {
                     let kb = project.keyboard.get_or_insert_with(KeyboardData::default);

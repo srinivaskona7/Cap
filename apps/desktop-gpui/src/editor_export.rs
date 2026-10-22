@@ -467,10 +467,7 @@ fn decode_jpeg_bytes(bytes: &[u8]) -> Option<Arc<RenderImage>> {
 }
 
 impl EditorWindow {
-    pub(crate) fn render_magic_polish_button(
-        &self,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(crate) fn render_magic_polish_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         ui::EditorButton::plain(&self.theme, "editor-magic-polish")
             .left_icon("icons/sparkles.svg")
             .label("Magic Polish")
@@ -494,7 +491,10 @@ impl EditorWindow {
         ui::EditorButton::plain(&self.theme, "editor-copy-clipboard")
             .left_icon("icons/copy.svg")
             .label("Copy")
-            .tooltip(&self.theme, "Export and copy video to clipboard (Max Clarity)")
+            .tooltip(
+                &self.theme,
+                "Export and copy video to clipboard (Max Clarity)",
+            )
             .disabled(!self.project_ready())
             .on_click(cx.listener(|this, _, window, cx| {
                 if !this.project_ready() {

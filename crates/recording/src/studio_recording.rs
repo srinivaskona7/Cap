@@ -3420,6 +3420,8 @@ async fn create_segment_pipeline(
         )
         .await
         .context("screen capture init")?;
+        #[cfg(target_os = "macos")]
+        let screen_config = screen_config.with_macos_window_id(capture_target.window());
 
         let screen_info = screen_config.info();
         let output_size = calculate_gpu_compatible_size(

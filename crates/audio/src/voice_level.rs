@@ -11,6 +11,13 @@ fn compressor(channels: u16) -> String {
     format!("acompressor=threshold={threshold}:ratio=2:attack=15:release=180:knee=2.828:makeup=1")
 }
 
+pub fn studio_mastering_chain(channels: u16) -> String {
+    format!(
+        "highpass=f=80,agate=threshold=0.012:ratio=2.5:attack=10:release=160,equalizer=f=250:t=q:w=1.0:g=2.0,equalizer=f=5000:t=q:w=1.2:g=3.0,equalizer=f=6800:t=q:w=2.0:g=-2.5,{}",
+        compressor(channels)
+    )
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct VoiceProfile {
     pub gain_db: f32,
@@ -82,12 +89,12 @@ impl VoiceProfile {
         if level < -60.0 {
             return Ok(Self::default());
         }
-        let gain_db = (-16.0 - level).clamp(-12.0, 24.0);
+        let gain_db = (-14.0 - level).clamp(-12.0, 24.0);
         let filter = format!("volume={gain_db}dB,{}", compressor(channels));
-        let compressed = measure(&samples, channels, &filter)?.unwrap_or(-16.0);
+        let compressed = measure(&samples, channels, &filter)?.unwrap_or(-14.0);
         Ok(Self {
             gain_db,
-            makeup_db: (-16.0 - compressed).clamp(-6.0, 6.0),
+            makeup_db: (-14.0 - compressed).clamp(-6.0, 6.0),
         })
     }
 
@@ -96,6 +103,15 @@ impl VoiceProfile {
             "volume={}dB,{},volume={}dB,aresample=192000,alimiter=limit=0.841395:attack=5:release=80:level=false:latency=true,aresample=48000",
             self.gain_db,
             compressor(channels),
+            self.makeup_db,
+        )
+    }
+
+    pub fn broadcast_filter(self, channels: u16) -> String {
+        format!(
+            "volume={}dB,{},volume={}dB,aresample=192000,alimiter=limit=0.841395:attack=5:release=80:level=false:latency=true,aresample=48000",
+            self.gain_db,
+            studio_mastering_chain(channels),
             self.makeup_db,
         )
     }

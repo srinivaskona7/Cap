@@ -6,10 +6,17 @@ Cap maintains two desktop application directories in the monorepo that share the
 
 ## 1. `apps/desktop-gpui` — Primary Shipping Desktop App (`sricap-rec`)
 
-- **Status**: **Active production desktop client** (`sricap-rec`, v0.6.1+, bundle ID `com.sri.sricap-rec`).
+- **Status**: **Active production desktop client** (`sricap-rec`, v0.6.5+, bundle ID `com.sri.sricap-rec`).
 - **Standalone Cargo Workspace**:
   - Intentionally excluded from the root `Cargo.toml` workspace (`apps/desktop-gpui/Cargo.toml` defines its own `[workspace]` with members `[".", "kernels"]` and `[[bin]] name = "sricap-rec"`).
+  - **Important Offline Lockfile Invariant**: Keep `apps/desktop-gpui/Cargo.lock`'s `cap-desktop-gpui` `version` field synchronized with `apps/desktop-gpui/Cargo.toml` (`0.6.5`) so `cargo build` never attempts network fetches against `wingleeio/zed`.
+  - **In-App Auto-Updater (`src/installer.rs` & `src/updates.rs`)**: Queries `https://api.github.com/repos/srinivaskona7/Cap/releases/latest` (`parse_github_release`), shows release notes in the update prompt, downloads `sricap-rec-macos-arm64.zip`, unpacks via `/usr/bin/ditto -x -k`, and atomically hot-replaces `/Applications/sricap-rec.app`.
   - **Why**: GPUI (`wingleeio/zed` fork) pulls a massive dependency tree including `wgpu` v29, whereas `cap-rendering` uses `wgpu` v25 with `[patch.crates-io]` `vendor/wgpu-hal`. Isolating the workspace keeps `Cargo.lock`, `cargo hakari`, and Tauri patches cleanly separated.
+- **Direct Studio Launch, Opt-In Auto-Zoom & Camera/MP4 Workflow**:
+  - **Main Page Quick Launch (`main_window.rs` & `import.rs`)**: `Open Studio Editor` (`open_studio_editor_directly`) opens the newest Studio recording or synthesizes a ready-to-edit 1920×1080 30fps `Studio Canvas` `.cap` project (`synthesize_blank_studio_project`) so the Studio Editor opens immediately even with zero prior recordings; `Import .MP4 / Video` (`pick_and_import_video`) imports any `.mp4`, `.mov`, `.mkv`, `.webm`, `.m4v`, or `.avi` directly into Studio Editor.
+  - **In-Editor `.MP4` & Camera Attachment (`editor_window.rs`, `editor_tabs.rs`, `editor_sidebar.rs`, `editor_clips.rs`)**:
+    - Header bar includes **`+ Add .MP4`**, **`+ Record Cam/Clip`** (`record_new_clip_from_editor`), **`16:9 YouTube` | `9:16 Reels` | `1:1 LinkedIn`** aspect switchers, and **`Auto-Zoom: OFF / ON`** (`toggle_cursor_auto_zoom`, strictly opt-in and off by default).
+    - `SidebarTab::Camera` is always enabled (`editor_sidebar.rs`) and exposes **`+ Attach Cam (.mp4)`** (`attach_camera_video_clicked` → `transcode_camera_overlay_for_project`) to attach any external `.mp4`/`.mov` facecam video onto the project's camera track, plus **`+ Record Cam/Clip`**.
 - **Performance Architecture (`kernels/` & Fast Dev Profile)**:
   - In dev builds (`[profile.dev]`), `cap-desktop-gpui` compiles at `opt-level = 0` with `incremental = true`, `codegen-units = 256`, and `split-debuginfo = "unpacked"` (skipping macOS `dsymutil` on incremental links), while all dependencies compile at `opt-level = 2` and `apps/desktop-gpui/kernels` (`cap-gpui-kernels`) compiles at `opt-level = 3` so hot pixel/audio loops (`frame_image`, waveform/sample processing) take ~1ms instead of ~42ms.
   - In release builds (`[profile.release]`), `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `panic = "abort"`, and `strip = true` keep the final `.dmg` compact (~40–50MB).

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (e.g. v0.6.3)"
+        description: "Release tag to publish (e.g. v0.6.5)"
         required: false
-        default: "v0.6.3"
+        default: "v0.6.5"
 
 permissions:
   contents: write
@@ -28,10 +28,17 @@ jobs:
       RUST_TARGET_TRIPLE: aarch64-apple-darwin
       MACOSX_DEPLOYMENT_TARGET: "12.3"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_BUILD_JOBS: "4"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_STRIP: "symbols"
+      CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup sccache for fast Rust compilation
+        uses: mozilla-actions/sccache-action@v0.0.7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -65,18 +72,20 @@ jobs:
           echo "RUST_TARGET_TRIPLE=aarch64-apple-darwin" >> .env
           RUST_TARGET_TRIPLE=aarch64-apple-darwin bun run cap-setup
 
-      - name: Build sidecar binaries (cap-muxer & cap-cli)
-        env:
-          CARGO_PROFILE_RELEASE_DEBUG: "0"
-          CARGO_PROFILE_RELEASE_STRIP: symbols
+      - name: Build sidecars (cap-muxer & cap-cli) and GPUI binary in parallel
         run: |
-          ./scripts/build-desktop-binaries.sh aarch64-apple-darwin
+          ./scripts/build-desktop-binaries.sh aarch64-apple-darwin &
+          SIDECAR_PID=$!
+          bash scripts/build-gpui-binary.sh release aarch64-apple-darwin &
+          GPUI_PID=$!
+          wait $SIDECAR_PID
+          wait $GPUI_PID
 
-      - name: Build & Bundle sricap-rec macOS App & DMG
+      - name: Bundle sricap-rec macOS App (--skip-build --bundles app)
         env:
           CI: "false"
         run: |
-          node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app,dmg
+          node scripts/bundle-gpui.mjs aarch64-apple-darwin --skip-build --bundles app
 
       - name: Ad-hoc Deep Codesign App Bundle
         run: |
@@ -87,27 +96,54 @@ jobs:
             codesign --verify --deep --strict --verbose=2 "$APP_PATH" || true
           fi
 
-      - name: Package release artifacts & SHA256 checksums
+      - name: Package Polished macOS DMG & Auto-Updater ZIP + SHA256SUMS
         run: |
           mkdir -p dist-release
-          DMG_FILE="$(find apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/dmg apps/desktop/src-tauri/target/release/bundle -name "*.dmg" 2>/dev/null | head -n 1)"
           APP_PATH="$(find apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
-          if [ -z "$DMG_FILE" ] || [ ! -f "$DMG_FILE" ]; then
-            echo "::error::No .dmg found after bundling!"
-            exit 1
-          fi
           if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
             echo "::error::No sricap-rec.app found after bundling!"
             exit 1
           fi
-          echo "Found DMG: $DMG_FILE"
           echo "Found APP: $APP_PATH"
 
-          # Re-create DMG with the freshly signed .app
           DMG_DIR="$(mktemp -d)"
           cp -R "$APP_PATH" "$DMG_DIR/"
           ln -s /Applications "$DMG_DIR/Applications"
-          hdiutil create -volname "sricap-rec" -srcfolder "$DMG_DIR" -ov -format UDZO dist-release/sricap-rec.dmg
+          if [ -f "apps/desktop/src-tauri/icons/macos/icon.icns" ]; then
+            cp "apps/desktop/src-tauri/icons/macos/icon.icns" "$DMG_DIR/.VolumeIcon.icns"
+            SetFile -c icnC "$DMG_DIR/.VolumeIcon.icns" 2>/dev/null || true
+            SetFile -a C "$DMG_DIR" 2>/dev/null || true
+          fi
+
+          RW_DMG="$(mktemp -u).dmg"
+          hdiutil create -volname "sricap-rec" -srcfolder "$DMG_DIR" -ov -format UDRW "$RW_DMG"
+          MOUNT_DIR="/Volumes/sricap-rec"
+          if hdiutil attach -readwrite -noverify -noautoopen "$RW_DMG"; then
+            osascript <<'EOF' || true
+          tell application "Finder"
+            tell disk "sricap-rec"
+              open
+              set current view of container window to icon view
+              set toolbar visible of container window to false
+              set statusbar visible of container window to false
+              set the bounds of container window to {200, 120, 800, 520}
+              set viewOptions to the icon view options of container window
+              set arrangement of viewOptions to not arranged
+              set icon size of viewOptions to 128
+              set position of item "sricap-rec.app" of container window to {175, 190}
+              set position of item "Applications" of container window to {425, 190}
+              close
+              open
+              update without registering applications
+              delay 1
+            end tell
+          end tell
+          EOF
+            sync
+            hdiutil detach "$MOUNT_DIR" -force || true
+          fi
+          hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -ov -o dist-release/sricap-rec.dmg
+          rm -f "$RW_DMG"
           rm -rf "$DMG_DIR"
 
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" dist-release/sricap-rec-macos-arm64.zip
@@ -128,7 +164,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.4' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.5' }}
           draft: false
           prerelease: false
           generate_release_notes: true

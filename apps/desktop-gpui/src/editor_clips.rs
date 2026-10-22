@@ -1558,13 +1558,17 @@ impl EditorWindow {
         }
         cx.spawn_in(window, async move |this, cx| {
             #[cfg(target_os = "macos")]
-            let source = crate::platform::open_image_panel(&["mp4"]);
+            let source = crate::platform::open_image_panel(crate::import::VIDEO_IMPORT_EXTENSIONS);
             #[cfg(target_os = "linux")]
-            let source =
-                crate::platform::open_file_panel_async(&[("MP4 Video", &["mp4"])], None, cx).await;
+            let source = crate::platform::open_file_panel_async(
+                &[("Video Files", crate::import::VIDEO_IMPORT_EXTENSIONS)],
+                None,
+                cx,
+            )
+            .await;
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             let source = rfd::FileDialog::new()
-                .add_filter("MP4 Video", &["mp4"])
+                .add_filter("Video Files", crate::import::VIDEO_IMPORT_EXTENSIONS)
                 .pick_file();
             if let Some(source) = source {
                 this.update_in(cx, |this, window, cx| {
@@ -1599,7 +1603,12 @@ impl EditorWindow {
                 .detach();
             return;
         }
-        if source.is_file() && has_allowed_extension(&source.to_string_lossy(), &["mp4"]) {
+        if source.is_file()
+            && has_allowed_extension(
+                &source.to_string_lossy(),
+                crate::import::VIDEO_IMPORT_EXTENSIONS,
+            )
+        {
             self.import_mp4(source, window, cx);
             return;
         }
