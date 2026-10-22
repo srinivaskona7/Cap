@@ -230,3 +230,222 @@ impl VoiceFilter {
         })
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AudioLevelMetrics {
+    pub peak_linear: f32,
+    pub peak_dbfs: f32,
+    pub rms_dbfs: f32,
+    pub recommended_gain_db: f32,
+    pub clipping_risk: bool,
+}
+
+impl Default for AudioLevelMetrics {
+    fn default() -> Self {
+        Self {
+            peak_linear: 0.0,
+            peak_dbfs: -60.0,
+            rms_dbfs: -60.0,
+            recommended_gain_db: 0.0,
+            clipping_risk: false,
+        }
+    }
+}
+
+pub fn measure_audio_levels(samples: &[f32]) -> AudioLevelMetrics {
+    if samples.is_empty() {
+        return AudioLevelMetrics::default();
+    }
+    let mut peak = 0.0_f32;
+    let mut sum_sq = 0.0_f64;
+    let mut count = 0_usize;
+    for &sample in samples {
+        if sample.is_finite() {
+            let abs = sample.abs();
+            if abs > peak {
+                peak = abs;
+            }
+            sum_sq += f64::from(sample) * f64::from(sample);
+            count += 1;
+        }
+    }
+    if count == 0 || peak <= 1e-6 {
+        return AudioLevelMetrics::default();
+    }
+    let rms = (sum_sq / count as f64).sqrt() as f32;
+    let peak_dbfs = (20.0 * peak.log10()).clamp(-60.0, 6.0);
+    let rms_dbfs = if rms > 1e-6 {
+        (20.0 * rms.log10()).clamp(-60.0, 6.0)
+    } else {
+        -60.0
+    };
+    let recommended_gain_db = (-1.0 - peak_dbfs).clamp(-12.0, 18.0);
+    AudioLevelMetrics {
+        peak_linear: peak,
+        peak_dbfs,
+        rms_dbfs,
+        recommended_gain_db,
+        clipping_risk: peak >= 0.98,
+    }
+}
+
+pub fn normalize_peak_gain(samples: &mut [f32], ceiling_dbfs: f32) -> f32 {
+    let metrics = measure_audio_levels(samples);
+    if metrics.peak_linear <= 1e-6 {
+        return 0.0;
+    }
+    let target_ceiling_db = ceiling_dbfs.clamp(-12.0, -0.1);
+    let gain_db = (target_ceiling_db - metrics.peak_dbfs).clamp(-12.0, 18.0);
+    let gain_linear = 10.0_f32.powf(gain_db / 20.0);
+    let ceiling_linear = 10.0_f32.powf(target_ceiling_db / 20.0);
+    for sample in samples.iter_mut() {
+        let scaled = *sample * gain_linear;
+        let abs = scaled.abs();
+        *sample = if abs <= ceiling_linear {
+            scaled
+        } else {
+            let excess = abs - ceiling_linear;
+            let headroom = (1.0 - ceiling_linear).max(0.01);
+            let compressed = ceiling_linear + headroom * (excess / headroom).tanh();
+            compressed.copysign(scaled)
+        };
+    }
+    gain_db
+}
+
+pub fn apply_noise_gate_and_rnnoise(
+    samples: &[f32],
+    channels: u16,
+    gate_threshold_db: f32,
+) -> Vec<f32> {
+    let ch = usize::from(channels.clamp(1, 2));
+    if samples.is_empty() {
+        return Vec::new();
+    }
+    let threshold_linear = 10.0_f32.powf(gate_threshold_db.clamp(-70.0, -18.0) / 20.0);
+    let attack_coeff = (-1.0_f32 / (0.004 * 48_000.0)).exp();
+    let release_coeff = (-1.0_f32 / (0.085 * 48_000.0)).exp();
+    let floor_gain = 0.08_f32;
+
+    let mut gated = Vec::with_capacity(samples.len());
+    let mut envelope = 0.0_f32;
+    let mut current_gain = floor_gain;
+
+    for frame in samples.chunks(ch) {
+        let frame_peak = frame.iter().fold(0.0_f32, |acc, s| acc.max(s.abs()));
+        let coeff = if frame_peak > envelope {
+            attack_coeff
+        } else {
+            release_coeff
+        };
+        envelope = coeff * envelope + (1.0 - coeff) * frame_peak;
+        let target_gain = if envelope >= threshold_linear {
+            1.0
+        } else {
+            let ratio = (envelope / threshold_linear.max(1e-6)).clamp(0.0, 1.0);
+            floor_gain + (1.0 - floor_gain) * ratio * ratio
+        };
+        current_gain = 0.995 * current_gain + 0.005 * target_gain;
+        for &s in frame {
+            gated.push(s * current_gain);
+        }
+    }
+
+    let raw_audio = crate::AudioData::from_samples(gated, channels.clamp(1, 2));
+    let frames = raw_audio.sample_count();
+    let mut enhancer = VoiceEnhancer::new(channels.clamp(1, 2));
+    let mut denoised = enhancer.render(&raw_audio, 0, frames).samples().to_vec();
+    let _ = normalize_peak_gain(&mut denoised, -1.0);
+    denoised
+}
+
+pub fn synthesize_tactile_click_and_keystroke_sfx(
+    total_samples: usize,
+    sample_rate: u32,
+    click_times_sec: &[f64],
+    keystroke_times_sec: &[f64],
+) -> Vec<f32> {
+    if total_samples == 0 || sample_rate == 0 {
+        return Vec::new();
+    }
+    let mut pcm = vec![0.0_f32; total_samples];
+    let sr = f64::from(sample_rate);
+
+    for &t in click_times_sec {
+        if t < 0.0 {
+            continue;
+        }
+        let start = (t * sr) as usize;
+        let len = (0.018 * sr) as usize;
+        for i in 0..len {
+            let idx = start + i;
+            if idx >= total_samples {
+                break;
+            }
+            let local_t = i as f32 / sample_rate as f32;
+            let env = (-local_t * 260.0).exp();
+            let transient = (2.0 * std::f32::consts::PI * 1850.0 * local_t).sin() * 0.22
+                + (2.0 * std::f32::consts::PI * 680.0 * local_t).sin() * 0.14;
+            pcm[idx] = (pcm[idx] + transient * env).clamp(-0.5, 0.5);
+        }
+    }
+
+    for &t in keystroke_times_sec {
+        if t < 0.0 {
+            continue;
+        }
+        let start = (t * sr) as usize;
+        let len = (0.012 * sr) as usize;
+        for i in 0..len {
+            let idx = start + i;
+            if idx >= total_samples {
+                break;
+            }
+            let local_t = i as f32 / sample_rate as f32;
+            let env = (-local_t * 360.0).exp();
+            let switch_thock = (2.0 * std::f32::consts::PI * 2400.0 * local_t).sin() * 0.10
+                + (2.0 * std::f32::consts::PI * 920.0 * local_t).sin() * 0.08;
+            pcm[idx] = (pcm[idx] + switch_thock * env).clamp(-0.5, 0.5);
+        }
+    }
+
+    pcm
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn measure_and_normalize_peak_gain_prevent_clipping() {
+        let mut samples = vec![0.1_f32, -0.25, 0.35, -0.4, 0.2];
+        let before = measure_audio_levels(&samples);
+        assert!(before.peak_dbfs < -6.0);
+        assert!(!before.clipping_risk);
+        assert!(before.recommended_gain_db > 5.0);
+
+        let applied_db = normalize_peak_gain(&mut samples, -1.0);
+        assert!(applied_db > 5.0);
+        let after = measure_audio_levels(&samples);
+        assert!((after.peak_dbfs - -1.0).abs() < 0.15);
+        assert!(!after.clipping_risk);
+    }
+
+    #[test]
+    fn noise_gate_and_rnnoise_suppresses_low_hum() {
+        let hum: Vec<f32> = (0..4_800)
+            .map(|i| 0.002 * (2.0 * std::f32::consts::PI * 60.0 * (i as f32 / 48_000.0)).sin())
+            .collect();
+        let cleaned = apply_noise_gate_and_rnnoise(&hum, 1, -40.0);
+        assert_eq!(cleaned.len(), hum.len());
+        assert!(cleaned.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
+    }
+
+    #[test]
+    fn tactile_click_and_keystroke_sfx_synthesizes_bounded_transients() {
+        let pcm = synthesize_tactile_click_and_keystroke_sfx(48_000, 48_000, &[0.1, 0.5], &[0.25]);
+        assert_eq!(pcm.len(), 48_000);
+        let metrics = measure_audio_levels(&pcm);
+        assert!(metrics.peak_linear > 0.05 && metrics.peak_linear <= 0.5);
+    }
+}

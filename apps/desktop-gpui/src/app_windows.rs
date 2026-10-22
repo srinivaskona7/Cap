@@ -3968,6 +3968,34 @@ pub fn close_camera_window(cx: &mut App) {
     }
 }
 
+pub fn toggle_camera_bubble(cx: &mut App) {
+    if !cx.has_global::<AppWindows>() {
+        return;
+    }
+    if cx.global::<AppWindows>().camera.is_some() {
+        close_camera_window(cx);
+    } else {
+        open_camera_window(cx);
+    }
+}
+
+pub fn toggle_editor_spotlight_or_zoom(cx: &mut App) {
+    if !cx.has_global::<AppWindows>() {
+        return;
+    }
+    let editors: Vec<_> = cx
+        .global::<AppWindows>()
+        .editors
+        .iter()
+        .map(|(_, handle)| *handle)
+        .collect();
+    for handle in editors {
+        let _ = handle.update(cx, |editor, window, cx| {
+            editor.toggle_cursor_auto_zoom(window, cx);
+        });
+    }
+}
+
 fn camera_preview_is_inline(cx: &App) -> bool {
     TargetSelect::global(cx).read(cx).mode == Some(TargetType::CameraOnly)
 }

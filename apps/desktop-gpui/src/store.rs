@@ -936,6 +936,7 @@ pub struct GeneralSettings {
     /// Also outside `general_settings`: the `audio_enhancement` section's
     /// `enabledByDefault`, rendered in the Recording card next to it.
     pub studio_sound_by_default: bool,
+    pub enable_click_and_keystroke_sfx: bool,
 }
 
 /// The section names, so the write calls read as the store keys they are.
@@ -946,6 +947,22 @@ pub const RECORDING_START_SAFETY: &str = "recording_start_safety";
 /// and the Recording settings card both write it.
 pub const AUDIO_ENHANCEMENT: &str = "audio_enhancement";
 pub const STUDIO_SOUND_BY_DEFAULT_KEY: &str = "enabledByDefault";
+
+pub fn click_and_keystroke_sfx_by_default() -> bool {
+    bool_at(
+        &store_section(GENERAL_SETTINGS),
+        "enableClickAndKeystrokeSfx",
+        false,
+    )
+}
+
+pub fn set_click_and_keystroke_sfx_by_default(enabled: bool) -> bool {
+    set_store_setting(
+        GENERAL_SETTINGS,
+        "enableClickAndKeystrokeSfx",
+        Value::Bool(enabled),
+    )
+}
 
 pub fn studio_sound_by_default() -> bool {
     bool_at(
@@ -1281,6 +1298,7 @@ impl GeneralSettings {
                 true,
             ),
             studio_sound_by_default: bool_at(audio_enhancement, STUDIO_SOUND_BY_DEFAULT_KEY, true),
+            enable_click_and_keystroke_sfx: bool_at(general, "enableClickAndKeystrokeSfx", false),
         }
     }
 }
@@ -1406,6 +1424,45 @@ pub fn hotkeys_raw() -> Map<String, Value> {
 /// section (there is none today) alone.
 pub fn set_hotkeys_raw(map: &Map<String, Value>) -> bool {
     set_store_setting(HOTKEYS, "hotkeys", Value::Object(map.clone()))
+}
+
+pub fn default_creator_hotkeys() -> Map<String, Value> {
+    let mut map = Map::new();
+    if let Ok(val) = serde_json::to_value(Hotkey {
+        code: "Digit2".to_string(),
+        meta: true,
+        ctrl: false,
+        alt: false,
+        shift: true,
+    }) {
+        map.insert("toggleRecording".to_string(), val);
+    }
+    if let Ok(val) = serde_json::to_value(Hotkey {
+        code: "KeyZ".to_string(),
+        meta: true,
+        ctrl: false,
+        alt: true,
+        shift: false,
+    }) {
+        map.insert("toggleSpotlightZoom".to_string(), val);
+    }
+    if let Ok(val) = serde_json::to_value(Hotkey {
+        code: "KeyP".to_string(),
+        meta: true,
+        ctrl: false,
+        alt: false,
+        shift: true,
+    }) {
+        map.insert("togglePauseRecording".to_string(), val);
+    }
+    map
+}
+
+pub fn hotkeys_with_defaults() -> Map<String, Value> {
+    match store_section(HOTKEYS).remove("hotkeys") {
+        Some(Value::Object(map)) => map,
+        _ => default_creator_hotkeys(),
+    }
 }
 
 pub fn hotkey_from_value(value: &Value) -> Option<Hotkey> {

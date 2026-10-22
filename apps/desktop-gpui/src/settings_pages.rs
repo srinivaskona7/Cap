@@ -420,7 +420,7 @@ impl PagesState {
         }));
 
         Self {
-            hotkeys: store::hotkeys_raw(),
+            hotkeys: store::hotkeys_with_defaults(),
             listening: None,
             shortcut_saved: None,
             shortcut_saved_reset: None,
@@ -934,7 +934,8 @@ impl SettingsWindow {
 
 const SCREENSHOT_SHORTCUTS: [&str; 3] = ["screenshotArea", "screenshotWindow", "screenshotDisplay"];
 
-const RECORDING_SHORTCUTS: [&str; 7] = [
+const RECORDING_SHORTCUTS: [&str; 8] = [
+    "toggleRecording",
     "startStudioRecording",
     "startInstantRecording",
     "openRecordingPickerArea",
@@ -944,8 +945,12 @@ const RECORDING_SHORTCUTS: [&str; 7] = [
     "cycleRecordingMode",
 ];
 
-const WHILE_RECORDING_SHORTCUTS: [&str; 3] =
-    ["stopRecording", "togglePauseRecording", "restartRecording"];
+const WHILE_RECORDING_SHORTCUTS: [&str; 4] = [
+    "stopRecording",
+    "togglePauseRecording",
+    "toggleSpotlightZoom",
+    "restartRecording",
+];
 
 const SHORTCUT_SAVED_NOTICE: std::time::Duration = std::time::Duration::from_secs(6);
 
@@ -1043,6 +1048,7 @@ fn shortcut_label(action: &str) -> &'static str {
         "screenshotArea" => "Screenshot an area",
         "screenshotWindow" => "Screenshot a window",
         "screenshotDisplay" => "Screenshot the display",
+        "toggleRecording" => "Toggle Record (Start / Stop)",
         "startStudioRecording" => "Start Studio recording",
         "startInstantRecording" => "Start Instant recording",
         "openRecordingPickerArea" => "Record an area",
@@ -1052,6 +1058,7 @@ fn shortcut_label(action: &str) -> &'static str {
         "cycleRecordingMode" => "Cycle recording mode",
         "stopRecording" => "Stop recording",
         "togglePauseRecording" => "Pause or resume",
+        "toggleSpotlightZoom" => "Toggle Spotlight / Auto-Zoom",
         "restartRecording" => "Restart recording",
         _ => "Shortcut",
     }
@@ -1096,6 +1103,7 @@ fn shortcut_effect(
         "screenshotArea" => format!("select an area and {screenshot}"),
         "screenshotWindow" => format!("capture the window under your pointer and {screenshot}"),
         "screenshotDisplay" => format!("capture the display under your pointer and {screenshot}"),
+        "toggleRecording" => "start or stop recording in your current mode".into(),
         "startStudioRecording" => {
             format!("record your selected screen or window in Studio mode{studio_stop}")
         }
@@ -1109,6 +1117,7 @@ fn shortcut_effect(
         "cycleRecordingMode" => "switch between Studio, Instant and Screenshot mode".into(),
         "stopRecording" => "stop the current recording".into(),
         "togglePauseRecording" => "pause the current recording, or resume it".into(),
+        "toggleSpotlightZoom" => "toggle spotlight and cursor auto-zoom".into(),
         "restartRecording" => "throw away the current take and start again".into(),
         _ => String::new(),
     }
@@ -8166,7 +8175,7 @@ mod tests {
             .chain(WHILE_RECORDING_SHORTCUTS.iter())
             .copied()
             .collect();
-        assert_eq!(shown.len(), 13);
+        assert_eq!(shown.len(), 15);
         let settings = store::GeneralSettings::default();
         for action in &shown {
             assert_eq!(shown.iter().filter(|other| *other == action).count(), 1);

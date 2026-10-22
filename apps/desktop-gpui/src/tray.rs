@@ -60,6 +60,8 @@ const STOP_ICON: &[u8] = include_bytes!("../assets/tray/tray-stop-icon.png");
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrayItem {
     OpenCap,
+    ToggleRecording,
+    ToggleCameraBubble,
     RecordDisplay,
     RecordWindow,
     RecordArea,
@@ -344,11 +346,32 @@ pub fn build_onboarding_menu(version: &str) -> Vec<Entry> {
     ]
 }
 
+pub fn format_menubar_recording_status(
+    elapsed_secs: u64,
+    paused: bool,
+    mic_active: bool,
+) -> String {
+    let mins = elapsed_secs / 60;
+    let secs = elapsed_secs % 60;
+    let prefix = if paused { " ⏸ " } else { " " };
+    let mic = if mic_active { " · 🎙" } else { "" };
+    format!("{prefix}{mins}:{secs:02}{mic}")
+}
+
 fn current_menu_entries(cx: &App, mode: Mode, previous: &[PreviousItem]) -> Vec<Entry> {
     if crate::app_windows::onboarding_is_open(cx) && !crate::permissions::necessary_granted() {
         return build_onboarding_menu(crate::menus::app_version());
     }
-    build_menu(mode, previous, crate::menus::app_version())
+    let mut entries = build_menu(mode, previous, crate::menus::app_version());
+    let quick_actions = vec![
+        Entry::item("Start / Stop Recording (⌘⇧2)", TrayItem::ToggleRecording),
+        Entry::item("Toggle Camera Bubble", TrayItem::ToggleCameraBubble),
+        Entry::item("Quick Screenshot", TrayItem::TakeScreenshot),
+        Entry::Separator,
+    ];
+    let insert_pos = usize::from(!entries.is_empty());
+    entries.splice(insert_pos..insert_pos, quick_actions);
+    entries
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +390,8 @@ pub fn handle_item(item: TrayItem, cx: &mut App) {
             // the window (and the menu bar) to come forward.
             cx.activate(true);
         }
+        TrayItem::ToggleRecording => crate::hotkeys::trigger_toggle_recording(cx),
+        TrayItem::ToggleCameraBubble => app_windows::toggle_camera_bubble(cx),
         TrayItem::RecordDisplay => app_windows::arm_target_mode(TargetType::Display, cx),
         TrayItem::RecordWindow => app_windows::arm_target_mode(TargetType::Window, cx),
         TrayItem::RecordArea => app_windows::arm_target_mode(TargetType::Area, cx),
@@ -985,6 +1010,15 @@ mod mac {
     /// AppKit opens the menu instead -- so stopping a recording by clicking the
     /// status item means *detaching* the menu and giving the button a
     /// target/action, then putting the menu back when the recording ends.
+    fn set_button_title(tray: &Tray, title: &str) {
+        unsafe {
+            let button: *mut AnyObject = msg_send![&*tray.status_item, button];
+            if !button.is_null() {
+                let _: () = msg_send![button, setTitle: &*NSString::from_str(title)];
+            }
+        }
+    }
+
     pub fn set_recording(recording: bool, cx: &mut App) {
         if !cx.has_global::<Tray>() {
             return;
@@ -1011,7 +1045,38 @@ mod mac {
                 }
                 let icon = mode_icon(tray.mode);
                 set_button_image(tray, icon);
+                set_button_title(tray, "");
             }
+        }
+        if recording {
+            cx.spawn(async move |cx| {
+                loop {
+                    let still_recording = cx.update(|cx| {
+                        if !cx.has_global::<Tray>() || !cx.global::<Tray>().recording {
+                            return false;
+                        }
+                        let (elapsed, paused, mic_active) = {
+                            let s = crate::session::RecordingSession::global(cx).read(cx);
+                            (
+                                s.elapsed().as_secs(),
+                                s.is_paused(),
+                                s.has_microphone() && !s.mic_muted,
+                            )
+                        };
+                        let label =
+                            super::format_menubar_recording_status(elapsed, paused, mic_active);
+                        set_button_title(cx.global::<Tray>(), &label);
+                        true
+                    });
+                    if !still_recording {
+                        break;
+                    }
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(500))
+                        .await;
+                }
+            })
+            .detach();
         }
         tracing::info!(recording, "tray recording state");
     }

@@ -2293,6 +2293,16 @@ impl EditorWindow {
         self.flush_animated_gradient_selection();
         self.sidebar = crate::editor_sidebar::SidebarState::new(&self.project);
         self.sidebar_loaded(window, cx);
+        if crate::store::click_and_keystroke_sfx_by_default() {
+            let already_has_sfx = self.project.timeline.as_ref().is_some_and(|tl| {
+                tl.audio_segments
+                    .iter()
+                    .any(|seg| seg.path.contains("ui-click-key-sfx.wav"))
+            });
+            if !already_has_sfx {
+                self.generate_click_and_key_sfx_track_inner(false, window, cx);
+            }
+        }
         cx.notify();
         window.refresh();
     }
@@ -5989,14 +5999,41 @@ impl EditorWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.generate_click_and_key_sfx_track_inner(true, window, cx);
+    }
+
+    pub(crate) fn generate_click_and_key_sfx_track_inner(
+        &mut self,
+        notify_user: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let total = self.total_duration().max(1.0);
         let clicks = load_recording_clicks(&self.project_path);
-        let key_times: Vec<f64> = self
+        let click_times: Vec<f64> = clicks
+            .iter()
+            .flat_map(|seg| seg.iter().filter(|c| c.down).map(|c| c.time_ms / 1000.0))
+            .collect();
+        let mut key_times: Vec<f64> = self
             .project
             .timeline
             .as_ref()
             .map(|tl| tl.keyboard_segments.iter().map(|k| k.start).collect())
             .unwrap_or_default();
+        if key_times.is_empty()
+            && let Some(timeline) = self.project.timeline.as_ref()
+            && let Ok(meta) = RecordingMeta::load_for_project(&self.project_path)
+            && let Ok(segs) = cap_project::generate_project_keyboard_segments(
+                &meta,
+                timeline,
+                &cap_project::KeyboardSettings::default(),
+            )
+        {
+            key_times = segs.into_iter().map(|s| s.start).collect();
+        }
+        if !notify_user && click_times.is_empty() && key_times.is_empty() {
+            return;
+        }
         let audio_dir = self.project_path.join("assets").join("audio");
         if std::fs::create_dir_all(&audio_dir).is_err() {
             return;
@@ -6005,42 +6042,12 @@ impl EditorWindow {
         let relative_path = "assets/audio/ui-click-key-sfx.wav".to_string();
         let sample_rate = 48_000_u32;
         let total_samples = ((total * f64::from(sample_rate)) as usize).clamp(48_000, 48_000 * 600);
-        let mut buf = vec![0.0_f32; total_samples];
-
-        for seg_clicks in &clicks {
-            for click in seg_clicks {
-                if !click.down {
-                    continue;
-                }
-                let start_idx = ((click.time_ms / 1000.0) * f64::from(sample_rate)) as usize;
-                let tap_samples = (0.018 * f64::from(sample_rate)) as usize;
-                for i in 0..tap_samples {
-                    let idx = start_idx + i;
-                    if idx >= buf.len() {
-                        break;
-                    }
-                    let t = i as f32 / sample_rate as f32;
-                    let env = (-t * 240.0).exp();
-                    let wave = (2.0 * std::f32::consts::PI * 1650.0 * t).sin() * 0.35
-                        + (2.0 * std::f32::consts::PI * 820.0 * t).sin() * 0.25;
-                    buf[idx] = (buf[idx] + wave * env).clamp(-0.9, 0.9);
-                }
-            }
-        }
-        for &kt in &key_times {
-            let start_idx = (kt * f64::from(sample_rate)) as usize;
-            let tick_samples = (0.012 * f64::from(sample_rate)) as usize;
-            for i in 0..tick_samples {
-                let idx = start_idx + i;
-                if idx >= buf.len() {
-                    break;
-                }
-                let t = i as f32 / sample_rate as f32;
-                let env = (-t * 320.0).exp();
-                let wave = (2.0 * std::f32::consts::PI * 2200.0 * t).sin() * 0.28;
-                buf[idx] = (buf[idx] + wave * env).clamp(-0.9, 0.9);
-            }
-        }
+        let buf = cap_audio::synthesize_tactile_click_and_keystroke_sfx(
+            total_samples,
+            sample_rate,
+            &click_times,
+            &key_times,
+        );
 
         let spec = hound::WavSpec {
             channels: 1,
@@ -6063,8 +6070,101 @@ impl EditorWindow {
                 window,
                 cx,
             );
-            self.show_notice("Added Click & Keystroke SFX track to timeline.", window, cx);
+            if notify_user {
+                self.show_notice("Added Click & Keystroke SFX track to timeline.", window, cx);
+            }
         }
+    }
+
+    pub(crate) fn compute_project_audio_levels(&self) -> cap_audio::AudioLevelMetrics {
+        let mut samples = Vec::new();
+        let mic_gain = 10.0_f32.powf(self.project.audio.mic_volume_db / 20.0);
+        for wf in &self.timeline.mic_waveforms {
+            for &v in wf.iter() {
+                samples.push((v * mic_gain).clamp(-2.0, 2.0));
+            }
+        }
+        if samples.is_empty() {
+            let sys_gain = 10.0_f32.powf(self.project.audio.system_volume_db / 20.0);
+            for wf in &self.timeline.system_waveforms {
+                for &v in wf.iter() {
+                    samples.push((v * sys_gain).clamp(-2.0, 2.0));
+                }
+            }
+        }
+        if samples.is_empty()
+            && let Some(tl) = self.project.timeline.as_ref()
+        {
+            for seg in &tl.audio_segments {
+                let full = self.project_path.join(&seg.path);
+                if let Ok(mut reader) = hound::WavReader::open(&full) {
+                    let gain = 10.0_f32.powf(seg.volume_db / 20.0);
+                    for s in reader.samples::<f32>().take(48_000 * 4).flatten() {
+                        samples.push(s * gain);
+                    }
+                }
+            }
+        }
+        cap_audio::measure_audio_levels(&samples)
+    }
+
+    pub(crate) fn normalize_and_clean_project_audio(
+        &mut self,
+        apply_rnnoise_gate: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let metrics = self.compute_project_audio_levels();
+        let gain_delta = metrics.recommended_gain_db;
+        let paths_to_clean: Vec<PathBuf> = self
+            .project
+            .timeline
+            .as_ref()
+            .map(|tl| {
+                tl.audio_segments
+                    .iter()
+                    .filter(|seg| seg.path.ends_with(".wav") && !seg.path.contains("sfx"))
+                    .map(|seg| self.project_path.join(&seg.path))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        for wav_path in paths_to_clean {
+            if let Ok(mut reader) = hound::WavReader::open(&wav_path) {
+                let spec = reader.spec();
+                if spec.sample_format == hound::SampleFormat::Float {
+                    let mut raw: Vec<f32> = reader.samples::<f32>().flatten().collect();
+                    let processed = if apply_rnnoise_gate {
+                        cap_audio::apply_noise_gate_and_rnnoise(&raw, spec.channels, -42.0)
+                    } else {
+                        let _ = cap_audio::normalize_peak_gain(&mut raw, -1.0);
+                        raw
+                    };
+                    if let Ok(mut writer) = hound::WavWriter::create(&wav_path, spec) {
+                        for s in processed {
+                            let _ = writer.write_sample(s);
+                        }
+                        let _ = writer.finalize();
+                    }
+                }
+            }
+        }
+
+        self.edit_project("audio-normalize-clean", window, cx, move |project| {
+            project.audio.mute = false;
+            if apply_rnnoise_gate {
+                project.audio.improve = true;
+            }
+            let current = project.audio.mic_volume_db;
+            project.audio.mic_volume_db = (current + gain_delta).clamp(-12.0, 10.0);
+            true
+        });
+        let msg = if apply_rnnoise_gate {
+            "Applied RNNoise + Noise Gate (-42 dB) & Normalized Peak Gain (-1.0 dBFS ceiling)."
+        } else {
+            "Normalized Voice Peak Gain to -1.0 dBFS ceiling (anti-clipping enabled)."
+        };
+        self.show_notice(msg, window, cx);
     }
 
     pub(crate) fn export_current_frame_thumbnail(
@@ -6917,6 +7017,57 @@ impl EditorWindow {
     ) {
         let path = self.project_path.clone();
         let base_project = self.project.clone();
+        let recording_durations = self.clip_display_durations.clone();
+        let (b16_9, b9_16, b1_1, b4_5, write_srt, write_vtt) =
+            self.export
+                .as_ref()
+                .map_or((true, true, true, false, true, true), |u| {
+                    (
+                        u.batch_16_9,
+                        u.batch_9_16,
+                        u.batch_1_1,
+                        u.batch_4_5,
+                        u.export_srt_sidecar,
+                        u.export_vtt_sidecar,
+                    )
+                });
+        let mut targets = Vec::new();
+        if b16_9 {
+            targets.push((
+                "16x9-YouTube",
+                cap_project::AspectRatio::Wide,
+                cap_project::XY::new(3840, 2160),
+                0.15_f32,
+            ));
+        }
+        if b9_16 {
+            targets.push((
+                "9x16-Reels-Shorts",
+                cap_project::AspectRatio::Vertical,
+                cap_project::XY::new(1080, 1920),
+                0.12_f32,
+            ));
+        }
+        if b1_1 {
+            targets.push((
+                "1x1-LinkedIn-Square",
+                cap_project::AspectRatio::Square,
+                cap_project::XY::new(1080, 1080),
+                0.14_f32,
+            ));
+        }
+        if b4_5 {
+            targets.push((
+                "4x5-Portrait",
+                cap_project::AspectRatio::Tall,
+                cap_project::XY::new(1080, 1350),
+                0.14_f32,
+            ));
+        }
+        if targets.is_empty() {
+            return;
+        }
+        let target_total = targets.len();
         let title = self
             .summary()
             .map(|s| s.pretty_name.clone())
@@ -6935,7 +7086,7 @@ impl EditorWindow {
         let exports_dir = crate::recording::recordings_dir().join("Exports");
         let _ = std::fs::create_dir_all(&exports_dir);
         self.show_notice(
-            "Batch-exporting 16:9 YouTube + 9:16 Reels + 1:1 Square MP4s to Exports/...",
+            format!("Batch-exporting {target_total} checked format(s) to Exports/..."),
             window,
             cx,
         );
@@ -6943,14 +7094,41 @@ impl EditorWindow {
         cx.spawn_in(window, async move |this, cx| {
             let done = gpui_tokio::Tokio::spawn(cx, async move {
                 let mut count = 0usize;
-                for (suffix, aspect) in [
-                    ("16x9-YouTube", cap_project::AspectRatio::Wide),
-                    ("9x16-Reels", cap_project::AspectRatio::Vertical),
-                    ("1x1-LinkedIn", cap_project::AspectRatio::Square),
-                ] {
+                for (suffix, aspect, res_base, bpp) in targets {
                     let mut p = base_project.clone();
                     p.aspect_ratio = Some(aspect);
+                    if matches!(
+                        aspect,
+                        cap_project::AspectRatio::Vertical | cap_project::AspectRatio::Tall
+                    ) {
+                        p.camera.position = cap_project::CameraPosition {
+                            x: cap_project::CameraXPosition::Center,
+                            y: cap_project::CameraYPosition::Top,
+                        };
+                        if let Some(tl) = p.timeline.as_mut()
+                            && tl.zoom_segments.is_empty()
+                        {
+                            for seg_clicks in load_recording_clicks(&path) {
+                                for click in seg_clicks.into_iter().filter(|c| c.down).take(12) {
+                                    let s = (click.time_ms / 1000.0 - 0.15).max(0.0);
+                                    let e = s + 1.6;
+                                    let _ = crate::editor_edits::insert_zoom_segment(tl, s, e, 1.5);
+                                }
+                            }
+                        }
+                        crate::transcription::regroup_captions_for_social_reels(
+                            &mut p,
+                            &recording_durations,
+                            3,
+                        );
+                    }
                     let out_file = exports_dir.join(format!("{safe_title}-{suffix}.mp4"));
+                    crate::editor_export::write_caption_sidecars_for_video(
+                        &p,
+                        &out_file,
+                        write_srt,
+                        write_vtt,
+                    );
                     let Ok(builder) = cap_export::ExporterBase::builder(path.clone())
                         .with_config(p)
                         .with_output_path(out_file)
@@ -6961,9 +7139,9 @@ impl EditorWindow {
                     };
                     let mp4_settings = cap_export::mp4::Mp4ExportSettings {
                         fps: 60,
-                        resolution_base: cap_project::XY::new(1920, 1080),
+                        resolution_base: res_base,
                         compression: cap_export::mp4::ExportCompression::Maximum,
-                        custom_bpp: Some(0.15),
+                        custom_bpp: Some(bpp),
                         force_ffmpeg_decoder: false,
                         optimize_filesize: false,
                     };
@@ -6979,7 +7157,7 @@ impl EditorWindow {
             this.update_in(cx, |this, window, cx| {
                 this.show_notice(
                     format!(
-                        "Exported {done}/3 Multi-Platform MP4s (16:9 + 9:16 + 1:1) to Exports/!"
+                        "Exported {done}/{target_total} Multi-Platform MP4s (+ SRT/VTT sidecars) to Exports/!"
                     ),
                     window,
                     cx,
@@ -13212,6 +13390,27 @@ impl EditorWindow {
                     .justify_end()
                     .items_center()
                     // The split toggle (`Player.tsx:409-427`).
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "transport-generate-captions",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .icon("icons/captions.svg")
+                        .label(
+                            if crate::transcription::ui_snapshot(&self.project_path).generating {
+                                "Generating Captions..."
+                            } else {
+                                "Generate Captions"
+                            },
+                        )
+                        .radius(px(7.))
+                        .disabled(!self.project_ready())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.generate_captions_one_click(window, cx);
+                        })),
+                    )
                     .child(
                         div()
                             .id("transport-split-tooltip")

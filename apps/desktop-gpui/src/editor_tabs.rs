@@ -1976,6 +1976,10 @@ impl EditorWindow {
         let auto_ducked = (audio.system_volume_db <= -10.0 || bg_music_ducked) && !audio.mute;
         let original_clip_muted = audio.mic_volume_db <= -30.0 && audio.system_volume_db <= -30.0;
         let recording_voiceover = self.voiceover_recording.is_some();
+        let vu_metrics = self.compute_project_audio_levels();
+        let vu_fill = ((vu_metrics.peak_dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
+        let vu_rms_fill = ((vu_metrics.rms_dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
+        let click_key_sfx_default = crate::store::click_and_keystroke_sfx_by_default();
         let audio_tracks_list: Vec<(usize, String, f64, f64)> = self
             .project
             .timeline
@@ -2235,6 +2239,138 @@ impl EditorWindow {
                                         ),
                                     ),
                                 ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(6.))
+                                .p(px(8.))
+                                .rounded(px(8.))
+                                .bg(Hsla::from(theme.gray_2))
+                                .border_1()
+                                .border_color(Hsla::from(theme.editor.line))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_size(px(11.))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(Hsla::from(theme.editor.text_1))
+                                                .child("VU Meter & Peak Gain Normalizer"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(10.5))
+                                                .text_color(if vu_metrics.clipping_risk {
+                                                    Hsla::from(theme.red_9)
+                                                } else {
+                                                    Hsla::from(theme.gray_11)
+                                                })
+                                                .child(SharedString::from(format!(
+                                                    "Peak {:.1} dBFS · RMS {:.1} dBFS",
+                                                    vu_metrics.peak_dbfs, vu_metrics.rms_dbfs
+                                                ))),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .w_full()
+                                        .h(px(6.))
+                                        .rounded_full()
+                                        .overflow_hidden()
+                                        .bg(Hsla::from(theme.gray_4))
+                                        .relative()
+                                        .child(div().h_full().w(gpui::relative(vu_fill)).bg(
+                                            if vu_metrics.clipping_risk {
+                                                Hsla::from(theme.red_9)
+                                            } else if vu_metrics.peak_dbfs > -3.0 {
+                                                Hsla::from(theme.amber_3)
+                                            } else {
+                                                Hsla::from(theme.blue_9)
+                                            },
+                                        ))
+                                        .child(
+                                            div()
+                                                .absolute()
+                                                .top_0()
+                                                .bottom_0()
+                                                .left_0()
+                                                .w(gpui::relative(vu_rms_fill))
+                                                .bg(Theme::with_alpha(theme.blue_9, 0.45)),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(6.))
+                                        .child(
+                                            div().flex_1().child(
+                                                ui::Button::plain(
+                                                    &theme,
+                                                    "audio-rnnoise-gate-clean",
+                                                    ui::ButtonVariant::Primary,
+                                                    ui::ButtonSize::Xs,
+                                                )
+                                                .label("RNNoise + Noise Gate")
+                                                .full_width()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.normalize_and_clean_project_audio(
+                                                        true, window, cx,
+                                                    );
+                                                })),
+                                            ),
+                                        )
+                                        .child(
+                                            div().flex_1().child(
+                                                ui::Button::plain(
+                                                    &theme,
+                                                    "audio-normalize-peak-gain",
+                                                    ui::ButtonVariant::Gray,
+                                                    ui::ButtonSize::Xs,
+                                                )
+                                                .label("Normalize Peak (-1 dB)")
+                                                .full_width()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.normalize_and_clean_project_audio(
+                                                        false, window, cx,
+                                                    );
+                                                })),
+                                            ),
+                                        ),
+                                ),
+                        )
+                        .child(
+                            ui::Subfield::plain(
+                                &theme,
+                                "Click & Keystroke Tactile SFX (Auto on Open)",
+                            )
+                            .child(
+                                ui::Toggle::plain(
+                                    &theme,
+                                    "audio-toggle-click-key-sfx-default",
+                                    click_key_sfx_default,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        let next = !click_key_sfx_default;
+                                        let _ =
+                                            crate::store::set_click_and_keystroke_sfx_by_default(
+                                                next,
+                                            );
+                                        if next {
+                                            this.generate_click_and_key_sfx_track(window, cx);
+                                        } else {
+                                            cx.notify();
+                                        }
+                                    },
+                                )),
+                            ),
                         )
                         .child(
                             ui::Button::plain(
@@ -3454,7 +3590,12 @@ impl EditorWindow {
         // `hasAudio` (`CaptionsTab.tsx:600-605`).
         let has_audio = self
             .summary()
-            .is_some_and(|summary| summary.has_microphone || summary.has_system_audio);
+            .is_some_and(|summary| summary.has_microphone || summary.has_system_audio)
+            || self
+                .project
+                .timeline
+                .as_ref()
+                .is_some_and(|tl| !tl.audio_segments.is_empty());
         let error_color = Hsla::from(gpui::rgb(0xef4444));
 
         // The `KSelect.Trigger` with label, description and size
@@ -4418,10 +4559,63 @@ impl EditorWindow {
         .detach();
     }
 
+    pub(crate) fn generate_captions_one_click(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.sidebar.tab = crate::editor_sidebar::SidebarTab::Captions;
+        self.tracks.caption = true;
+        transcription::refresh_downloaded_models();
+        let snapshot = transcription::ui_snapshot(&self.project_path);
+        if snapshot.generating {
+            cx.notify();
+            return;
+        }
+        let selected = self.selected_caption_model().name;
+        if snapshot.downloaded.contains(selected) {
+            self.generate_captions_clicked(window, cx);
+            return;
+        }
+        if let Some(downloaded_model) = available_caption_models()
+            .iter()
+            .find(|m| snapshot.downloaded.contains(m.name))
+        {
+            self.sidebar.caption_model = downloaded_model.name;
+            self.generate_captions_clicked(window, cx);
+            return;
+        }
+        if transcription::begin_download(selected) {
+            self.show_notice(
+                "Downloading offline AI caption model, then generating captions...",
+                window,
+                cx,
+            );
+            cx.spawn_in(window, async move |this, cx| {
+                let _ = gpui_tokio::Tokio::spawn(
+                    cx,
+                    transcription::run_model_download(selected.to_string()),
+                )
+                .await;
+                let _ = this.update_in(cx, |this, window, cx| {
+                    transcription::refresh_downloaded_models();
+                    this.generate_captions_clicked(window, cx);
+                });
+            })
+            .detach();
+            self.spawn_caption_download_poll(cx);
+        }
+        cx.notify();
+    }
+
     /// `generateCaptions` (`CaptionsTab.tsx:715-757`): transcribe on the
     /// tokio blocking pool, then apply the result through one `edit_project`
     /// write so a regenerate is a single undo entry.
-    fn generate_captions_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn generate_captions_clicked(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(summary) = self.summary() else {
             return;
         };

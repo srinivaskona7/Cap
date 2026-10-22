@@ -3555,6 +3555,26 @@ impl SettingsWindow {
                         .into_any_element(),
                     ),
                     self.setting_row(
+                        "Click & keystroke sound effects",
+                        Some(
+                            "Generate subtle, crisp tactile keystroke and mouse-click audio \
+                             feedback for software tutorials.",
+                        ),
+                        self.toggle(
+                            "click-keystroke-sfx-default",
+                            settings.enable_click_and_keystroke_sfx,
+                            cx,
+                            |this, cx| {
+                                let value = !this.settings.enable_click_and_keystroke_sfx;
+                                if store::set_click_and_keystroke_sfx_by_default(value) {
+                                    this.settings.enable_click_and_keystroke_sfx = value;
+                                }
+                                cx.notify();
+                            },
+                        )
+                        .into_any_element(),
+                    ),
+                    self.setting_row(
                         "Main window when recording starts",
                         Some("What happens to the main window once a recording begins."),
                         self.select(

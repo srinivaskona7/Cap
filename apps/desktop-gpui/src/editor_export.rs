@@ -219,6 +219,12 @@ pub struct ExportUi {
     pub reuploading: bool,
     pub upload_progress: f32,
     pub copy_link_pressed: bool,
+    pub export_srt_sidecar: bool,
+    pub export_vtt_sidecar: bool,
+    pub batch_16_9: bool,
+    pub batch_9_16: bool,
+    pub batch_1_1: bool,
+    pub batch_4_5: bool,
     bpp_track: ui::SliderTrack,
     bpp_dragging: bool,
 }
@@ -315,6 +321,12 @@ impl ExportUi {
             reuploading: false,
             upload_progress: 0.0,
             copy_link_pressed: false,
+            export_srt_sidecar: true,
+            export_vtt_sidecar: true,
+            batch_16_9: true,
+            batch_9_16: true,
+            batch_1_1: true,
+            batch_4_5: false,
             bpp_track: ui::SliderTrack::default(),
             bpp_dragging: false,
         }
@@ -1011,6 +1023,13 @@ impl EditorWindow {
             match export.await {
                 Ok(Ok(path)) => {
                     tracing::info!(path = %path.display(), "editor export completed");
+                    let _ = this.update(cx, |this, _| {
+                        let (write_srt, write_vtt) = this
+                            .export
+                            .as_ref()
+                            .map_or((false, false), |u| (u.export_srt_sidecar, u.export_vtt_sidecar));
+                        write_caption_sidecars_for_video(&this.project, &path, write_srt, write_vtt);
+                    });
                     if destination == ExportDestination::Clipboard {
                         let _ = this.update(cx, |this, cx| {
                             if let Some(ui) = this.export.as_mut() {
@@ -1906,21 +1925,7 @@ impl EditorWindow {
                             this.export_subtitle_and_docs_bundle(window, cx);
                         })),
                     )
-                    .child(
-                        ui::Button::plain(
-                            &theme,
-                            "export-multi-platform-pack",
-                            ui::ButtonVariant::Gray,
-                            ui::ButtonSize::Sm,
-                        )
-                        .label("Export All 3 Formats (16:9 YouTube + 9:16 Reels + 1:1 Square)")
-                        .icon("icons/layers.svg")
-                        .full_width()
-                        .disabled(ui.phase.is_busy())
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.export_multi_platform_aspect_bundle(window, cx);
-                        })),
-                    )
+                    .child(self.render_batch_aspect_exporter_card(ui, cx))
                     .child(
                         ui::Button::plain(
                             &theme,
@@ -1937,6 +1942,168 @@ impl EditorWindow {
                         })),
                     )
                     .child(self.export_cta(ui, cx)),
+            )
+    }
+
+    fn render_batch_aspect_exporter_card(
+        &self,
+        ui: &ExportUi,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let theme = self.theme;
+        let editor = theme.editor;
+        let b16_9 = ui.batch_16_9;
+        let b9_16 = ui.batch_9_16;
+        let b1_1 = ui.batch_1_1;
+        let b4_5 = ui.batch_4_5;
+        let srt = ui.export_srt_sidecar;
+        let vtt = ui.export_vtt_sidecar;
+        let selected_count =
+            usize::from(b16_9) + usize::from(b9_16) + usize::from(b1_1) + usize::from(b4_5);
+
+        let check_pill =
+            |id: &'static str, label: &'static str, checked: bool, on_toggle: fn(&mut ExportUi)| {
+                div()
+                    .id(id)
+                    .flex_1()
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(6.))
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(if checked {
+                        Hsla::from(editor.accent)
+                    } else {
+                        Hsla::from(editor.line)
+                    })
+                    .bg(if checked {
+                        crate::theme::Theme::with_alpha(editor.accent, 0.14)
+                    } else {
+                        Hsla::from(editor.ctl)
+                    })
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(Hsla::from(editor.text_1))
+                            .child(if checked {
+                                format!("✓ {label}")
+                            } else {
+                                format!("○ {label}")
+                            }),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(u) = this.export.as_mut() {
+                            on_toggle(u);
+                        }
+                        cx.notify();
+                    }))
+            };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(10.))
+            .rounded(px(10.))
+            .bg(Hsla::from(editor.card))
+            .border_1()
+            .border_color(Hsla::from(editor.line))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(Hsla::from(editor.text_1))
+                            .child("Multi-Platform Aspect Ratio Batch Exporter"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(10.5))
+                            .text_color(Hsla::from(editor.text_3))
+                            .child(format!("{selected_count} selected")),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(check_pill(
+                        "batch-check-16-9",
+                        "16:9 Landscape (YT/4K)",
+                        b16_9,
+                        |u| u.batch_16_9 = !u.batch_16_9,
+                    ))
+                    .child(check_pill(
+                        "batch-check-9-16",
+                        "9:16 Vertical (Reels/Shorts)",
+                        b9_16,
+                        |u| u.batch_9_16 = !u.batch_9_16,
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(check_pill(
+                        "batch-check-1-1",
+                        "1:1 Square (LinkedIn/X)",
+                        b1_1,
+                        |u| u.batch_1_1 = !u.batch_1_1,
+                    ))
+                    .child(check_pill(
+                        "batch-check-4-5",
+                        "4:5 Portrait (Feed)",
+                        b4_5,
+                        |u| u.batch_4_5 = !u.batch_4_5,
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(check_pill(
+                        "batch-check-srt",
+                        "Sidecar .SRT alongside MP4",
+                        srt,
+                        |u| u.export_srt_sidecar = !u.export_srt_sidecar,
+                    ))
+                    .child(check_pill(
+                        "batch-check-vtt",
+                        "Sidecar .VTT alongside MP4",
+                        vtt,
+                        |u| u.export_vtt_sidecar = !u.export_vtt_sidecar,
+                    )),
+            )
+            .child(
+                ui::Button::plain(
+                    &theme,
+                    "export-multi-platform-pack",
+                    ui::ButtonVariant::Primary,
+                    ui::ButtonSize::Sm,
+                )
+                .label(gpui::SharedString::from(format!(
+                    "Export Selected Formats ({selected_count} MP4{})",
+                    if selected_count == 1 { "" } else { "s" }
+                )))
+                .icon("icons/layers.svg")
+                .full_width()
+                .disabled(ui.phase.is_busy() || selected_count == 0)
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.export_multi_platform_aspect_bundle(window, cx);
+                })),
             )
     }
 
@@ -3237,6 +3404,80 @@ async fn run_export(
             .export_prepared(base, progress)
             .await
         }
+    }
+}
+
+pub(crate) fn write_caption_sidecars_for_video(
+    project: &cap_project::ProjectConfiguration,
+    video_path: &Path,
+    write_srt: bool,
+    write_vtt: bool,
+) {
+    if !write_srt && !write_vtt {
+        return;
+    }
+    let cues: Vec<(f64, f64, String)> = if let Some(tl) = project.timeline.as_ref()
+        && !tl.caption_segments.is_empty()
+    {
+        tl.caption_segments
+            .iter()
+            .map(|seg| (seg.start, seg.end, seg.text.trim().to_string()))
+            .filter(|(_, _, t)| !t.is_empty())
+            .collect()
+    } else if let Some(caps) = project.captions.as_ref() {
+        caps.segments
+            .iter()
+            .map(|seg| {
+                (
+                    f64::from(seg.start),
+                    f64::from(seg.end),
+                    seg.text.trim().to_string(),
+                )
+            })
+            .filter(|(_, _, t)| !t.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    if cues.is_empty() {
+        return;
+    }
+
+    let fmt_srt = |secs: f64| -> String {
+        let total_ms = (secs.max(0.0) * 1000.0).round() as u64;
+        let ms = total_ms % 1000;
+        let s = (total_ms / 1000) % 60;
+        let m = (total_ms / 60_000) % 60;
+        let h = total_ms / 3_600_000;
+        format!("{h:02}:{m:02}:{s:02},{ms:03}")
+    };
+    let fmt_vtt = |secs: f64| -> String { fmt_srt(secs).replace(',', ".") };
+
+    if write_srt {
+        let mut srt_out = String::new();
+        for (i, (start, end, text)) in cues.iter().enumerate() {
+            let idx = i + 1;
+            srt_out.push_str(&format!(
+                "{idx}\n{} --> {}\n{text}\n\n",
+                fmt_srt(*start),
+                fmt_srt(*end),
+            ));
+        }
+        let srt_path = video_path.with_extension("srt");
+        let _ = std::fs::write(srt_path, srt_out);
+    }
+
+    if write_vtt {
+        let mut vtt_out = String::from("WEBVTT\n\n");
+        for (start, end, text) in &cues {
+            vtt_out.push_str(&format!(
+                "{} --> {}\n{text}\n\n",
+                fmt_vtt(*start),
+                fmt_vtt(*end),
+            ));
+        }
+        let vtt_path = video_path.with_extension("vtt");
+        let _ = std::fs::write(vtt_path, vtt_out);
     }
 }
 

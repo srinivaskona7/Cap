@@ -1218,6 +1218,40 @@ fn extract_project_audio(project_path: &Path, output_path: &Path) -> Result<(), 
         }
     }
 
+    if !any_audio
+        && let Ok(project_config) = ProjectConfiguration::load(project_path)
+        && let Some(timeline) = project_config.timeline.as_ref()
+    {
+        let mut sources = Vec::new();
+        let mut max_end = 1.0_f64;
+        for seg in &timeline.audio_segments {
+            if seg.path.contains("ui-click-key-sfx.wav") {
+                continue;
+            }
+            let audio_path = project_path.join(&seg.path);
+            if audio_path.exists()
+                && let Ok((samples, channels)) = decode_audio_file(&audio_path)
+            {
+                any_audio = true;
+                max_end = max_end.max(seg.end);
+                sources.push(TranscriptionAudioSource {
+                    samples,
+                    channels,
+                    offset_secs: seg.start,
+                });
+            }
+        }
+        if any_audio {
+            final_samples.clear();
+            let take = TranscriptionAudioTake {
+                display_duration_secs: max_end,
+                sources,
+            };
+            append_transcription_audio(&mut final_samples, &take, DECODE_SAMPLE_RATE)
+                .map_err(|error| format!("Failed to assemble timeline audio: {error}"))?;
+        }
+    }
+
     if !any_audio {
         return Err("No audio sources found in the recording metadata".to_string());
     }

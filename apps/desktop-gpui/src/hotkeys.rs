@@ -36,6 +36,8 @@ use crate::{
 /// camelCase store keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HotkeyAction {
+    ToggleRecording,
+    ToggleSpotlightZoom,
     StartStudioRecording,
     StartInstantRecording,
     StopRecording,
@@ -51,7 +53,9 @@ pub enum HotkeyAction {
     ScreenshotArea,
 }
 
-const ACTION_KEYS: [(&str, HotkeyAction); 13] = [
+const ACTION_KEYS: [(&str, HotkeyAction); 15] = [
+    ("toggleRecording", HotkeyAction::ToggleRecording),
+    ("toggleSpotlightZoom", HotkeyAction::ToggleSpotlightZoom),
     ("startStudioRecording", HotkeyAction::StartStudioRecording),
     ("startInstantRecording", HotkeyAction::StartInstantRecording),
     ("stopRecording", HotkeyAction::StopRecording),
@@ -640,7 +644,7 @@ pub fn complete_clean_capture_stop(generation: u64, cx: &mut App) {
 }
 
 fn register_from_store(cx: &mut App) {
-    let stored = store::hotkeys_raw();
+    let stored = store::hotkeys_with_defaults();
     let hotkeys = cx.global_mut::<Hotkeys>();
     for (key, value) in &stored {
         let Some(action) = HotkeyAction::from_store_key(key) else {
@@ -734,9 +738,27 @@ fn actions_for(bindings: &[(HotKey, HotkeyAction)], id: u32) -> Vec<HotkeyAction
 /// `handle_hotkey` (`hotkeys.rs:228-337` over there), against this app's
 /// counterparts. Session methods are no-ops in the wrong phase, matching the
 /// Tauri commands' own early returns.
+pub fn trigger_toggle_recording(cx: &mut App) {
+    if RecordingSession::global(cx).read(cx).phase == Phase::Idle {
+        start_from_hotkey(Mode::from_store(), cx);
+    } else {
+        RecordingSession::global(cx).update(cx, |session, cx| session.stop(cx));
+    }
+}
+
 fn dispatch(action: HotkeyAction, cx: &mut App) {
     tracing::info!(?action, "global hotkey");
     match action {
+        HotkeyAction::ToggleRecording => trigger_toggle_recording(cx),
+        HotkeyAction::ToggleSpotlightZoom => {
+            let current = store::GeneralSettings::load().auto_zoom_on_clicks;
+            let _ = store::set_store_setting(
+                store::GENERAL_SETTINGS,
+                "autoZoomOnClicks",
+                serde_json::Value::Bool(!current),
+            );
+            app_windows::toggle_editor_spotlight_or_zoom(cx);
+        }
         HotkeyAction::StartStudioRecording => start_from_hotkey(Mode::Studio, cx),
         HotkeyAction::StartInstantRecording => start_from_hotkey(Mode::Instant, cx),
         HotkeyAction::StopRecording => {
