@@ -1030,6 +1030,64 @@ impl AndroidWindow {
         cx.notify();
     }
 
+    pub fn handle_dropped_paths(&mut self, paths: &[std::path::PathBuf], cx: &mut Context<Self>) {
+        let Some(serial) = self.selected_serial.clone() else {
+            self.status_notice = "Connect an Android device before dropping files.".to_string();
+            cx.notify();
+            return;
+        };
+        if paths.is_empty() {
+            return;
+        }
+        let owned: Vec<std::path::PathBuf> = paths.to_vec();
+        self.status_notice = format!("Processing {} dropped file(s) via ADB...", owned.len());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let summary = cx
+                .background_executor()
+                .spawn(async move {
+                    let adb = find_adb_binary();
+                    let mut installed = 0usize;
+                    let mut pushed = 0usize;
+                    for p in owned {
+                        let is_apk = p
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .is_some_and(|e| e.eq_ignore_ascii_case("apk"));
+                        if is_apk {
+                            if Command::new(&adb)
+                                .args(["-s", &serial, "install", "-r"])
+                                .arg(&p)
+                                .status()
+                                .map(|s| s.success())
+                                .unwrap_or(false)
+                            {
+                                installed += 1;
+                            }
+                        } else if Command::new(&adb)
+                            .args(["-s", &serial, "push"])
+                            .arg(&p)
+                            .arg("/sdcard/Download/")
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false)
+                        {
+                            pushed += 1;
+                        }
+                    }
+                    format!(
+                        "Drag & Drop complete: {installed} APK(s) installed, {pushed} file(s) pushed to /sdcard/Download/."
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.status_notice = summary;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub fn pick_and_install_apk(&mut self, cx: &mut Context<Self>) {
         let Some(serial) = self.selected_serial.clone() else {
             return;
@@ -1681,6 +1739,9 @@ impl Render for AndroidWindow {
             .p(px(12.))
             .bg(Hsla::from(theme.gray_1))
             .text_color(Hsla::from(theme.gray_12))
+            .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
+                this.handle_dropped_paths(paths.paths(), cx);
+            }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 this.on_key_down(event, cx);
             }))

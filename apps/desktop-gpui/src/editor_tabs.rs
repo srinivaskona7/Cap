@@ -321,8 +321,8 @@ pub static CAPTION_PRESETS: &[CaptionPreset] = &[
     },
     CaptionPreset {
         id: "dev-neon",
-        label: "Dev Green",
-        description: "High-contrast terminal green word highlight for tech Reels.",
+        label: "Dev Neon",
+        description: "Monospace cyan/neon glow word highlight for technical screencasts.",
         font_weight: 700,
         size: 56,
         color: "#FFFFFF",
@@ -330,7 +330,7 @@ pub static CAPTION_PRESETS: &[CaptionPreset] = &[
         background_opacity: 0,
         outline: true,
         outline_color: "#000000",
-        highlight_color: "#00FF66",
+        highlight_color: "#00F5FF",
         active_word_highlight: true,
         highlight_style: "color",
         animation: "pop",
@@ -393,8 +393,8 @@ pub static CAPTION_PRESETS: &[CaptionPreset] = &[
     },
     CaptionPreset {
         id: "glass-pill",
-        label: "Glass Pill",
-        description: "Modern dark translucent pill with indigo active word badge.",
+        label: "Clean Glass",
+        description: "Frosted translucent pill backdrop for professional demos.",
         font_weight: 700,
         size: 48,
         color: "#F8FAFC",
@@ -4067,7 +4067,25 @@ impl EditorWindow {
         let transcription = div()
             .flex()
             .flex_col()
-            .gap(px(16.))
+            .gap(px(12.))
+            .child(
+                ui::Button::plain(
+                    &theme,
+                    "caption-generate-offline-one-click",
+                    ui::ButtonVariant::Primary,
+                    ui::ButtonSize::Md,
+                )
+                .label(if generating {
+                    "✨ Generating AI Captions (Offline)..."
+                } else {
+                    "✨ Generate AI Captions (Offline)"
+                })
+                .full_width()
+                .disabled(generating || any_deleting)
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.generate_captions_one_click(window, cx);
+                })),
+            )
             .child(
                 ui::Subfield::plain(&theme, "Model").child(div().w(px(220.)).child(model_trigger)),
             )
@@ -4499,7 +4517,7 @@ impl EditorWindow {
                                     ui::ButtonVariant::Gray,
                                     ui::ButtonSize::Sm,
                                 )
-                                .label("Copy Clickable SOP & Chapters (.MD)")
+                                .label("Copy Clickable SOP (.md)")
                                 .full_width()
                                 .on_click(cx.listener(
                                     |this, _, window, cx| {

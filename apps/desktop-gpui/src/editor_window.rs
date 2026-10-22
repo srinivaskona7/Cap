@@ -8016,8 +8016,14 @@ impl EditorWindow {
             .map(|s| s.pretty_name.clone())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "Tutorial & Process Guide".to_string());
+        let clicks = load_recording_clicks(&self.project_path);
+        let click_times: Vec<f64> = clicks
+            .iter()
+            .flat_map(|seg| seg.iter().filter(|c| c.down).map(|c| c.time_ms / 1000.0))
+            .collect();
+
         let mut md = format!(
-            "# {title} — Interactive Process Links & Timestamped SOP\n\n## 🔗 Clickable Process Chapters\n"
+            "# {title} — Clickable Step-by-Step SOP (.md)\n\n## 🔗 Clickable Process Chapters\n"
         );
         if let Some(tl) = self.project.timeline.as_ref() {
             let mut cursor = 0.0_f64;
@@ -8032,6 +8038,53 @@ impl EditorWindow {
                     dur
                 ));
                 cursor += dur;
+            }
+            if !tl.caption_segments.is_empty() {
+                md.push_str("\n## 🎙️ Transcript & Action Walkthrough\n");
+                for (step_idx, cap) in tl.caption_segments.iter().enumerate() {
+                    let mins = (cap.start as u64) / 60;
+                    let secs = (cap.start as u64) % 60;
+                    let nearby_click = click_times
+                        .iter()
+                        .find(|&&t| t >= cap.start - 0.5 && t <= cap.end + 0.5);
+                    if let Some(&click_t) = nearby_click {
+                        md.push_str(&format!(
+                            "{}. **[{mins:02}:{secs:02}](#t={:.0}s)** — {} *(🖱 Click at `{click_t:.1}s`)*\n",
+                            step_idx + 1,
+                            cap.start,
+                            cap.text.trim(),
+                        ));
+                    } else {
+                        md.push_str(&format!(
+                            "{}. **[{mins:02}:{secs:02}](#t={:.0}s)** — {}\n",
+                            step_idx + 1,
+                            cap.start,
+                            cap.text.trim()
+                        ));
+                    }
+                }
+            } else if !click_times.is_empty() {
+                md.push_str("\n## 🖱️ Recorded Click Actions\n");
+                for (idx, &t) in click_times.iter().take(20).enumerate() {
+                    let mins = (t as u64) / 60;
+                    let secs = (t as u64) % 60;
+                    md.push_str(&format!(
+                        "{}. **[{mins:02}:{secs:02}](#t={:.0}s)** — Click interaction at `{t:.1}s`\n",
+                        idx + 1,
+                        t,
+                    ));
+                }
+            }
+            if !tl.keyboard_segments.is_empty() {
+                md.push_str("\n## ⌨️ Inline Commands & Shortcuts\n");
+                for kb in &tl.keyboard_segments {
+                    let mins = (kb.start as u64) / 60;
+                    let secs = (kb.start as u64) % 60;
+                    md.push_str(&format!(
+                        "- **[{mins:02}:{secs:02}](#t={:.0}s)** — `{}`\n",
+                        kb.start, kb.display_text
+                    ));
+                }
             }
             if !tl.text_segments.is_empty() {
                 md.push_str("\n## 📌 Embedded Callouts & Resource Links\n");
@@ -8050,7 +8103,7 @@ impl EditorWindow {
         let _ = std::fs::write(exports_dir.join("process-links-and-chapters.md"), &md);
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(md));
         self.show_notice(
-            "Copied Clickable Process Chapters & Links (.md) to Clipboard & Exports/!",
+            "Copied Clickable SOP (.md) with Transcript, Clicks & Commands to Clipboard & Exports/!",
             window,
             cx,
         );
