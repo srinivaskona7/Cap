@@ -1302,8 +1302,10 @@ fn get_codec_and_options(
                 if let Some(ref crf_val) = crf_str {
                     options.set("preset", "slow");
                     options.set("crf", crf_val);
+                    options.set("tune", "animation");
                     options.set("pix_fmt", "yuv420p");
                 } else if is_export {
+                    options.set("tune", "animation");
                     options.set(
                         "preset",
                         match preset {
