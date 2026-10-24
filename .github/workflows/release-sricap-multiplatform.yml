@@ -1,0 +1,155 @@
+name: Release sricap-rec (macOS & Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish (e.g. v0.6.7)"
+        required: false
+        default: "v0.6.7"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build sricap-rec (macOS Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install system dependencies (ffmpeg, pnpm, cargo-tauri)
+        run: |
+          brew install ffmpeg@7 pkg-config cmake ninja
+          echo "$(brew --prefix ffmpeg@7)/bin" >> $GITHUB_PATH
+          echo "PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> $GITHUB_ENV
+          echo "FFMPEG_DIR=$(brew --prefix ffmpeg@7)" >> $GITHUB_ENV
+          npm install -g pnpm@10.15.0 @tauri-apps/cli@2.9.6
+
+      - name: Install Rust toolchains
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --target aarch64-apple-darwin
+          rustup toolchain install 1.95.0 --profile minimal --target aarch64-apple-darwin
+          rustup default 1.88.0
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build GPUI Application
+        run: |
+          cd apps/desktop-gpui
+          rustup run 1.95.0 cargo build --release --bin sricap-rec
+
+      - name: Bundle macOS App & DMG
+        run: |
+          node scripts/bundle-gpui.mjs aarch64-apple-darwin --skip-build --bundles app,dmg
+          mkdir -p dist-release
+          cp -r apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist-release/sricap-rec-mac-arm64.dmg 2>/dev/null || true
+          cd apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/osx && zip -r -X ../../../../../../dist-release/sricap-rec-macos-arm64.zip sricap-rec.app && cd -
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist-release/*
+
+  build-windows:
+    name: Build sricap-rec (Windows x64 NSIS)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust Toolchains
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build sricap-rec for Windows
+        shell: bash
+        run: |
+          cd apps/desktop-gpui
+          cargo build --release --bin sricap-rec --target x86_64-pc-windows-msvc
+
+      - name: Bundle Windows NSIS Installer
+        shell: bash
+        run: |
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis
+          mkdir -p dist-windows
+          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/sricap-rec-windows-x64-setup.exe 2>/dev/null || true
+          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/sricap-rec-windows-x64.exe 2>/dev/null || true
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist-windows/*
+
+  publish:
+    name: Publish Multi-Platform Release (macOS + Windows)
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+          path: release-assets
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: release-assets
+
+      - name: Generate Checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cd ..
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}
+          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }} (macOS & Windows)"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release-assets/*
