@@ -238,22 +238,41 @@ Inside `apps/desktop-gpui/src/editor_tabs.rs` (Captions Tab) and `settings_pages
 
 ## ⚡ SECTION 6: Reverse-Engineered Parakeet-AI Call & Mock Interview Copilot
 
-Reverse-engineered from analysis of `parakeet-ai.com`:
+## ⚡ SECTION 6: Complete Reverse-Engineered Parakeet-AI Ecosystem (Free & Built-In)
 
-### 1. Core Architecture & Secret Free Fast APIs
-- **Zero-Cloud Audio Streaming**: Your Mac's local **NVIDIA Parakeet TDT** transcribes live speaker and microphone audio in < 200ms latency.
-- **Pluggable Fast LLM Calling**: Configurable directly from your `.env` without recurring subscriptions:
-  - Free/Low-latency providers:
-    - **Groq Cloud API** (`GROQ_API_KEY`: LLaMA-3.3 70B streaming at ~300 tokens/sec — completely free tier available).
-    - **Google Gemini Flash API** (`GEMINI_API_KEY`: gemini-1.5-flash / 2.0-flash with sub-500ms time-to-first-token).
-    - **Ollama Local Endpoint** (`OLLAMA_HOST=http://localhost:11434`: 100% offline, zero internet required).
+By reverse-engineering `parakeet-ai.com` via bundle inspection and route extraction, the complete platform consists of **4 distinct interconnected suites** that we can deliver 100% free with local/open APIs:
 
-### 2. Standalone Real-Time Floating HUD (`apps/desktop-gpui/src/copilot_window.rs`)
+### 1. Live Real-Time Call & Interview Copilot (`/callSession`)
 - **Undetectable Screen-Share Stealth Mode**: Uses macOS CoreGraphics window level flags (`kCGBackingStoreNonretained` + `sharingState = none`) so Zoom, Google Meet, Teams, and Webex screen-sharing **never capture the copilot window**.
-- **Real-Time Question Interceptor**: Automatically detects interviewer questions (technical algorithms, behavioral STAR questions, system design).
-- **Custom Context Injection**: Upload or paste your Resume/CV and the Job Description (`JD`). The AI streams tailored, first-person talking points instantly as the interviewer speaks.
-- **Interactive Mock Interview Simulator (`/mock-interview`)**:
-  - Practice real rounds with an AI interviewer asking follow-ups and grading technical depth and communication pacing.
+- **Live Question Interceptor & Audio Splitter**:
+  - Speaker channel (captures interviewer asking behavioral or LeetCode questions).
+  - Microphone channel (captures your voice so the copilot knows what you already answered and doesn't repeat it).
+- **Sub-200ms Local Transcription**: Powered by our pre-installed local **NVIDIA Parakeet TDT** (or Whisper fallback).
+- **Pluggable Fast LLM Calling**: Configurable directly from your `.env` without recurring subscriptions:
+  - **Groq Cloud API** (`GROQ_API_KEY`: LLaMA-3.3 70B streaming at ~300 tokens/sec — completely free tier).
+  - **Google Gemini Flash API** (`GEMINI_API_KEY`: gemini-1.5-flash / 2.0-flash with sub-400ms time-to-first-token).
+  - **Ollama Local Endpoint** (`OLLAMA_HOST=http://localhost:11434`: 100% offline, zero internet required).
+- **Dynamic Context Grounding**: Injects your Resume/CV and the Job Description (`JD`) so the AI speaks in your authentic voice with your exact project achievements (STAR method).
+- **Technical Coding Assistant**: Auto-solves LeetCode / HackerRank / Coderpad prompts with Big-O complexity analysis and step-by-step explanations.
+
+### 2. Live AI Mock Interview Simulator (`/mock-interview`)
+- **Interactive Practice Partner**: An AI interviewer that speaks realistic interview questions out loud using Apple Neural TTS or ElevenLabs.
+- **Real-Time Follow-Ups**: Challenges weak answers, probes deeper into architecture decisions, and evaluates candidate responses.
+- **Detailed Post-Interview Scorecard**: Evaluates technical accuracy, filler word ratio (`"um"`, `"ah"` count), pacing (WPM), and STAR completeness.
+
+### 3. Interview Question Bank by Company (`/question-bank`)
+- Community-curated database of actual questions asked by FAANG & Tier-1 tech firms (Google, Apple, Meta, Amazon, Microsoft, Netflix, Stripe).
+- Categorized by track: **System Design, DSA / Algorithms, Behavioral, Product Sense, DevOps / SRE**.
+- 1-Click **"Practice This Question Now"** launching the Mock Interview engine with the specific prompt loaded.
+
+### 4. AI Resume Maker & ATS Match Score (`/resume-maker`)
+- Import existing `.pdf` or `.docx` resume and compare it against any target Job Description.
+- Calculates an instant **ATS Keyword Match Score (0–100%)**.
+- AI-tailors bullet points to highlight missing skills, action verbs, and quantifiable metrics with 1-click accept/reject diffs.
+- Lossless PDF export ready for job applications.
+
+### 5. AI Professional Studio Headshots (`/headshots`)
+- 1-click portrait enhancer leveraging local stable diffusion / Apple Vision filters to turn casual web camera selfies into LinkedIn-ready professional headshots.
 
 ---
 
