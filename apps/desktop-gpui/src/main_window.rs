@@ -384,6 +384,15 @@ pub enum TargetType {
 impl TargetType {
     fn label(self) -> &'static str {
         match self {
+            Self::Display => "Full Screen Display (Retina)",
+            Self::Window => "Active Window",
+            Self::Area => "Area Selection",
+            Self::CameraOnly => "Mobile / Android Mirror",
+        }
+    }
+
+    fn id_slug(self) -> &'static str {
+        match self {
             Self::Display => "Display",
             Self::Window => "Window",
             Self::Area => "Area",
@@ -396,7 +405,7 @@ impl TargetType {
             Self::Display => "icons/screen.svg",
             Self::Window => "icons/window.svg",
             Self::Area => "icons/area.svg",
-            Self::CameraOnly => "icons/camera.svg",
+            Self::CameraOnly => "icons/mobile.svg",
         }
     }
 }
@@ -852,6 +861,12 @@ pub struct MainWindow {
     input_enumeration_gate: devices::InputEnumerationGate,
     /// `scheduleTargetListPrewarm` (`new-main/index.tsx:1897-1965`).
     prewarm_task: Option<gpui::Task<()>>,
+    speedtest: crate::speedtest::SpeedTestResult,
+    speedtest_modal_open: bool,
+    speedtest_notice: Option<String>,
+    play_with_target: Option<std::path::PathBuf>,
+    always_open_sricap_player: bool,
+    play_with_notice: Option<String>,
 }
 
 /// `createLicenseQuery` (`utils/queries.ts:257-273`): pro from the auth
@@ -1115,6 +1130,12 @@ impl MainWindow {
             input_poll_generation: 0,
             input_enumeration_gate: devices::InputEnumerationGate::default(),
             prewarm_task: None,
+            speedtest: crate::speedtest::SpeedTestResult::default(),
+            speedtest_modal_open: false,
+            speedtest_notice: None,
+            play_with_target: None,
+            always_open_sricap_player: crate::store::always_open_with_sricap_player(),
+            play_with_notice: None,
         }
     }
 
@@ -2716,12 +2737,17 @@ impl Render for MainWindow {
             .when(!cfg!(target_os = "windows"), |shell| shell.rounded(px(16.)))
             // Opaque `bg-gray-1` with no material; a translucent tint over the
             // live `NSGlassEffectView`/`NSVisualEffectView` backdrop with one.
-            .bg(theme.shell_bg())
-            // Only the vibrancy path draws a shell border -- Liquid Glass sets
-            // `border: 0`.
-            .when_some(theme.shell_border(), |this, color| {
-                this.border_1().border_color(color)
+            .bg(if theme.material.is_some() {
+                theme.shell_bg()
+            } else {
+                theme.argon_glass_surface()
             })
+            .border_1()
+            .border_color(
+                theme
+                    .shell_border()
+                    .unwrap_or_else(|| theme.argon_specular_border()),
+            )
             .font_family(crate::theme::UI_FONT)
             // `body { font-weight: 500 }` (`ui-solid/src/main.css:189-192`). The shipping app renders
             // *everything* Medium unless a `font-*` class says otherwise, so
@@ -2760,8 +2786,38 @@ impl Render for MainWindow {
             .when_some(self.idle_error(cx), |this, error| {
                 this.child(self.render_idle_error(error, cx))
             })
-            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
-                if event.keystroke.key == "escape" && this.dismiss_main(cx) {
+            .when(self.speedtest_modal_open, |this| {
+                this.child(self.render_speedtest_telemetry_modal(cx))
+            })
+            .when_some(self.play_with_target.clone(), |this, target| {
+                this.child(self.render_play_with_modal(target, cx))
+            })
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" {
+                    if this.speedtest_modal_open {
+                        this.speedtest_modal_open = false;
+                        cx.notify();
+                        cx.stop_propagation();
+                        return;
+                    }
+                    if this.play_with_target.take().is_some() {
+                        cx.notify();
+                        cx.stop_propagation();
+                        return;
+                    }
+                    if this.dismiss_main(cx) {
+                        cx.stop_propagation();
+                        return;
+                    }
+                }
+                let is_space = event.keystroke.key == " " || event.keystroke.key == "space";
+                let is_opt_r =
+                    event.keystroke.modifiers.alt && event.keystroke.key.eq_ignore_ascii_case("r");
+                if (is_space || is_opt_r) && this.panel.is_none() {
+                    if this.target.is_none() {
+                        this.target = Some(TargetType::Display);
+                    }
+                    this.start_recording(window, cx);
                     cx.stop_propagation();
                 }
             }))
@@ -2769,6 +2825,615 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    fn trigger_speedtest_probe(&mut self, buffer_optimized: bool, cx: &mut Context<Self>) {
+        self.speedtest.is_testing = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result =
+                cx.background_executor()
+                    .spawn(async move {
+                        crate::speedtest::run_network_diagnostics_probe(buffer_optimized)
+                    })
+                    .await;
+            let _ = this.update(cx, |view, cx| {
+                view.speedtest = result;
+                view.speedtest_notice = Some(if buffer_optimized {
+                    "Network buffer pacing optimized for zero-jitter 4K streaming.".to_string()
+                } else {
+                    "Live telemetry updated from edge socket probe.".to_string()
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn open_play_with_dialog(&mut self, path: Option<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let resolved = path
+            .or_else(|| {
+                crate::library::list_recordings_limited(1)
+                    .into_iter()
+                    .next()
+                    .map(|item| item.path)
+            })
+            .unwrap_or_else(|| std::path::PathBuf::from("Studio_4K_Master_Demo.mp4"));
+        self.play_with_notice = None;
+        self.play_with_target = Some(resolved);
+        cx.notify();
+    }
+
+    fn render_speedtest_telemetry_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = self.theme;
+        let res = &self.speedtest;
+        let pill_text = res.format_pill_label();
+        let cloud_status = res.cloud_upload_4k60_status();
+        let rtmp_status = res.rtmp_ingest_status();
+        let peer_status = res.multi_cam_peer_status();
+        let wifi_line = format!("{} • {}", res.wifi_standard, res.channel_freq);
+        let bssid_line = res.bssid_spectrum_summary();
+        let cdn_line = res.cdn_edge_summary();
+        let ip_dns_line = format!(
+            "Local IP: {} (GW {}ms) • DNS: Cloudflare {}ms vs Google {}ms",
+            res.local_ip, res.gateway_ping_ms, res.dns_cloudflare_ms, res.dns_google_ms
+        );
+        let bloat_line = format!(
+            "Bufferbloat Grade: {} (Loaded +{}ms)",
+            res.bufferbloat_grade, res.loaded_latency_delta_ms
+        );
+        let jitter_samples = res.jitter_waveform_samples;
+        let auto_throttle = res.auto_throttle_saver;
+        let notice = self.speedtest_notice.clone();
+
+        div()
+            .id("speedtest-telemetry-modal")
+            .absolute()
+            .inset_0()
+            .when(cfg!(target_os = "windows"), |overlay| {
+                overlay.top(px(HEADER_HEIGHT))
+            })
+            .rounded(px(16.))
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(px(12.))
+            .bg(gpui::rgba(0x090a_0fe0))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .w_full()
+                    .max_w(px(340.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .border_color(theme.body_border(6))
+                    .bg(theme.gray_1)
+                    .p(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(theme.gray_12)
+                                    .child("📡 Network & Streaming Telemetry"),
+                            )
+                            .child(
+                                div()
+                                    .id("speedtest-modal-close")
+                                    .size(px(24.))
+                                    .rounded_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(theme.body_hover_fill(4)))
+                                    .child(
+                                        svg()
+                                            .path("icons/x.svg")
+                                            .size(px(12.))
+                                            .text_color(theme.gray_11),
+                                    )
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.speedtest_modal_open = false;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .p(px(8.))
+                            .rounded(px(8.))
+                            .bg(theme.body_fill(3))
+                            .border_1()
+                            .border_color(theme.body_border(5))
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                div()
+                                    .font_family(crate::theme::MONO_FONT)
+                                    .text_size(px(12.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(theme.gray_12)
+                                    .child(format!(
+                                        "{pill_text}   ({:.1} / {:.1} Mbps)",
+                                        res.download_mbps, res.upload_mbps
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .font_family(crate::theme::MONO_FONT)
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_11)
+                                    .child(format!(
+                                        "Ping (RTT): {}ms  •  Jitter: ±{}ms  •  Loss: {:.1}%",
+                                        res.ping_ms, res.jitter_ms, res.packet_loss_pct
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_end()
+                                    .gap(px(3.))
+                                    .h(px(18.))
+                                    .mt(px(2.))
+                                    .children(jitter_samples.into_iter().map(|sample| {
+                                        let h = (sample * 4).clamp(4, 18) as f32;
+                                        div().flex_1().h(px(h)).rounded(px(2.)).bg(theme.blue_9)
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .p(px(8.))
+                            .rounded(px(8.))
+                            .bg(theme.body_fill(3))
+                            .flex()
+                            .flex_col()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(theme.blue_9)
+                                    .child("STREAMING & 4K CLOUD READINESS"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(format!("• {cloud_status}")),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(format!("• {rtmp_status}")),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(format!("• {peer_status}")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .p(px(8.))
+                            .rounded(px(8.))
+                            .bg(theme.body_fill(3))
+                            .flex()
+                            .flex_col()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(theme.gray_11)
+                                    .child("WIFI 6E/7 BSSID RADAR & CDN EDGE MAP"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(wifi_line),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_11)
+                                    .child(bssid_line),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(cdn_line),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_11)
+                                    .child(ip_dns_line),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_12)
+                                    .child(bloat_line),
+                            ),
+                    )
+                    .when_some(notice, |el, msg| {
+                        el.child(div().text_size(px(10.)).text_color(theme.blue_9).child(msg))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "speedtest-rerun",
+                                    ui::ButtonVariant::Blue,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("⚡ Re-Run Complete Diagnostics")
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        this.trigger_speedtest_probe(
+                                            this.speedtest.buffer_optimized,
+                                            cx,
+                                        );
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "speedtest-copy-md",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("📋 Copy Diagnostics Report (.MD)")
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        let report = this.speedtest.to_markdown_report();
+                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            report,
+                                        ));
+                                        this.speedtest_notice = Some(
+                                        "Copied Markdown Network Telemetry Report to clipboard!"
+                                            .to_string(),
+                                    );
+                                        cx.notify();
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "speedtest-optimize-buffer",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("🛠 Optimize QoS Network Buffer")
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        this.trigger_speedtest_probe(true, cx);
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "speedtest-auto-throttle",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label(if auto_throttle {
+                                    "🔋 Auto-Throttle Bandwidth Saver: ON"
+                                } else {
+                                    "🔋 Auto-Throttle Bandwidth Saver: OFF"
+                                })
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        this.speedtest.auto_throttle_saver =
+                                            !this.speedtest.auto_throttle_saver;
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
+                    ),
+            )
+    }
+
+    fn render_play_with_modal(
+        &self,
+        target_path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let theme = self.theme;
+        let summary = crate::player_window::probe_video_clip_summary(&target_path);
+        let external_players = crate::platform::detect_installed_video_players();
+        let always_open = self.always_open_sricap_player;
+        let notice = self.play_with_notice.clone();
+        let studio_target = target_path.clone();
+
+        div()
+            .id("play-with-modal")
+            .absolute()
+            .inset_0()
+            .when(cfg!(target_os = "windows"), |overlay| {
+                overlay.top(px(HEADER_HEIGHT))
+            })
+            .rounded(px(16.))
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(px(12.))
+            .bg(gpui::rgba(0x090a_0fe0))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .w_full()
+                    .max_w(px(340.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .border_color(theme.body_border(6))
+                    .bg(theme.gray_1)
+                    .p(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .min_w_0()
+                                    .child(
+                                        div()
+                                            .text_size(px(13.))
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(theme.gray_12)
+                                            .child("🎬 Play With…"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(10.))
+                                            .font_family(crate::theme::MONO_FONT)
+                                            .text_color(theme.gray_11)
+                                            .truncate()
+                                            .child(format!(
+                                                "{} · {}×{} {}fps",
+                                                summary.file_name,
+                                                summary.width,
+                                                summary.height,
+                                                summary.fps
+                                            )),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .id("play-with-modal-close")
+                                    .size(px(24.))
+                                    .rounded_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(theme.body_hover_fill(4)))
+                                    .child(
+                                        svg()
+                                            .path("icons/x.svg")
+                                            .size(px(12.))
+                                            .text_color(theme.gray_11),
+                                    )
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.play_with_target = None;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("play-with-sricap-pro")
+                            .p(px(10.))
+                            .rounded(px(8.))
+                            .bg(Theme::with_alpha(theme.blue_9, 0.16))
+                            .border_1()
+                            .border_color(Theme::with_alpha(theme.blue_9, 0.55))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(Theme::with_alpha(theme.blue_9, 0.24)))
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(theme.gray_12)
+                                            .child("⚡ sricap Studio Pro Player"),
+                                    )
+                                    .child(
+                                        div()
+                                            .px(px(6.))
+                                            .py(px(2.))
+                                            .rounded_full()
+                                            .bg(theme.blue_9)
+                                            .text_size(px(9.))
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(gpui::white())
+                                            .child("PRO DEFAULT"),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_11)
+                                    .child(
+                                        "Metal 4K • Frame Stepper (J/L) • EBU R128 LUFS Radar • Scopes • Lossless Cut",
+                                    ),
+                            )
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                let p = studio_target.clone();
+                                this.play_with_target = None;
+                                cx.defer(move |cx| app_windows::open_video_player(Some(p), cx));
+                                cx.notify();
+                            })),
+                    )
+                    .children(external_players.into_iter().map(|ext| {
+                        let resolved = summary.resolved_video_path.clone();
+                        let app_name = ext.app_name;
+                        div()
+                            .id(ext.id)
+                            .px(px(10.))
+                            .py(px(8.))
+                            .rounded(px(8.))
+                            .bg(theme.body_fill(3))
+                            .border_1()
+                            .border_color(theme.body_border(5))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(theme.body_hover_fill(4)))
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(theme.gray_12)
+                                    .child(ext.label),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(theme.gray_10)
+                                    .child(if ext.installed {
+                                        "Installed"
+                                    } else {
+                                        "System App"
+                                    }),
+                            )
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                match crate::platform::open_with_external_player(
+                                    app_name, &resolved,
+                                ) {
+                                    Ok(()) => {
+                                        this.play_with_target = None;
+                                    }
+                                    Err(err) => {
+                                        this.play_with_notice = Some(err);
+                                    }
+                                }
+                                cx.notify();
+                            }))
+                    }))
+                    .child(
+                        div()
+                            .id("play-with-always-checkbox")
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(8.))
+                            .py(px(4.))
+                            .cursor_pointer()
+                            .child(
+                                div()
+                                    .size(px(16.))
+                                    .rounded(px(4.))
+                                    .border_1()
+                                    .border_color(if always_open {
+                                        theme.blue_9
+                                    } else {
+                                        theme.gray_7
+                                    })
+                                    .bg(if always_open {
+                                        theme.blue_9
+                                    } else {
+                                        theme.gray_2
+                                    })
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .when(always_open, |el| {
+                                        el.child(
+                                            svg()
+                                                .path("icons/check.svg")
+                                                .size(px(12.))
+                                                .text_color(gpui::white()),
+                                        )
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(theme.gray_11)
+                                    .child("Always open with sricap Studio Player"),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.always_open_sricap_player = !this.always_open_sricap_player;
+                                let _ = crate::store::set_always_open_with_sricap_player(
+                                    this.always_open_sricap_player,
+                                );
+                                cx.notify();
+                            })),
+                    )
+                    .when_some(notice, |el, msg| {
+                        el.child(
+                            div()
+                                .text_size(px(10.))
+                                .text_color(theme.blue_9)
+                                .child(msg),
+                        )
+                    })
+                    .child(
+                        ui::Button::plain(
+                            &theme,
+                            "play-with-set-macos-default",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🌐 Set sricap as macOS Default Video Player")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            match crate::platform::set_as_default_video_player() {
+                                Ok(()) => {
+                                    this.play_with_notice = Some(
+                                        "sricap-rec registered via LaunchServices for .mp4, .mov, .mkv!"
+                                            .to_string(),
+                                    );
+                                }
+                                Err(err) => {
+                                    this.play_with_notice = Some(err);
+                                }
+                            }
+                            cx.notify();
+                        })),
+                    ),
+            )
+    }
+
     fn render_microphone_warning(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         let checked = self
@@ -3468,6 +4133,15 @@ impl MainWindow {
                 "settings" => "Settings",
                 "screenshots" => "Screenshots",
                 "open-studio-direct" => "Open Studio Editor Directly",
+                "open-video-player" => {
+                    "Studio Pro Video Player & Free-to-Air Live TV (Metal 4K · LUFS Radar · EPG)"
+                }
+                "open-book-reader" => {
+                    "Universal Studio Book Reader (PDF · EPUB · Markdown · AI Neural Flashcards)"
+                }
+                "open-copilot-window" => {
+                    "Parakeet-AI Call & Mock Interview Copilot (Stealth Overlay · <200ms TDT)"
+                }
                 "import-video-studio" => "Import Video (.mp4)",
                 "recordings" => "Recordings",
                 "teleprompter" => "Teleprompter",
@@ -3500,6 +4174,19 @@ impl MainWindow {
                 )
         };
 
+        let speed_pill_text = self.speedtest.format_pill_label();
+        let speed_tooltip = SharedString::from(self.speedtest.hover_tooltip());
+        let speed_pill_bg = gpui::rgba(if theme.is_dark() {
+            0xffffff0a
+        } else {
+            0x0000000a
+        });
+        let speed_pill_hover = gpui::rgba(if theme.is_dark() {
+            0xffffff14
+        } else {
+            0x00000014
+        });
+
         let actions = div()
             .flex()
             .flex_1()
@@ -3513,6 +4200,33 @@ impl MainWindow {
                         cx.defer(app_windows::open_onboarding);
                     },
                 )),
+            )
+            .child(
+                div()
+                    .id("speedometer-pill")
+                    .when(cfg!(target_os = "windows"), |this| this.occlude())
+                    .h(px(22.))
+                    .px(px(7.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme.header_border())
+                    .bg(speed_pill_bg)
+                    .hover(move |s| s.bg(speed_pill_hover))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .flex_shrink_0()
+                    .font_family(crate::theme::MONO_FONT)
+                    .text_size(px(10.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme.gray_12)
+                    .tooltip(move |_, cx| ui::Tooltip::new(&theme, speed_tooltip.clone()).view(cx))
+                    .tooltip_show_delay(ui::TOOLTIP_SHOW_DELAY)
+                    .child(speed_pill_text)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.speedtest_modal_open = true;
+                        this.trigger_speedtest_probe(this.speedtest.buffer_optimized, cx);
+                    })),
             )
             // Keep drag handlers off the header root: starting native dragging
             // on a button's mouse-down consumes its later click.
@@ -3556,6 +4270,27 @@ impl MainWindow {
                         icon_button("open-studio-direct", "icons/film-cut.svg", 16.).on_click(
                             cx.listener(|_, _, _window, cx| {
                                 cx.defer(crate::import::open_studio_editor_directly);
+                            }),
+                        ),
+                    )
+                    .child(
+                        icon_button("open-video-player", "icons/play-square.svg", 16.).on_click(
+                            cx.listener(|this, _, _window, cx| {
+                                this.open_play_with_dialog(None, cx);
+                            }),
+                        ),
+                    )
+                    .child(
+                        icon_button("open-book-reader", "icons/book-open.svg", 16.).on_click(
+                            cx.listener(|_, _, _window, cx| {
+                                cx.defer(|cx| app_windows::open_book_reader(None, cx));
+                            }),
+                        ),
+                    )
+                    .child(
+                        icon_button("open-copilot-window", "icons/sparkles.svg", 16.).on_click(
+                            cx.listener(|_, _, _window, cx| {
+                                cx.defer(app_windows::open_copilot_window);
                             }),
                         ),
                     )
@@ -4649,6 +5384,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) -> gpui::Div {
         let path = item.path.clone();
+        let play_path = path.clone();
         let mode = item.mode;
         let sharing = item.sharing.clone();
         let mut row = div()
@@ -4659,6 +5395,13 @@ impl MainWindow {
             .px(px(8.))
             .pb(px(6.))
             .gap(px(4.));
+        row = row.child(self.library_action(
+            ("lib-rec-play", index),
+            "icons/play-square.svg",
+            cx.listener(move |this, _, _window, cx| {
+                this.open_play_with_dialog(Some(play_path.clone()), cx);
+            }),
+        ));
         if item.opens_editor() {
             let editor = path.clone();
             row = row.child(self.library_action(
@@ -6201,53 +6944,58 @@ impl MainWindow {
         let recording_clip = self.session.read(cx).editor_recording_target().is_some();
         div()
             .flex()
-            .flex_row()
-            .items_center()
-            .justify_between()
+            .flex_col()
+            .gap(px(8.))
             .mt(px(4.))
             .flex_shrink_0()
             .child(
-                // `flex items-center space-x-1` around the logo and its badge.
                 div()
                     .flex()
                     .flex_row()
                     .items_center()
-                    .gap(px(4.))
-                    .when(!recording_clip, |this| {
-                        this.child(self.render_logo())
-                            .child(self.render_plan_badge())
-                    })
-                    .when(recording_clip, |this| {
-                        this.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(4.))
-                                .child(div().text_size(px(13.)).child("Record a new clip"))
-                                .child(
-                                    div()
-                                        .text_size(px(10.))
-                                        .text_color(self.theme.gray_11)
-                                        .child("Add to your current project"),
-                                ),
-                        )
-                    }),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(self.render_mode_pill(cx))
+                    .justify_between()
                     .child(
                         div()
-                            .text_size(px(9.))
-                            .line_height(px(11.))
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(4.))
+                            .when(!recording_clip, |this| {
+                                this.child(self.render_logo())
+                                    .child(self.render_plan_badge())
+                            })
+                            .when(recording_clip, |this| {
+                                this.child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .font_family(crate::theme::DISPLAY_FONT)
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_size(px(14.))
+                                                .child("Record a new clip"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(10.))
+                                                .text_color(self.theme.gray_11)
+                                                .child("Add to your current project"),
+                                        ),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .font_family(crate::theme::MONO_FONT)
+                            .text_size(px(10.))
+                            .line_height(px(12.))
                             .text_color(self.theme.gray_11)
                             .child(format!("{} Mode", self.effective_mode(cx).panel_title())),
                     ),
             )
+            .child(self.render_mode_pill(cx))
     }
 
     /// The plan badge: Personal is `text-[0.6rem] ml-2 rounded-lg border
@@ -6263,9 +7011,11 @@ impl MainWindow {
             .items_center()
             .flex_shrink_0()
             .ml(px(8.))
-            .px(px(4.))
+            .px(px(6.))
             .py(px(2.))
             .rounded(px(8.))
+            .font_family(crate::theme::MONO_FONT)
+            .font_weight(FontWeight::SEMIBOLD)
             .text_size(px(9.6));
 
         match self.plan {
@@ -6280,12 +7030,12 @@ impl MainWindow {
                     cx.open_url(crate::auth::PRICING_URL);
                 }),
             PlanBadge::Pro | PlanBadge::Commercial => badge
-                .bg(theme.blue_9)
+                .bg(Theme::argon_primary_gradient())
                 .text_color(gpui::white())
                 .child(if self.plan == PlanBadge::Commercial {
                     "Commercial"
                 } else {
-                    "Pro"
+                    "PRO"
                 }),
         }
     }
@@ -6378,15 +7128,12 @@ impl MainWindow {
         )
     }
 
-    /// `Mode.tsx`: `p-1.5 gap-2 rounded-full border border-gray-5 bg-gray-3`,
-    /// 28px round buttons (`size-7`). Selected gets `bg-gray-7` plus a 2px
-    /// `blue-500` ring offset 1px against `gray-1`.
     fn render_mode_pill(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         let selected_mode = self.effective_mode(cx);
         let locked = self.session.read(cx).editor_recording_target().is_some();
 
-        let button = |mode: Mode, id: &'static str, index: usize| {
+        let button = |mode: Mode, id: &'static str, pill_label: &'static str, index: usize| {
             let selected = mode == selected_mode;
             let bounds = self.mode_hover_bounds[index].clone();
             div()
@@ -6398,27 +7145,36 @@ impl MainWindow {
                 }))
                 .when(locked && !selected, |this| this.opacity(0.5))
                 .flex()
+                .flex_1()
+                .flex_row()
                 .items_center()
                 .justify_center()
-                .size(px(28.))
-                .rounded_full()
-                .bg(if selected {
-                    Hsla::from(theme.gray_7)
-                } else {
-                    theme.body_fill(3)
-                })
+                .gap(px(4.))
+                .h(px(30.))
+                .px(px(6.))
+                .rounded(px(8.))
+                .cursor_pointer()
                 .when(selected, |this| {
-                    // `ring-2 ring-blue-500 ring-offset-1 ring-offset-gray-1`.
-                    this.border_2()
-                        .border_color(theme.blue_500)
+                    this.bg(Theme::argon_primary_gradient())
+                        .text_color(gpui::white())
                         .shadow(vec![gpui::BoxShadow {
-                            color: theme.ring_offset(),
-                            offset: gpui::point(px(0.), px(0.)),
-                            blur_radius: px(0.),
-                            spread_radius: px(1.),
+                            color: gpui::rgba(0x3b82f644).into(),
+                            offset: gpui::point(px(0.), px(2.)),
+                            blur_radius: px(8.),
+                            spread_radius: px(0.),
                             inset: false,
                         }])
                 })
+                .when(!selected, |this| {
+                    this.bg(gpui::transparent_black())
+                        .text_color(theme.gray_11)
+                        .hover(move |style| {
+                            style
+                                .bg(theme.argon_card_hover_surface())
+                                .text_color(theme.gray_12)
+                        })
+                })
+                .active(|style| style.opacity(0.88))
                 .child(
                     gpui::canvas(move |value, _, _| bounds.set(Some(value)), |_, _, _, _| {})
                         .absolute()
@@ -6428,9 +7184,21 @@ impl MainWindow {
                     svg()
                         .path(mode.icon())
                         .size(px(mode.icon_size()))
-                        .text_color(theme.gray_12),
+                        .flex_shrink_0()
+                        .text_color(if selected {
+                            gpui::white()
+                        } else {
+                            theme.gray_11.into()
+                        }),
                 )
-                .hover(|style| style.bg(theme.body_hover_fill(7)))
+                .child(
+                    div()
+                        .font_family(crate::theme::TEXT_FONT)
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(10.5))
+                        .truncate()
+                        .child(pill_label),
+                )
                 .on_click(cx.listener(move |this, _, _window, cx| {
                     if this.session.read(cx).editor_recording_target().is_some() {
                         return;
@@ -6445,47 +7213,42 @@ impl MainWindow {
             .flex()
             .flex_row()
             .items_center()
-            .gap(px(8.))
-            .p(px(6.))
-            .rounded_full()
+            .w_full()
+            .gap(px(4.))
+            .p(px(3.))
+            .rounded(px(11.))
             .border_1()
-            .border_color(theme.body_border(5))
-            .bg(theme.body_fill(3))
-            .child(button(Mode::Instant, "mode-instant", 0))
-            .child(button(Mode::Studio, "mode-studio", 1))
-            .child(button(Mode::Screenshot, "mode-screenshot", 2))
-            // `absolute -left-1.5 -top-2 p-1 rounded-full bg-gray-5`, hanging
-            // off the pill's top-left corner.
+            .border_color(theme.argon_specular_border())
+            .bg(theme.argon_card_surface())
+            .child(button(Mode::Instant, "mode-instant", "⚡ Instant Mode", 0))
+            .child(button(Mode::Studio, "mode-studio", "🎬 Studio Pro", 1))
+            .child(button(
+                Mode::Screenshot,
+                "mode-screenshot",
+                "📸 Screenshot",
+                2,
+            ))
             .child(
                 div()
                     .id("mode-info")
                     .tab_index(0)
                     .tooltip(move |_, cx| ui::Tooltip::new(&theme, "Recording mode info").view(cx))
                     .tooltip_show_delay(ui::TOOLTIP_SHOW_DELAY)
-                    .absolute()
-                    .left(px(-6.))
-                    .top(px(-8.))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .p(px(4.))
+                    .size(px(22.))
+                    .flex_shrink_0()
                     .rounded_full()
-                    .bg(theme.body_fill(5))
+                    .bg(theme.body_fill(4))
                     .child(
                         svg()
                             .path("icons/info.svg")
                             .size(px(10.))
                             .text_color(theme.gray_12),
                     )
-                    .hover(|style| style.opacity(0.5))
+                    .hover(|style| style.opacity(0.75))
                     .on_click(cx.listener(|this, _, window, cx| {
-                        // What shipping new-main actually does: it passes
-                        // `onInfoClick` into `Mode.tsx`, so the dot opens the
-                        // in-window info panel -- `showWindow("ModeSelect")` is
-                        // `Mode.tsx`'s *fallback*, and nothing in the shipping
-                        // frontend reaches it. The standalone window exists
-                        // here for parity (`CAP_GPUI_AUTO_MODE_SELECT` opens
-                        // it), but the dot mirrors the observed behavior.
                         this.open_panel(Panel::ModeInfo, window, cx);
                     })),
             )
@@ -6501,10 +7264,12 @@ impl MainWindow {
             .child(
                 div()
                     .px(px(4.))
-                    .text_size(px(10.))
+                    .font_family(crate::theme::TEXT_FONT)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_size(px(10.5))
                     .line_height(px(14.))
                     .text_color(self.theme.gray_11)
-                    .child("Choose a capture source"),
+                    .child("CAPTURE SOURCE"),
             )
             .child(
                 div()
@@ -6528,26 +7293,24 @@ impl MainWindow {
             )
     }
 
-    /// Display and Window are split controls: the tile plus a 28px
-    /// (`w-7`) chevron button, sharing one rounded border.
     fn render_split_target(&self, target: TargetType, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         let selected = self.target == Some(target);
-        let dropdown_id = SharedString::from(format!("{}-dropdown", target.label()));
+        let dropdown_id = SharedString::from(format!("{}-dropdown", target.id_slug()));
 
         div()
             .flex()
             .flex_1()
             .overflow_hidden()
-            .rounded(px(10.))
+            .rounded(px(12.))
             .map(|this| glass_button(this, theme, selected))
             .child(self.target_button_inner(target, true, cx))
             .child(
                 div()
                     .id(dropdown_id.clone())
                     .flex()
-                    .w(px(28.))
-                    .rounded_r(px(9.))
+                    .w(px(26.))
+                    .rounded_r(px(11.))
                     .flex_shrink_0()
                     .items_center()
                     .justify_center()
@@ -6582,7 +7345,7 @@ impl MainWindow {
                             &theme,
                             match target {
                                 TargetType::Display => "Choose a display",
-                                TargetType::Window => "Choose a window",
+                                TargetType::Window => "Choose a window or browser tab",
                                 _ => unreachable!(),
                             },
                         )
@@ -6595,7 +7358,6 @@ impl MainWindow {
             )
     }
 
-    /// Area and Camera Only are plain tiles with their own border.
     fn render_target_tile(&self, target: TargetType, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         let selected = self.target == Some(target);
@@ -6604,7 +7366,7 @@ impl MainWindow {
             .flex()
             .flex_1()
             .overflow_hidden()
-            .rounded(px(10.))
+            .rounded(px(12.))
             .map(|this| glass_button(this, theme, selected))
             .child(self.target_button_inner(target, false, cx))
     }
@@ -6628,28 +7390,59 @@ impl MainWindow {
             theme.gray_12
         };
 
+        let live_thumb = match target {
+            TargetType::Display => self
+                .selected_display
+                .as_ref()
+                .or_else(|| self.devices.displays.first())
+                .and_then(|display| self.thumbnails.display(&display.id).image),
+            TargetType::Window => self
+                .selected_window
+                .as_ref()
+                .or_else(|| self.devices.windows.first())
+                .and_then(|window| self.thumbnails.window(&window.id).image),
+            TargetType::Area | TargetType::CameraOnly => None,
+        };
+
         let icon = svg()
             .path(target.icon())
-            .size(px(20.))
+            .size(px(18.))
             .flex_shrink_0()
             .text_color(icon_color);
 
         let base = div()
-            .id(SharedString::from(target.label()))
+            .id(SharedString::from(target.id_slug()))
+            .relative()
+            .overflow_hidden()
             .flex()
             .flex_1()
             .py(px(8.))
-            .when(split, |this| this.rounded_l(px(9.)))
-            .when(!split, |this| this.rounded(px(9.)))
+            .px(px(6.))
+            .when(split, |this| this.rounded_l(px(11.)))
+            .when(!split, |this| this.rounded(px(11.)))
+            .cursor_pointer()
             .hover(move |style| style.bg(capture_hover_fill(theme, selected)))
-            .active(move |style| style.bg(capture_press_fill(theme, selected)))
+            .active(move |style| style.bg(capture_press_fill(theme, selected)).opacity(0.92))
+            .when_some(live_thumb, |this, image| {
+                use gpui::StyledImage as _;
+                this.child(
+                    img(image)
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Cover)
+                        .opacity(0.18),
+                )
+            })
             .on_click(cx.listener(move |this, _, window, cx| {
                 if target == TargetType::Window && this.target != Some(TargetType::Window) {
                     this.open_panel(Panel::Target(TargetType::Window), window, cx);
                     return;
                 }
-                // `toggleTargetMode`: clicking the armed tile again is a
-                // cancel, which takes the overlays down with it.
+                if target == TargetType::CameraOnly && this.camera.is_none() {
+                    app_windows::open_android_window(cx);
+                    return;
+                }
                 this.target = if this.target == Some(target) {
                     None
                 } else {
@@ -6663,20 +7456,21 @@ impl MainWindow {
             .items_center()
             .justify_end()
             .gap(px(4.))
-            // `pl-5` on the split controls when compact, to keep the icon
-            // optically centred against the chevron on the right.
-            .when(split, |this| this.pl(px(20.)))
+            .when(split, |this| this.pl(px(12.)))
             .child(icon)
             .child(
                 div()
-                    .text_size(px(12.))
-                    .line_height(px(16.))
+                    .font_family(crate::theme::TEXT_FONT)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_size(px(11.))
+                    .line_height(px(14.))
+                    .text_center()
                     .text_color(label_color)
                     .child(target.label()),
             )
     }
 
-    /// `BaseControls`: camera, microphone, system audio.
+    /// `BaseControls`: camera, microphone, system audio, and floating primary 4K recording CTA.
     fn render_base_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
         div()
@@ -6700,7 +7494,8 @@ impl MainWindow {
                             )
                             .icon("icons/film-cut.svg")
                             .label("Open Studio Editor")
-                            .height(px(34.))
+                            .radius(px(10.))
+                            .height(px(32.))
                             .full_width()
                             .on_click(cx.listener(
                                 |_, _, _window, cx| {
@@ -6719,7 +7514,8 @@ impl MainWindow {
                             )
                             .icon("icons/import.svg")
                             .label("Import .MP4 / Video")
-                            .height(px(34.))
+                            .radius(px(10.))
+                            .height(px(32.))
                             .full_width()
                             .on_click(cx.listener(
                                 |this, _, window, cx| {
@@ -6735,6 +7531,52 @@ impl MainWindow {
                     ),
             )
             .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(8.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-open-interview-copilot",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/sparkles.svg")
+                            .label("🥷 Interview Copilot")
+                            .radius(px(10.))
+                            .height(px(32.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |_, _, _window, cx| {
+                                    cx.defer(app_windows::open_copilot_window);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-open-studio-player-body",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/play-square.svg")
+                            .label("🎥 Studio Player")
+                            .radius(px(10.))
+                            .height(px(32.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, _window, cx| {
+                                    this.open_play_with_dialog(None, cx);
+                                },
+                            )),
+                        ),
+                    ),
+            )
+            .child(
                 ui::Button::plain(
                     &theme,
                     "main-open-android-mirror-hub",
@@ -6743,7 +7585,8 @@ impl MainWindow {
                 )
                 .icon("icons/mobile.svg")
                 .label("📱 Phone Mirror Hub (iPhone & Android)")
-                .height(px(32.))
+                .radius(px(10.))
+                .height(px(30.))
                 .full_width()
                 .on_click(cx.listener(|_, _, _window, cx| {
                     app_windows::open_android_window(cx);
@@ -6752,10 +7595,12 @@ impl MainWindow {
             .child(
                 div()
                     .px(px(4.))
-                    .text_size(px(10.))
+                    .font_family(crate::theme::TEXT_FONT)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_size(px(10.5))
                     .line_height(px(14.))
                     .text_color(self.theme.gray_11)
-                    .child("Choose your camera and microphone"),
+                    .child("AV DEVICES & LIVE VU METER"),
             )
             .child(
                 div().flex().flex_col().child(
@@ -6786,10 +7631,6 @@ impl MainWindow {
                         cx,
                     )
                     .on_click(cx.listener(|this, _, window, cx| {
-                        // Through `open_panel`, so the filter field takes focus
-                        // the way it already does for the display and window
-                        // panels -- before the field was real there was nothing
-                        // to focus into.
                         if !this.enumerating && this.device_changes_allowed(cx) {
                             this.open_panel(Panel::Device(DeviceMenu::Camera), window, cx);
                         }
@@ -6825,10 +7666,6 @@ impl MainWindow {
                         cx,
                     )
                     .on_click(cx.listener(|this, _, window, cx| {
-                        // Through `open_panel`, so the filter field takes focus
-                        // the way it already does for the display and window
-                        // panels -- before the field was real there was nothing
-                        // to focus into.
                         if !this.enumerating && this.device_changes_allowed(cx) {
                             this.open_panel(Panel::Device(DeviceMenu::Microphone), window, cx);
                         }
@@ -6853,14 +7690,61 @@ impl MainWindow {
                         None,
                         cx,
                     )
-                    // System audio has no device to choose, so the row is a
-                    // plain toggle rather than a picker.
                     .on_click(cx.listener(|this, _, _window, cx| {
                         if this.device_changes_allowed(cx) {
                             this.set_system_audio(!this.system_audio, cx);
                         }
                     })),
                 ),
+            )
+            .child(
+                div()
+                    .id("start-4k-recording-cta")
+                    .mt(px(4.))
+                    .h(px(46.))
+                    .w_full()
+                    .rounded(px(12.))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .bg(Theme::argon_primary_gradient())
+                    .border_1()
+                    .border_color(gpui::rgba(0xffffff33))
+                    .shadow(theme.argon_primary_glow())
+                    .hover(|style| style.bg(Theme::argon_primary_hover_gradient()))
+                    .active(|style| {
+                        style
+                            .bg(Theme::argon_primary_active_gradient())
+                            .opacity(0.95)
+                    })
+                    .child(
+                        div()
+                            .size(px(10.))
+                            .rounded_full()
+                            .bg(rgb(Theme::ARGON_EMBER_RED))
+                            .shadow(Theme::argon_ember_glow()),
+                    )
+                    .child(
+                        div()
+                            .font_family(crate::theme::DISPLAY_FONT)
+                            .font_weight(FontWeight::BOLD)
+                            .text_size(px(13.))
+                            .text_color(gpui::white())
+                            .child("START 4K RECORDING (Space / ⌥R)"),
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        if this.target.is_none() {
+                            this.target = Some(TargetType::Display);
+                        }
+                        if this.target == Some(TargetType::Area) {
+                            this.sync_overlays(cx);
+                            return;
+                        }
+                        this.start_recording(window, cx);
+                    })),
             )
     }
 
