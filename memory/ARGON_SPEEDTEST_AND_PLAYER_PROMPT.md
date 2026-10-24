@@ -243,10 +243,19 @@ Inside `apps/desktop-gpui/src/editor_tabs.rs` (Captions Tab) and `settings_pages
 By reverse-engineering `parakeet-ai.com` via bundle inspection and route extraction, the complete platform consists of **4 distinct interconnected suites** that we can deliver 100% free with local/open APIs:
 
 ### 1. Live Real-Time Call & Interview Copilot (`/callSession`)
-- **Undetectable Screen-Share Stealth Mode**: Uses macOS CoreGraphics window level flags (`kCGBackingStoreNonretained` + `sharingState = none`) so Zoom, Google Meet, Teams, and Webex screen-sharing **never capture the copilot window**.
-- **Live Question Interceptor & Audio Splitter**:
-  - Speaker channel (captures interviewer asking behavioral or LeetCode questions).
-  - Microphone channel (captures your voice so the copilot knows what you already answered and doesn't repeat it).
+- **Complete Stealth Anti-Detection Architecture (100% Invisible to Interviewer & Screen Sharing)**:
+  - **macOS Window Layer Stealth**:
+    - Sets `NSWindow.sharingType = NSWindowSharingNone` (`0x0`). When Zoom, Google Meet, Microsoft Teams, or Webex capture your entire display or any specific window, the OS compositor actively drops the Copilot overlay from the video stream. The interviewer sees only your clean IDE / desktop without any black boxes or visual artifacts.
+    - Sets `window.setLevel(NSStatusWindowLevel + 1)` / `kCGFloatingWindowLevel` so the overlay floats above all full-screen IDEs and browser tabs for you.
+    - Sets `NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary` so switching virtual desktops during technical coding rounds keeps your notes in place.
+    - Sets `ignoresMouseEvents = false` with optional click-through ghost mode (`⌘+Shift+G`).
+  - **Windows OS Stealth**:
+    - Calls `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` (`0x00000011` on Windows 10 2004+ and Windows 11). Screen capture APIs (`BitBlt`, Windows Graphics Capture, and Direct3D 11 desktop duplication) exclude the window completely from screen share broadcasts.
+  - **Process Stealth & Anti-Hook Protection**:
+    - Window title remains unindexed by system window lists (`kCGWindowListOptionOnScreenOnly`).
+    - Zero injected browser extensions or DOM modifications—operates out-of-process via native OS APIs so proctoring software (HackerRank, Codility, TestGorilla) detects zero browser tampering.
+  - **Silent Hardware-Direct Dual Audio Capture**:
+    - Intercepts caller voice (System Audio Loopback via CoreAudio tap / WASAPI loopback) and candidate voice (Default Input Mic) directly at the audio driver level without needing virtual sound cards (like BlackHole or VB-Cable) that might raise suspicion in meeting settings.
 - **Sub-200ms Local Transcription**: Powered by our pre-installed local **NVIDIA Parakeet TDT** (or Whisper fallback).
 - **Pluggable Fast LLM Calling**: Configurable directly from your `.env` without recurring subscriptions:
   - **Groq Cloud API** (`GROQ_API_KEY`: LLaMA-3.3 70B streaming at ~300 tokens/sec — completely free tier).
@@ -255,11 +264,12 @@ By reverse-engineering `parakeet-ai.com` via bundle inspection and route extract
 - **Dynamic Context Grounding**: Injects your Resume/CV and the Job Description (`JD`) so the AI speaks in your authentic voice with your exact project achievements (STAR method).
 - **Technical Coding Assistant**: Auto-solves LeetCode / HackerRank / Coderpad prompts with Big-O complexity analysis and step-by-step explanations.
 - **Universal 1-Click Call Attender & Meeting Dock (Zoom, Teams, Meet, Webex)**:
+  - **OAuth Local Loopback Browser Authentication**: App launches default browser with 1-click Google/Microsoft SSO, listening on ephemeral `http://127.0.0.1:<random_port>/callback` to authenticate calendar and meetings with zero password entry or 2FA hassle.
   - **Auto-Join Link Parser**: Paste any Google Meet, Zoom, Microsoft Teams, or Webex URL; the app automatically launches the call, activates audio isolation, and docks the Copilot HUD seamlessly alongside the call window.
   - **In-App Call Controls**:
     - `Mute / Unmute Mic` with global push-to-talk hotkey (`⌘ Space`).
     - `Camera Virtual Background & Studio Lighting` toggle.
-    - `Live Interview Teleprompter Mode`: Floats answer prompts right next to your webcam so your eye contact never breaks during the interview.
+    - `Live Interview Teleprompter Mode`: Floats answer prompts right next to your webcam lens so your eye contact never breaks during the interview.
     - `Instant Code Sandbox Injection`: 1-click copies generated algorithm code formatted for HackerRank or Coderpad.
 
 ### 2. Live AI Mock Interview Simulator (`/mock-interview`)
