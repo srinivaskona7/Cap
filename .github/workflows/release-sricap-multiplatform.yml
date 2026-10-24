@@ -49,7 +49,7 @@ jobs:
           echo "FFMPEG_DIR=$(brew --prefix ffmpeg@7)" >> $GITHUB_ENV
           npm install -g pnpm@10.15.0 @tauri-apps/cli@2.9.6
 
-      - name: Install Rust toolchains
+      - name: Install Rust toolchains (1.88.0 + 1.95.0)
         run: |
           rustup toolchain install 1.88.0 --profile minimal --target aarch64-apple-darwin
           rustup toolchain install 1.95.0 --profile minimal --target aarch64-apple-darwin
@@ -133,13 +133,26 @@ jobs:
         with:
           minimum-size: 16GB
           maximum-size: 24GB
-          disk-root: "C:"
+          disk-root: "D:"
+
+      - name: Create root .env for Windows target
+        shell: bash
+        run: |
+          echo "RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc" >> .env
 
       - name: Run cap-setup
         shell: bash
         run: bun run cap-setup
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+
+      - name: Copy native-deps to apps/desktop-gpui/target
+        shell: bash
+        run: |
+          mkdir -p apps/desktop-gpui/.cargo
+          cp .cargo/config.toml apps/desktop-gpui/.cargo/config.toml 2>/dev/null || true
+          mkdir -p apps/desktop-gpui/target/native-deps
+          cp -r target/native-deps/* apps/desktop-gpui/target/native-deps/ 2>/dev/null || true
 
       - name: Build Sidecar Binaries (Windows)
         shell: bash
@@ -153,6 +166,9 @@ jobs:
         shell: bash
         run: |
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle
+        env:
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
       - name: Bundle Windows NSIS Installer
         shell: bash
@@ -197,8 +213,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/feature1'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.6' }}
-          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.6' }} (macOS & Windows)"
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}
+          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }} (macOS & Windows)"
           body: |
             ### sricap-rec Unified Multi-Platform Release (macOS & Windows)
             - **macOS Apple Silicon**: `sricap-rec.dmg` (Drag-and-drop installer) & `sricap-rec-macos-arm64.zip`
