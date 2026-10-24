@@ -161,7 +161,35 @@ Add a dedicated icon button in `main_window.rs` header:
 
 ---
 
-## 🛠 SECTION 4: Technical Implementation Specifications
+## 🌟 SECTION 4: 20 Novelty & Free-to-Air Live TV Features (Compete with $200 Apps)
+
+Drawn from leading open-source broadcast repositories (`iptv-org/iptv`, `Free-TV/IPTV`, `Streamlink`, `IINA+`, and `mpv`):
+
+### A. Free-to-Air Live TV & Global Broadcast Engine (10 Novelty Features)
+1. **Zero-Cost Global Free-to-Air TV Directory**: Direct integration with the verified `iptv-org` legal public broadcast index (over 8,000+ public news, NASA TV, Bloomberg, DW, France24, NHK World, PBS, weather, and educational channels streaming 100% free with zero subscriptions).
+2. **Apple TV Style Live EPG (Electronic Program Guide)**: Clean 7-day visual timeline grid showing current and upcoming shows with live progress bars.
+3. **Multi-View Sports & News Mosaic (4-Channel Grid)**: Watch up to 4 live free-to-air feeds simultaneously in a synchronized 2×2 grid with 1-click audio switching.
+4. **DVR Catch-Up & 30-Minute Live Pause Buffer**: Pause, rewind, or slow-motion scrub live broadcast streams using an in-memory rolling ring buffer.
+5. **Smart Auto-Fallback Stream Resolver**: If a public CDN link drops or lags, automatically rotates to the fastest verified mirror stream without interrupting playback.
+6. **Hardware-Decoded Low-Latency HLS/DASH Engine**: Instant sub-second channel tuning utilizing Apple VideoToolbox hardware acceleration.
+7. **Picture-in-Picture (PiP) Floating HUD**: Detach any live TV broadcast or tutorial video into an always-on-top borderless floating glass window while coding.
+8. **Real-Time Live Closed-Captions & Subtitle Translator**: On-the-fly local whisper transcription and subtitle translation for foreign public broadcasts.
+9. **Instant Stream Clip to Studio Editor**: 1-click `Cmd+Shift+R` to grab a 30s highlight from any live free-to-air stream directly into the Cap Studio editor for reels/shorts creation.
+10. **Audio-Only Background Radio Mode**: Minimize bandwidth to ~64 kbps to listen to global news, tech panels, and music streams with screen off.
+
+### B. Pro Internet Radar & Network Novelty Suite (5 Novelty Features)
+11. **Wi-Fi 6E/7 BSSID Radar & Spectrum Analyzer**: Displays real-time channel congestion, RSSI signal drop warnings, and frequency interference.
+12. **Streaming Bufferbloat Grade & QoS Optimizer**: Evaluates real-time packet queuing latency under heavy network load with an A+ through F grading scale.
+13. **CDN Edge Latency Map**: Pings Cloudflare, AWS CloudFront, Fastly, and Akamai POPs to recommend the optimal upload region.
+14. **Packet Loss Forensics & Jitter Waveform**: Displays a live rolling oscilloscope graph of network stability during live broadcasts.
+15. **Auto-Throttle Bandwidth Saver**: Automatically downscales background playback when metering connections or running on low battery.
+
+### C. Studio Pro Video Player Novelty Tools (5 Novelty Features)
+16. **AI Speech Clarity & Dialog Boost**: Multi-band speech enhancer that isolates vocals and silences muddy background music in movies or noisy tutorials.
+17. **Dynamic Volume Night Mode**: Smooths out explosions and abrupt loud sounds to maintain comfortable, consistent dialogue volume.
+18. **Precision Subtitle Resync Waveform**: Visual timeline where users can drag subtitle tracks against audio peaks for millisecond-perfect lip sync.
+19. **Lossless Frame Extraction & Color Sampler**: Extract uncompressed 10-bit PNG stills and inspect hex/RGB values directly from video frames.
+20. **macOS Spatial Audio & Head-Tracking Support**: Immersive multi-channel sound virtualization for AirPods Pro/Max users.
 
 ### 1. Speed Test Engine (`apps/desktop-gpui/src/speedtest.rs`)
 ```rust
