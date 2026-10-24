@@ -570,7 +570,13 @@ impl AndroidWindow {
                 tabbing_identifier: None,
                 ..WindowOptions::default()
             },
-            |_window, cx| cx.new(Self::new),
+            |window, cx| {
+                window.on_window_should_close(cx, |_window, cx| {
+                    cx.defer(crate::app_windows::show_main_window);
+                    true
+                });
+                cx.new(Self::new)
+            },
         )
         .ok()
     }
