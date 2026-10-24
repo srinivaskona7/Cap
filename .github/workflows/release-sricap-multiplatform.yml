@@ -2,6 +2,9 @@ name: Release sricap-rec (macOS & Windows)
 
 on:
   push:
+    branches:
+      - feature1
+      - main
     tags:
       - "v*"
   workflow_dispatch:
