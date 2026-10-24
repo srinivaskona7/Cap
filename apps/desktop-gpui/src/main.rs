@@ -17,6 +17,7 @@ mod camera_blur_portable;
 mod camera_loading;
 mod camera_window;
 mod controls_window;
+mod copilot_window;
 mod deeplink;
 mod dev_restore;
 mod device_bridge;
@@ -45,6 +46,7 @@ mod feeds;
 mod hotkeys;
 mod import;
 mod installer;
+mod iptv_org;
 mod library;
 mod main_window;
 mod media_access;
@@ -61,7 +63,9 @@ mod picker_benchmark;
 #[cfg(debug_assertions)]
 mod picker_ui_benchmark;
 mod platform;
+mod player_window;
 mod presets;
+mod reader_window;
 mod recording;
 mod screenshot;
 mod screenshot_annotations;
@@ -76,6 +80,7 @@ mod sign_in;
 mod single_instance;
 #[cfg(debug_assertions)]
 mod snapshot;
+mod speedtest;
 mod store;
 mod target_overlay;
 mod target_thumbnails;
@@ -92,7 +97,7 @@ use gpui::{App, AppContext as _, Bounds, WindowBounds, WindowOptions, px, size};
 use crate::{assets::Assets, main_window::MainWindow, session::RecordingSession};
 
 const MAIN_WINDOW_WIDTH: f32 = 360.;
-const MAIN_WINDOW_HEIGHT: f32 = 490.;
+const MAIN_WINDOW_HEIGHT: f32 = 625.;
 
 /// The corner radius the native material is clipped to. `radius = 16` for
 /// material `"panel"` on both visual systems in

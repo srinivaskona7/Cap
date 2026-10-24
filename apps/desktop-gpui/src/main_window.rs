@@ -7544,7 +7544,7 @@ impl MainWindow {
                                 ui::ButtonSize::Sm,
                             )
                             .icon("icons/sparkles.svg")
-                            .label("🥷 Interview Copilot")
+                            .label("Interview Copilot")
                             .radius(px(10.))
                             .height(px(32.))
                             .full_width()
@@ -7564,7 +7564,7 @@ impl MainWindow {
                                 ui::ButtonSize::Sm,
                             )
                             .icon("icons/play-square.svg")
-                            .label("🎥 Studio Player")
+                            .label("Studio Player")
                             .radius(px(10.))
                             .height(px(32.))
                             .full_width()
@@ -7590,9 +7590,9 @@ impl MainWindow {
                                 ui::ButtonSize::Sm,
                             )
                             .icon("icons/book-open.svg")
-                            .label("📖 Universal Reader")
+                            .label("Universal Reader")
                             .radius(px(10.))
-                            .height(px(30.))
+                            .height(px(32.))
                             .full_width()
                             .on_click(cx.listener(
                                 |_, _, _window, cx| {
@@ -7610,9 +7610,9 @@ impl MainWindow {
                                 ui::ButtonSize::Sm,
                             )
                             .icon("icons/mobile.svg")
-                            .label("📱 Mirror Hub")
+                            .label("Device Mirror Hub")
                             .radius(px(10.))
-                            .height(px(30.))
+                            .height(px(32.))
                             .full_width()
                             .on_click(cx.listener(
                                 |_, _, _window, cx| {
