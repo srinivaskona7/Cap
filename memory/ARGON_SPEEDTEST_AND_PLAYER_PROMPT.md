@@ -254,6 +254,13 @@ By reverse-engineering `parakeet-ai.com` via bundle inspection and route extract
   - **Ollama Local Endpoint** (`OLLAMA_HOST=http://localhost:11434`: 100% offline, zero internet required).
 - **Dynamic Context Grounding**: Injects your Resume/CV and the Job Description (`JD`) so the AI speaks in your authentic voice with your exact project achievements (STAR method).
 - **Technical Coding Assistant**: Auto-solves LeetCode / HackerRank / Coderpad prompts with Big-O complexity analysis and step-by-step explanations.
+- **Universal 1-Click Call Attender & Meeting Dock (Zoom, Teams, Meet, Webex)**:
+  - **Auto-Join Link Parser**: Paste any Google Meet, Zoom, Microsoft Teams, or Webex URL; the app automatically launches the call, activates audio isolation, and docks the Copilot HUD seamlessly alongside the call window.
+  - **In-App Call Controls**:
+    - `Mute / Unmute Mic` with global push-to-talk hotkey (`⌘ Space`).
+    - `Camera Virtual Background & Studio Lighting` toggle.
+    - `Live Interview Teleprompter Mode`: Floats answer prompts right next to your webcam so your eye contact never breaks during the interview.
+    - `Instant Code Sandbox Injection`: 1-click copies generated algorithm code formatted for HackerRank or Coderpad.
 
 ### 2. Live AI Mock Interview Simulator (`/mock-interview`)
 - **Interactive Practice Partner**: An AI interviewer that speaks realistic interview questions out loud using Apple Neural TTS or ElevenLabs.
