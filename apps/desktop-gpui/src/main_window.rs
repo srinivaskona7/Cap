@@ -7577,20 +7577,50 @@ impl MainWindow {
                     ),
             )
             .child(
-                ui::Button::plain(
-                    &theme,
-                    "main-open-android-mirror-hub",
-                    ui::ButtonVariant::Gray,
-                    ui::ButtonSize::Sm,
-                )
-                .icon("icons/mobile.svg")
-                .label("📱 Phone Mirror Hub (iPhone & Android)")
-                .radius(px(10.))
-                .height(px(30.))
-                .full_width()
-                .on_click(cx.listener(|_, _, _window, cx| {
-                    app_windows::open_android_window(cx);
-                })),
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(8.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-open-book-reader-body",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/book-open.svg")
+                            .label("📖 Universal Reader")
+                            .radius(px(10.))
+                            .height(px(30.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |_, _, _window, cx| {
+                                    cx.defer(|cx| app_windows::open_book_reader(None, cx));
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "main-open-android-mirror-hub",
+                                ui::ButtonVariant::Gray,
+                                ui::ButtonSize::Sm,
+                            )
+                            .icon("icons/mobile.svg")
+                            .label("📱 Mirror Hub")
+                            .radius(px(10.))
+                            .height(px(30.))
+                            .full_width()
+                            .on_click(cx.listener(
+                                |_, _, _window, cx| {
+                                    app_windows::open_android_window(cx);
+                                },
+                            )),
+                        ),
+                    ),
             )
             .child(
                 div()
