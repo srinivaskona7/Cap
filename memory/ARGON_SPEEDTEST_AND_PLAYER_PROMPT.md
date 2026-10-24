@@ -127,6 +127,63 @@ pub struct SpeedTestResult {
   ```
 - Support `.mp4`, `.mov`, `.mkv`, `.webm`, `.m4v`, `.cap`.
 
+## 📚 SECTION 3: Universal $200 Tier Book & Document Reader Studio
+
+### 1. Formats Supported
+- **Documents & Textbooks**: PDF, EPUB, MOBI, AZW3, DJVU.
+- **Developer & Technical**: Markdown (`.md`), HTML, AsciiDoc, Org-Mode.
+- **Comics & Manga**: CBZ, CBR.
+
+### 2. Dedicated Reader Header Button & Quick Trigger
+Add a dedicated icon button in `main_window.rs` header:
+- **Button ID**: `"open-book-reader"`
+- **Icon**: `"icons/book-open.svg"` (16px).
+- **Tooltip**: `"Universal Studio Book Reader (PDF · EPUB · Markdown · AI Neural Flashcards)"`.
+- **Action**: Opens file picker or the Book Learning Vault (`reader_window.rs`).
+
+### 3. $200 Premium Book Reader Capabilities (Inside `reader_window.rs`)
+- **Typography & Bionic Reading Engine**:
+  - Warm Paper, E-Ink Monochrome, Dark Obsidian, and Solarized Sepia themes.
+  - Serif (Charter/Merriweather), Sans (Inter/SF Pro), and Monospace (JetBrains Mono) font modes.
+  - **Bionic Reading Toggle**: Highlights the initial letters of each word to boost reading speed by 40%.
+  - Text-to-Speech Voice Engine (Apple Neural Voice with speed control 0.5x–3.0x).
+- **Smart Learning & Annotation Hub**:
+  - Color-coded highlights (Yellow: Core Concept, Purple: Quote, Red: Objection/Counterargument).
+  - Margin sticky notes with instant Markdown export.
+  - Integrated Table of Contents (TOC) sidebar with search indexing and page bookmarks.
+- **AI Deep Study Companion Integration**:
+  - 1-Click **"Synthesize Chapter Summary"** into structured key takeaways.
+  - 1-Click **"Generate Retrieval Flashcards"** (integrated directly into the Book Learning Protocol).
+  - Inline Terminology Inspector: Hover over complex terms for contextual definitions.
+- **Two-Page Spread & Presentation Mode**:
+  - Continuous vertical scroll or Kindle-style two-page horizontal flip.
+  - Distraction-Free Zen Fullscreen (auto-hides macOS dock and menubar).
+
+---
+
+## 🛠 SECTION 4: Technical Implementation Specifications
+
+### 1. Speed Test Engine (`apps/desktop-gpui/src/speedtest.rs`)
+```rust
+#[derive(Clone, Debug, Default)]
+pub struct SpeedTestResult {
+    pub download_mbps: f64,
+    pub upload_mbps: f64,
+    pub ping_ms: u32,
+    pub jitter_ms: u32,
+    pub packet_loss_pct: f32,
+    pub wifi_standard: String,
+    pub channel_freq: String,
+    pub bufferbloat_grade: String,
+    pub is_testing: bool,
+}
+```
+
+### 2. Universal Reader Engine (`apps/desktop-gpui/src/reader_window.rs`)
+- High-performance PDF rendering using `pdfium` / CoreGraphics bindings on macOS.
+- EPUB parser extracting HTML/CSS spine with GPUI rich text layout.
+- Markdown viewer with live Mermaid diagram rendering.
+
 ### 3. Strict Pre-Generation Invariants for Code Generation
 Argon must follow all invariants in [AGENTS.md](file:///Users/sr20536224wipro.com/Documents/Github-apple/srinew/Cap/AGENTS.md):
 - **Zero code comments**: Only add comments for non-obvious platform workarounds.
@@ -139,21 +196,22 @@ Argon must follow all invariants in [AGENTS.md](file:///Users/sr20536224wipro.co
 ## 📋 Copyable Master Prompt for Argon
 
 ```text
-Please implement the following two studio-grade features in sricap-rec (apps/desktop-gpui):
+Please implement the following three studio-grade features in sricap-rec (apps/desktop-gpui):
 
 1. Minimal Top Live Speedometer HUD & Telemetry Modal:
 - In apps/desktop-gpui/src/main_window.rs header, add a minimalist glassmorphism pill displaying live speeds: "[ 🟢 ↓ 342 M  ↑ 88 M ]".
+- Hovering shows: "Network Health: Excellent (11ms) • Click for Full Network Radar & Diagnostics".
 - Clicking this pill opens a high-fidelity "Network & Streaming Telemetry" modal featuring:
-  • Download / Upload Mbps speed gauge
-  • Ping (RTT), Jitter (ms), and Packet Loss
-  • Streaming readiness ratings (4K 60fps upload, RTMP Twitch/YouTube headroom)
-  • Wi-Fi PHY channel details (5GHz/6GHz, RSSI, channel width)
+  • Real-time animated Download / Upload Mbps speed gauge
+  • Ping (RTT), Jitter (ms), and Packet Loss (0.0%)
+  • Streaming readiness ratings (4K 60fps cloud upload, RTMP Twitch/YouTube headroom)
+  • Wi-Fi PHY channel details (5GHz/6GHz, RSSI, channel width, Bufferbloat Grade A+)
   • 1-Click "Copy Diagnostics Report (.MD)" button
 
 2. Dedicated Studio Pro Video Player & "Play With..." Suite:
 - Add a dedicated "Studio Pro Video Player" button (icon: play-square.svg, 16px) to the main_window.rs header bar.
 - Implement a "Play With..." context modal when double-clicking videos or selecting play options, showing:
-  • sricap Studio Pro Player (Metal 4K, Frame Stepper, LUFS Radar, Scopes, Lossless Cut) marked as Recommended
+  • sricap Studio Pro Player (Metal 4K, Frame Stepper, LUFS Radar, Scopes, Lossless Cut) marked as Recommended Pro Default
   • QuickTime Player, VLC, and IINA detected app options
   • "[✓] Always open with sricap Studio Player" checkbox
   • "Set sricap as macOS Default Video Player" system button via LaunchServices
@@ -164,6 +222,15 @@ Please implement the following two studio-grade features in sricap-rec (apps/des
   • RGB Parade & Luminance Waveform scopes
   • Floating 400% pixel magnifier loupe
   • Instant lossless In/Out trimmer (I/O keys) with sub-second remux export
+
+3. Universal Book & Document Reader Studio:
+- Add a dedicated "Universal Book Reader" button (icon: book-open.svg, 16px) to the main_window.rs header bar.
+- Implement apps/desktop-gpui/src/reader_window.rs supporting:
+  • Formats: PDF, EPUB, MOBI, CBZ, and Markdown (.md)
+  • Themes: Warm Paper, E-Ink Monochrome, Dark Obsidian, and Solarized Sepia
+  • Bionic Reading Mode toggle (guided fixation typography)
+  • Interactive TOC sidebar, bookmarks, and color-coded annotation highlighter
+  • 1-Click "Export Markdown Notes & AI Flashcards" compatible with BOOK_LEARNING_PROTOCOL.md
 
 Adhere strictly to repo invariants: Zero unnecessary comments, tab indentation where applicable, Clippy-clean Rust, strict 8-point layout rhythm, and no overlapping hit targets.
 ```
