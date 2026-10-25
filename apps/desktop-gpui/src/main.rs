@@ -96,8 +96,10 @@ use gpui::{App, AppContext as _, Bounds, WindowBounds, WindowOptions, px, size};
 
 use crate::{assets::Assets, main_window::MainWindow, session::RecordingSession};
 
-const MAIN_WINDOW_WIDTH: f32 = 360.;
-const MAIN_WINDOW_HEIGHT: f32 = 625.;
+pub const MAIN_WINDOW_WIDTH: f32 = 360.;
+pub const MAIN_WINDOW_HEIGHT: f32 = 625.;
+pub const MAIN_WINDOW_EXPANDED_WIDTH: f32 = 740.;
+pub const MAIN_WINDOW_EXPANDED_HEIGHT: f32 = 680.;
 
 /// The corner radius the native material is clipped to. `radius = 16` for
 /// material `"panel"` on both visual systems in

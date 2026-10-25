@@ -1628,6 +1628,7 @@ pub fn open_teleprompter(cx: &mut App) {
             }
         })
         .detach();
+        hide_main_and_park_camera_preview(cx);
         return;
     }
 

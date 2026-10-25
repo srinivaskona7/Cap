@@ -831,6 +831,19 @@ impl PlayerWindow {
                     .items_center()
                     .gap(px(8.))
                     .child(
+                        ui::Button::plain(
+                            &theme,
+                            "player-back-home",
+                            ui::ButtonVariant::Gray,
+                            ui::ButtonSize::Sm,
+                        )
+                        .label("🏠 Home")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.remove_window();
+                            cx.defer(app_windows::show_main_window);
+                        })),
+                    )
+                    .child(
                         div()
                             .id("player-mode-video")
                             .px(px(10.))

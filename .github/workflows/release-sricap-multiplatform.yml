@@ -23,8 +23,22 @@ concurrency:
 
 jobs:
   build-macos:
-    name: Build sricap-rec (macOS Apple Silicon)
-    runs-on: macos-14
+    name: Build sricap-rec (macOS ${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            name: Silicon
+            artifact_dmg: mac-silicon.dmg
+            artifact_zip: mac-silicon.zip
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            name: Intel
+            artifact_dmg: mac-intel.dmg
+            artifact_zip: mac-intel.zip
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,8 +65,8 @@ jobs:
 
       - name: Install Rust toolchains (1.88.0 + 1.95.0)
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --target aarch64-apple-darwin
-          rustup toolchain install 1.95.0 --profile minimal --target aarch64-apple-darwin
+          rustup toolchain install 1.88.0 --profile minimal --target ${{ matrix.target }}
+          rustup toolchain install 1.95.0 --profile minimal --target ${{ matrix.target }}
           rustup default 1.88.0
 
       - name: Install Dependencies
@@ -61,12 +75,12 @@ jobs:
       - name: Run cap-setup
         run: bun run cap-setup
         env:
-          RUST_TARGET_TRIPLE: aarch64-apple-darwin
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
 
       - name: Build Sidecar Binaries
         run: |
           chmod +x scripts/build-desktop-binaries.sh
-          ./scripts/build-desktop-binaries.sh aarch64-apple-darwin
+          ./scripts/build-desktop-binaries.sh ${{ matrix.target }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: "0"
           CARGO_PROFILE_RELEASE_STRIP: symbols
@@ -74,34 +88,34 @@ jobs:
       - name: Build & Bundle sricap-rec GPUI App
         run: |
           chmod +x scripts/build-gpui-binary.sh
-          node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app
+          node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app
 
       - name: Package macOS DMG & ZIP
         run: |
           mkdir -p dist-release
-          APP_PATH="$(find apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
+          APP_PATH="$(find apps/desktop-gpui/target/${{ matrix.target }}/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
           if [ -z "$APP_PATH" ]; then
             echo "Error: sricap-rec.app not found!"
             exit 1
           fi
           echo "Found app bundle at: $APP_PATH"
           codesign --force --deep --sign - "$APP_PATH"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist-release/sricap-rec-macos-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist-release/${{ matrix.artifact_zip }}"
 
           DMG_STAGING="$(mktemp -d)"
           cp -R "$APP_PATH" "$DMG_STAGING/sricap-rec.app"
           ln -s /Applications "$DMG_STAGING/Applications"
-          hdiutil create -volname "sricap-rec" -srcfolder "$DMG_STAGING" -ov -format UDZO "dist-release/sricap-rec.dmg"
+          hdiutil create -volname "sricap-rec" -srcfolder "$DMG_STAGING" -ov -format UDZO "dist-release/${{ matrix.artifact_dmg }}"
           rm -rf "$DMG_STAGING"
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts
+          name: macos-${{ matrix.name }}-artifacts
           path: dist-release/*
 
   build-windows:
-    name: Build sricap-rec (Windows x64 NSIS)
+    name: Build sricap-rec (Windows x64)
     runs-on: windows-2022
     steps:
       - name: Checkout repository
@@ -170,14 +184,16 @@ jobs:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
-      - name: Bundle Windows NSIS Installer
+      - name: Bundle Windows Installer (windows.exe)
         shell: bash
         run: |
           npm install -g @tauri-apps/cli@2.9.6
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis
           mkdir -p dist-windows
-          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/sricap-rec-windows-x64-setup.exe 2>/dev/null || true
-          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/sricap-rec-windows-x64.exe 2>/dev/null || true
+          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe 2>/dev/null || true
+          if [ ! -f dist-windows/windows.exe ]; then
+            cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/windows.exe
+          fi
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -186,24 +202,22 @@ jobs:
           path: dist-windows/*
 
   publish:
-    name: Publish Multi-Platform Release (macOS + Windows)
+    name: Publish Multi-Platform Release (macOS & Windows)
     needs: [build-macos, build-windows]
     runs-on: ubuntu-24.04
     steps:
-      - name: Download macOS Artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos-artifacts
-          path: release-assets
+          path: raw-artifacts
 
-      - name: Download Windows Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-artifacts
-          path: release-assets
-
-      - name: Generate Checksums
+      - name: Collect & Organize Clean Release Assets
         run: |
+          mkdir -p release-assets
+          find raw-artifacts -name "mac-silicon.dmg" -exec cp {} release-assets/ \;
+          find raw-artifacts -name "mac-intel.dmg" -exec cp {} release-assets/ \;
+          find raw-artifacts -name "windows.exe" -exec cp {} release-assets/ \;
+          
           cd release-assets
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -214,12 +228,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}
-          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }} (macOS & Windows)"
+          name: "sricap-rec ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}"
           body: |
-            ### sricap-rec Unified Multi-Platform Release (macOS & Windows)
-            - **macOS Apple Silicon**: `sricap-rec.dmg` (Drag-and-drop installer) & `sricap-rec-macos-arm64.zip`
-            - **Windows x64**: `sricap-rec-windows-x64-setup.exe` (NSIS Installer) & `sricap-rec-windows-x64.exe` (Standalone portable)
-            - **All 30 Novelty Features Included**: Live Internet Speedometer, Studio Video Player, Universal Book & Document Reader, Mobile Mirroring, 100% Stealth AI Interview Copilot, and Transcription Model Hub.
+            ### 🚀 sricap-rec Multi-Platform Release
+            
+            Simplified downloads for all platforms:
+            - 🍏 **Apple Silicon Mac**: [`mac-silicon.dmg`](https://github.com/srinivaskona7/Cap/releases/download/${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}/mac-silicon.dmg) (M1, M2, M3, M4)
+            - 🍏 **Intel Mac**: [`mac-intel.dmg`](https://github.com/srinivaskona7/Cap/releases/download/${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}/mac-intel.dmg) (x86_64 Intel Macs)
+            - 🪟 **Windows**: [`windows.exe`](https://github.com/srinivaskona7/Cap/releases/download/${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v0.6.7' }}/windows.exe) (Windows 10/11 64-bit Installer)
+
+            ---
+            **Included Novelty Features:**
+            - ⚡ **Live Internet Speedometer**: Real-time traffic, latency, jitter & bufferbloat telemetry.
+            - 🎬 **Studio Pro Video Player**: PIP, speed control, 0.5x–2.0x, subtitle support, and loop mode.
+            - 📖 **Universal Reader**: Dual-pane reader for PDFs, EPUBs, Markdown notes, and manuals.
+            - 📱 **Mobile Screen Mirroring**: Low-latency wireless & USB Android mirroring.
+            - 🤖 **AI Interview Copilot**: 100% stealth prompter with system audio transcription and auto-summarizer.
           draft: false
           prerelease: false
           generate_release_notes: true

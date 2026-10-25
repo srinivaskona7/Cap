@@ -385,6 +385,24 @@ impl Render for CopilotWindow {
                             .flex_row()
                             .items_center()
                             .gap(px(8.))
+                            .child(
+                                div()
+                                    .id("copilot-back-home")
+                                    .h(px(32.))
+                                    .px(px(10.))
+                                    .rounded(px(8.))
+                                    .cursor_pointer()
+                                    .flex()
+                                    .items_center()
+                                    .bg(rgba(0xffffff10))
+                                    .text_size(px(11.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child("🏠 Home")
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        window.remove_window();
+                                        cx.defer(crate::app_windows::show_main_window);
+                                    })),
+                            )
                             .children(CopilotSuiteTab::ALL.into_iter().map(|tab| {
                                 let active = self.active_tab == tab;
                                 div()

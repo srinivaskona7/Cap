@@ -867,6 +867,7 @@ pub struct MainWindow {
     play_with_target: Option<std::path::PathBuf>,
     always_open_sricap_player: bool,
     play_with_notice: Option<String>,
+    window_is_expanded: bool,
 }
 
 /// `createLicenseQuery` (`utils/queries.ts:257-273`): pro from the auth
@@ -1136,6 +1137,7 @@ impl MainWindow {
             play_with_target: None,
             always_open_sricap_player: crate::store::always_open_with_sricap_player(),
             play_with_notice: None,
+            window_is_expanded: false,
         }
     }
 
@@ -2719,6 +2721,7 @@ impl MainWindow {
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_appearance(window, cx);
+        self.sync_window_expansion(window);
         let theme = self.theme;
         let meter_active = self.panel.is_none()
             && self.microphone.is_some()
@@ -2825,6 +2828,34 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    pub fn is_expanded_page(&self) -> bool {
+        self.panel.is_some() || self.speedtest_modal_open || self.play_with_target.is_some()
+    }
+
+    fn sync_window_expansion(&mut self, window: &mut Window) {
+        let should_expand = self.is_expanded_page();
+        if self.window_is_expanded != should_expand {
+            self.window_is_expanded = should_expand;
+            let target_size = if should_expand {
+                gpui::size(
+                    px(crate::MAIN_WINDOW_EXPANDED_WIDTH),
+                    px(crate::MAIN_WINDOW_EXPANDED_HEIGHT),
+                )
+            } else {
+                gpui::size(px(crate::MAIN_WINDOW_WIDTH), px(crate::MAIN_WINDOW_HEIGHT))
+            };
+            window.resize(target_size);
+        }
+    }
+
+    fn active_window_width(&self) -> f32 {
+        if self.is_expanded_page() {
+            crate::MAIN_WINDOW_EXPANDED_WIDTH
+        } else {
+            MAIN_WINDOW_WIDTH
+        }
+    }
+
     fn trigger_speedtest_probe(&mut self, buffer_optimized: bool, cx: &mut Context<Self>) {
         self.speedtest.is_testing = true;
         cx.notify();
@@ -2902,7 +2933,7 @@ impl MainWindow {
             .child(
                 div()
                     .w_full()
-                    .max_w(px(340.))
+                    .max_w(px(660.))
                     .rounded(px(12.))
                     .border_1()
                     .border_color(theme.body_border(6))
@@ -3186,7 +3217,7 @@ impl MainWindow {
             .child(
                 div()
                     .w_full()
-                    .max_w(px(340.))
+                    .max_w(px(660.))
                     .rounded(px(12.))
                     .border_1()
                     .border_color(theme.body_border(6))
@@ -4275,8 +4306,8 @@ impl MainWindow {
                     )
                     .child(
                         icon_button("open-video-player", "icons/play-square.svg", 16.).on_click(
-                            cx.listener(|this, _, _window, cx| {
-                                this.open_play_with_dialog(None, cx);
+                            cx.listener(|_, _, _window, cx| {
+                                cx.defer(|cx| app_windows::open_video_player(None, cx));
                             }),
                         ),
                     )
@@ -6286,7 +6317,7 @@ impl MainWindow {
     /// picker routinely holds, so the grid states the width and the cards take
     /// it with `flex_none`.
     fn target_card_width(&self) -> f32 {
-        (MAIN_WINDOW_WIDTH - 50.) / 2.
+        (self.active_window_width() - 50.) / 2.
     }
 
     /// `TargetMenuGrid`: two columns of cards.

@@ -17,7 +17,7 @@ fn main() {
     }
 
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
-        // Export dispatch constructs media futures on the UI thread before Tokio can poll them.
+        println!("cargo:rustc-link-arg-bin=sricap-rec=/STACK:16777216");
         println!("cargo:rustc-link-arg-bin=cap-gpui=/STACK:16777216");
     }
 

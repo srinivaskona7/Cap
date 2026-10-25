@@ -513,6 +513,24 @@ impl Render for ReaderWindow {
                             .items_center()
                             .gap(px(10.))
                             .child(
+                                div()
+                                    .id("reader-back-home")
+                                    .h(px(28.))
+                                    .px(px(10.))
+                                    .rounded(px(6.))
+                                    .cursor_pointer()
+                                    .flex()
+                                    .items_center()
+                                    .bg(rgba(0x3b82f633))
+                                    .text_size(px(11.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child("🏠 Home")
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        window.remove_window();
+                                        cx.defer(crate::app_windows::show_main_window);
+                                    })),
+                            )
+                            .child(
                                 svg()
                                     .path("icons/book-open.svg")
                                     .size(px(18.))

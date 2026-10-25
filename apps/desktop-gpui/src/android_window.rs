@@ -2084,6 +2084,19 @@ impl Render for AndroidWindow {
                             .child(
                                 ui::Button::plain(
                                     &theme,
+                                    "android-back-home",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Xs,
+                                )
+                                .label("🏠 Home")
+                                .on_click(cx.listener(|_, _, window, cx| {
+                                    window.remove_window();
+                                    cx.defer(crate::app_windows::show_main_window);
+                                })),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
                                     "android-open-dialer",
                                     if self.dialer_open {
                                         ui::ButtonVariant::Primary
