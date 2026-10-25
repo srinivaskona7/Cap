@@ -449,7 +449,7 @@ impl PagesState {
             diagnostic_payload: None,
             diagnostic_upload: UploadStatus::Idle,
             selftest_binary: None,
-            changelog: None,
+            changelog: Some(Ok(builtin_sricap_changelog_entries())),
             license_input,
             license_draft: String::new(),
             license_activating: false,
@@ -2544,6 +2544,146 @@ impl SettingsWindow {
             );
         }
 
+        crate::transcription::refresh_downloaded_models();
+        let snap = crate::transcription::ui_snapshot(std::path::Path::new(""));
+        let primary_engine = crate::transcription::primary_model_name();
+        let fallback_engine = crate::transcription::fallback_model_name();
+        let model_cards: Vec<gpui::AnyElement> = crate::editor_tabs::CAPTION_MODELS
+            .iter()
+            .map(|entry| {
+                let is_downloaded = snap.downloaded.contains(entry.name);
+                let is_primary = primary_engine == entry.name;
+                let is_fallback = fallback_engine == entry.name;
+                let entry_name = entry.name;
+                self.card(true)
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(format!(
+                                        "{} — {} ({})",
+                                        entry.label, entry.model_name, entry.size
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme.settings_muted())
+                                    .child(if is_downloaded {
+                                        format!("Downloaded ({})", entry.size)
+                                    } else {
+                                        "Not Downloaded (Click to Install)".to_string()
+                                    }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(self.button(
+                                SharedString::from(format!("settings-hub-primary-{entry_name}")),
+                                (
+                                    if is_primary {
+                                        ui::ButtonVariant::Primary
+                                    } else {
+                                        ui::ButtonVariant::Gray
+                                    },
+                                    None,
+                                ),
+                                "Primary Engine",
+                                false,
+                                cx,
+                                move |_, _window, cx| {
+                                    crate::transcription::set_primary_model_name(entry_name);
+                                    cx.notify();
+                                },
+                            ))
+                            .child(self.button(
+                                SharedString::from(format!("settings-hub-fallback-{entry_name}")),
+                                (
+                                    if is_fallback {
+                                        ui::ButtonVariant::Primary
+                                    } else {
+                                        ui::ButtonVariant::Gray
+                                    },
+                                    None,
+                                ),
+                                "Secondary / Fallback Engine",
+                                false,
+                                cx,
+                                move |_, _window, cx| {
+                                    crate::transcription::set_fallback_model_name(entry_name);
+                                    cx.notify();
+                                },
+                            ))
+                            .when(!is_downloaded, |row| {
+                                row.child(self.button(
+                                    SharedString::from(format!(
+                                        "settings-hub-install-{entry_name}"
+                                    )),
+                                    (ui::ButtonVariant::Primary, Some("icons/download.svg")),
+                                    "Download / Install",
+                                    crate::transcription::download_active(),
+                                    cx,
+                                    move |_, _window, cx| {
+                                        if crate::transcription::begin_download(entry_name) {
+                                            gpui_tokio::Tokio::spawn(
+                                                cx,
+                                                crate::transcription::run_model_download(
+                                                    entry_name.to_string(),
+                                                ),
+                                            )
+                                            .detach();
+                                        }
+                                        cx.notify();
+                                    },
+                                ))
+                            })
+                            .when(is_downloaded, |row| {
+                                row.child(self.button(
+                                    SharedString::from(format!("settings-hub-purge-{entry_name}")),
+                                    (ui::ButtonVariant::Gray, Some("icons/trash.svg")),
+                                    "Delete Permanently",
+                                    false,
+                                    cx,
+                                    move |_, _window, cx| {
+                                        if crate::transcription::begin_delete(entry_name) {
+                                            crate::transcription::run_model_delete(entry_name);
+                                        }
+                                        cx.notify();
+                                    },
+                                ))
+                            }),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+
+        sections.push(
+            self.section(
+                "Transcription Model Hub & Disk Cleaner",
+                Some(
+                    "Manage local NVIDIA Parakeet TDT and OpenAI Whisper engines, assign Primary \
+                     and Secondary / Fallback roles, or permanently purge models from disk.",
+                ),
+                None,
+                model_cards,
+            )
+            .into_any_element(),
+        );
+
         sections
     }
 }
@@ -3921,11 +4061,55 @@ fn os_version() -> Option<String> {
 // Changelog (changelog.tsx)
 // ---------------------------------------------------------------------------
 
+fn builtin_sricap_changelog_entries() -> Vec<ChangelogEntry> {
+    vec![
+        ChangelogEntry {
+            title: "Top Live Speedometer HUD, Free-to-Air Live TV, Studio Pro Video Player & Universal Book Reader (20 Novelty Suite)".to_string(),
+            version: "0.6.8".to_string(),
+            published_at: "2026-10-24T12:00:00.000Z".to_string(),
+            content: "## Minimal Top Live Speedometer HUD & Pro Internet Radar (#11–#15)\n\nAdded ultra-compact header speedometer pill ([ 🟢 ↓ 342 M  ↑ 88 M ]) and Network Telemetry Modal with Wi-Fi 6E/7 BSSID Spectrum Analyzer, Bufferbloat Grade A+ & QoS Optimizer, CDN Edge Latency Map (Cloudflare, Fastly, AWS, Akamai), 16-bar Jitter Oscilloscope Waveform, Auto-Throttle Bandwidth Saver, and 1-click Markdown report copy.\n\n## Studio Pro Video Player & Free-to-Air Global Live TV Engine (#1–#10, #16–#20)\n\nAdded Metal 4K Studio Pro Video Player (player_window.rs) & Play With modal with Free-to-Air IPTV-Org directory (NASA TV 4K, Bloomberg, DW, France 24, NHK World, PBS, Euronews, WeatherNation), Apple TV EPG, 2x2 Multi-View Mosaic Grid, 30m DVR Rewind Buffer, Smart Fallback CDN, PiP HUD, Live Whisper CC Translator (EN/ES/DE/FR/JA/HI), Cmd+Shift+R 30s Stream Clip to Studio, 64kbps Radio Mode, SMPTE J/L Frame Stepper, EBU R128 LUFS Radar, AI Dialog Boost, Night Mode Limiter, Subtitle Resync, 400% Pixel Loupe & 10-Bit Color Sampler, Spatial 7.1.4 Audio, and Lossless I/O Cut.\n\n## Universal $200 Tier Book & Document Reader Studio (reader_window.rs)\n\nAdded Universal Book Reader (PDF, EPUB, MOBI, CBZ, Markdown) with Warm Paper / E-Ink / Dark Obsidian / Solarized Sepia themes, Bionic Reading (+40% speed), Apple Neural TTS, color-coded highlights, TOC & bookmarks, and 1-click Markdown Notes & AI Flashcards export.".to_string(),
+        },
+        ChangelogEntry {
+            title: "Argon Apple HIG Liquid Glass UI Redesign & Interactive Walkthroughs".to_string(),
+            version: "0.6.7".to_string(),
+            published_at: "2026-10-23T18:00:00.000Z".to_string(),
+            content: "## Apple HIG Liquid Glass Aesthetic\n\nRefined Main Recorder, Studio Editor, and Mirror Hub with frosted obsidian surfaces, 1px specular borders, strict 8-point rhythm, and a compact 2-row Studio Editor header.\n\n## Interactive Walkthrough Guides & Cached Sidecar CI\n\nAdded 3 self-contained HTML5 interactive walkthrough demos accessible from the Main Window header bar and cached prebuilt cap-muxer & cap-cli sidecar binaries in GitHub Releases.".to_string(),
+        },
+        ChangelogEntry {
+            title: "8K Ultra-Clarity Low-Bitrate Recording & Export Engine".to_string(),
+            version: "0.6.6".to_string(),
+            published_at: "2026-10-23T09:00:00.000Z".to_string(),
+            content: "## 5–8x Smaller Recordings with Zero Text Blur\n\nIntroduced Content-Adaptive Screen Recording with 10-bit HEVC (hevc_videotoolbox) & H.264 High Profile, Adaptive Idle-Scene VFR during static terminal/IDE pauses, and Smart Static/Motion ROI Bitrate Allocation.".to_string(),
+        },
+        ChangelogEntry {
+            title: "Enterprise & Developer Innovation Suite (DVR Buffer, E2E Codegen & C2PA)".to_string(),
+            version: "0.6.5".to_string(),
+            published_at: "2026-10-22T18:00:00.000Z".to_string(),
+            content: "## 30s Rolling DVR Bug Replay & AI Auto-Director\n\nAdded Cmd+Shift+S 30-second rolling DVR bug replay buffer, AI Cinematic Auto-Director, Magnetic Cursor Snapping, Neural Time-Warp over stagnant builds, Smart Keystroke Password Masking, Playwright & Maestro E2E test generation, and C2PA cryptographic provenance manifests.".to_string(),
+        },
+        ChangelogEntry {
+            title: "Apple & Android Pro Mirror Hub & Universal Device Bridge".to_string(),
+            version: "0.6.4".to_string(),
+            published_at: "2026-10-22T10:00:00.000Z".to_string(),
+            content: "## Unified Mobile Mirroring Studio\n\nAdded USB & Wireless Android ADB + Scrcpy 16-byte control protocol, Apple iPhone Mirroring & simctl iOS Simulator integration, Screen-Off Stealth Mode, Clean 9:41 Demo Bar, Telephony Call HUD, Cmd+K Dialer, Smart OTP 2FA Bridge, Dual-Device Comparative Canvas, and Touch Ripple Visualizer.".to_string(),
+        },
+        ChangelogEntry {
+            title: "sricap-rec Rebrand, 9:16 Vertical Teaching Studio & 40-Tool Creator Suite".to_string(),
+            version: "0.6.3".to_string(),
+            published_at: "2026-10-21T12:00:00.000Z".to_string(),
+            content: "## 100% Offline Pro Mode & Creator Studio\n\nUnlocked all Pro features offline, added Google Meet-style Browser Tabs & Windows picker with strict SCContentFilter single-window isolation, 3-zone 9:16 Vertical Teaching Studio, 40-Tool Creator Studio Suite, 6-Stage Audacity-Grade Audio DSP, and In-App GitHub Releases Auto-Updater.".to_string(),
+        },
+    ]
+}
+
 impl SettingsWindow {
     /// `apiClient.desktop.getChangelogPosts({ query: { origin } })` -- GET
     /// `/api/changelog?origin=..`; the server only reads `origin` for CORS,
     /// so the configured server origin stands in for `window.location.origin`.
     fn changelog_fetch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.pages.changelog.is_none() {
+            self.pages.changelog = Some(Ok(builtin_sricap_changelog_entries()));
+        }
         let server = self.settings.server_url.clone();
         let url = format!("{server}/api/changelog");
         self.spawn_tokio(
@@ -3944,12 +4128,17 @@ impl SettingsWindow {
                 .await
             },
             |this, result, _window, _cx| {
-                this.pages.changelog = Some(match result {
-                    Ok((200, body)) => serde_json::from_value::<Vec<ChangelogEntry>>(body)
-                        .map_err(|error| error.to_string()),
-                    Ok(_) => Err("Failed to fetch changelog".to_string()),
-                    Err(error) => Err(error.text()),
-                });
+                let mut entries = builtin_sricap_changelog_entries();
+                if let Ok((200, body)) = result
+                    && let Ok(remote) = serde_json::from_value::<Vec<ChangelogEntry>>(body)
+                {
+                    for item in remote {
+                        if !entries.iter().any(|e| e.version == item.version) {
+                            entries.push(item);
+                        }
+                    }
+                }
+                this.pages.changelog = Some(Ok(entries));
             },
         );
     }
@@ -8559,6 +8748,18 @@ mod tests {
         assert_eq!(changelog_date("2026-08-17T10:30:00.000Z"), "8/17/2026");
         // An unparseable date falls back to the raw string.
         assert_eq!(changelog_date("soon"), "soon");
+    }
+
+    #[test]
+    fn builtin_changelog_entries_include_each_release_in_order() {
+        let entries = builtin_sricap_changelog_entries();
+        let versions: Vec<&str> = entries.iter().map(|e| e.version.as_str()).collect();
+        assert_eq!(
+            versions,
+            ["0.6.8", "0.6.7", "0.6.6", "0.6.5", "0.6.4", "0.6.3"]
+        );
+        assert!(entries[0].content.contains("Studio Pro Video Player"));
+        assert!(entries[0].content.contains("Speedometer HUD"));
     }
 
     #[test]

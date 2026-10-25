@@ -1748,6 +1748,7 @@ impl EditorWindow {
                     .overflow_y_scroll()
                     .p(px(16.))
                     .gap(px(20.))
+                    .child(self.render_argon_export_preset_chips(ui, cx))
                     .child(self.export_destination_field(ui, link_disabled, cx))
                     .child(self.export_format_field(ui, format_locked, cx))
                     .child(self.export_resolution_field(ui, &resolutions, cx))
@@ -2296,6 +2297,184 @@ impl EditorWindow {
             })
             .children(icon.map(|icon| svg().path(icon).size(px(16.)).text_color(text)))
             .child(label)
+    }
+
+    fn render_argon_export_preset_chips(
+        &self,
+        ui: &ExportUi,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let theme = self.theme;
+        let editor = theme.editor;
+        let is_vertical = self.project.aspect_ratio == Some(cap_project::AspectRatio::Vertical);
+        let is_slack = ui.format == ExportFormatKind::Mp4
+            && ui.resolution == ExportResolution::P1080
+            && ui.fps == 30
+            && ui.optimize_filesize;
+        let is_yt_4k = ui.format == ExportFormatKind::Mp4
+            && ui.resolution == ExportResolution::P4k
+            && !is_vertical;
+        let is_reel = is_vertical && ui.resolution == ExportResolution::P1080 && ui.fps == 60;
+
+        let live_size = ui
+            .estimate
+            .as_ref()
+            .map(|estimate| format_estimate_range(estimate.size_range_mb, false))
+            .unwrap_or_else(|| {
+                if ui.estimate_loading {
+                    "Calculating…".into()
+                } else {
+                    "Ready".into()
+                }
+            });
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(10.))
+            .rounded(px(10.))
+            .bg(Hsla::from(editor.card_2))
+            .border_1()
+            .border_color(Hsla::from(editor.line))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .font_family(crate::theme::TEXT_FONT)
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(Hsla::from(editor.text_1))
+                            .child("Quick-Preset Chips"),
+                    )
+                    .child(
+                        div()
+                            .font_family(crate::theme::MONO_FONT)
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(Hsla::from(editor.accent))
+                            .child(format!("Est. {live_size}")),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "export-chip-slack-discord",
+                                if is_slack {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Slack/Discord (< 25MB)")
+                            .full_width()
+                            .disabled(ui.phase.is_busy())
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    if let Some(ui) = this.export.as_mut() {
+                                        ui.format = ExportFormatKind::Mp4;
+                                        ui.resolution = ExportResolution::P1080;
+                                        ui.fps = 30;
+                                        ui.compression = ExportCompression::Web;
+                                        ui.custom_bpp = Some(0.055);
+                                        ui.optimize_filesize = true;
+                                        ui.cursor_only = false;
+                                        ui.persist();
+                                    }
+                                    this.refresh_export_preview(window, cx);
+                                    cx.notify();
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "export-chip-youtube-4k",
+                                if is_yt_4k {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("YouTube 4K Crisp")
+                            .full_width()
+                            .disabled(ui.phase.is_busy())
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    if this.project.aspect_ratio
+                                        == Some(cap_project::AspectRatio::Vertical)
+                                    {
+                                        this.apply_youtube_4k_devops_preset(window, cx);
+                                    }
+                                    if let Some(ui) = this.export.as_mut() {
+                                        ui.format = ExportFormatKind::Mp4;
+                                        ui.resolution = ExportResolution::P4k;
+                                        ui.fps = 60;
+                                        ui.compression = ExportCompression::Maximum;
+                                        ui.custom_bpp = Some(0.08);
+                                        ui.optimize_filesize = false;
+                                        ui.cursor_only = false;
+                                        ui.persist();
+                                    }
+                                    this.refresh_export_preview(window, cx);
+                                    cx.notify();
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "export-chip-social-reel",
+                                if is_reel {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Social Reel 9:16")
+                            .full_width()
+                            .disabled(ui.phase.is_busy())
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    if this.project.aspect_ratio
+                                        != Some(cap_project::AspectRatio::Vertical)
+                                    {
+                                        this.apply_tech_reel_preset(false, window, cx);
+                                    }
+                                    if let Some(ui) = this.export.as_mut() {
+                                        ui.format = ExportFormatKind::Mp4;
+                                        ui.resolution = ExportResolution::P1080;
+                                        ui.fps = 60;
+                                        ui.compression = ExportCompression::Maximum;
+                                        ui.custom_bpp = Some(0.09);
+                                        ui.optimize_filesize = false;
+                                        ui.cursor_only = false;
+                                        ui.persist();
+                                    }
+                                    this.refresh_export_preview(window, cx);
+                                    cx.notify();
+                                },
+                            )),
+                        ),
+                    ),
+            )
     }
 
     fn export_section(&self, name: &'static str, icon: &'static str) -> ui::Field {

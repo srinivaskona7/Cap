@@ -108,7 +108,7 @@ pub fn generate_c2pa_provenance_manifest_json(
     author: &str,
 ) -> String {
     serde_json::json!({
-        "claim_generator": "sricap-rec/0.6.6 (Apple Silicon Metal + Secure Enclave C2PA)",
+        "claim_generator": "sricap-rec/0.6.8 (Apple Silicon Metal + Secure Enclave C2PA)",
         "title": title,
         "author": author,
         "assertions": [

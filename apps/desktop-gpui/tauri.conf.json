@@ -46,6 +46,12 @@
 				"name": "Cap Project",
 				"mimeType": "application/x-cap-project",
 				"role": "Editor"
+			},
+			{
+				"ext": ["mp4", "mov", "mkv", "webm", "m4v"],
+				"name": "Video File",
+				"mimeType": "video/mp4",
+				"role": "Viewer"
 			}
 		],
 		"macOS": {

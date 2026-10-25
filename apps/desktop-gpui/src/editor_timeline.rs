@@ -185,8 +185,10 @@ pub mod track_color {
     pub const TEXT: u32 = 0x14b8a6;
     pub const MASK: u32 = 0xef4444;
     pub const SCENE: u32 = 0x8b5cf6;
-    pub const AUDIO: u32 = 0x22c55e;
+    pub const AUDIO: u32 = 0x10b981;
     pub const THREE_D: u32 = 0x6366f1;
+    pub const VOICE_WAVEFORM: u32 = 0x10b981;
+    pub const SYSTEM_WAVEFORM: u32 = 0xf59e0b;
 }
 
 /// A muted clip keeps the clip lane's shape but drops its hue, so it reads as
@@ -852,7 +854,7 @@ impl TrackKind {
         match self {
             // The clip row's gutter label is "Video", not the definition's
             // "Clip" (`TL/index.tsx:1334`).
-            Self::Clip => "Video",
+            Self::Clip => "Screen Video",
             Self::Style => "Style",
             Self::Image => "Image",
             Self::Caption => "Captions",
@@ -862,7 +864,17 @@ impl TrackKind {
             Self::Audio => "Audio",
             Self::Zoom => "Zoom",
             Self::ThreeD => "3D",
-            Self::Scene => "Scene",
+            Self::Scene => "PIP Camera",
+        }
+    }
+
+    pub fn lane_label(self, lane: u32) -> &'static str {
+        match (self, lane) {
+            (Self::Clip, _) => "Screen Video",
+            (Self::Scene, _) => "PIP Camera",
+            (Self::Audio, 0) => "Bg Audio",
+            (Self::Audio, _) => "Voice Audio",
+            _ => self.label(),
         }
     }
 
@@ -1763,7 +1775,8 @@ impl SegmentUi<'_> {
 /// The gutter cell: a tinted 22px tile carrying the track's glyph, then the
 /// track's name. The saturated pill the source draws
 /// (`TL/TrackManager.tsx:264-281`) is gone.
-pub fn track_chip(theme: &Theme, kind: TrackKind) -> impl IntoElement {
+pub fn track_row_chip(theme: &Theme, row: TrackRow) -> impl IntoElement {
+    let kind = row.kind;
     let color = kind.color();
     div()
         .w_full()
@@ -1798,7 +1811,7 @@ pub fn track_chip(theme: &Theme, kind: TrackKind) -> impl IntoElement {
                 .text_size(px(11.))
                 .line_height(px(14.))
                 .font_weight(FontWeight::MEDIUM)
-                .child(kind.label()),
+                .child(kind.lane_label(row.lane)),
         )
 }
 
@@ -2095,7 +2108,7 @@ pub fn render_row(
                 .w(px(TRACK_GUTTER))
                 .flex_none()
                 .relative()
-                .child(track_chip(theme, row.kind)),
+                .child(track_row_chip(theme, row)),
         )
         .child(
             div()
@@ -3209,7 +3222,16 @@ fn render_waveform(
     let transform = view.transform;
     let full_width = width.max(1.) as f64;
     let wave_height = height.min(WAVEFORM_MAX_HEIGHT);
-    let wave_color = waveform_color(color);
+    let mic_wave_color = if volume <= 0.0 {
+        waveform_color(color)
+    } else {
+        waveform_color(Hsla::from(gpui::rgb(track_color::VOICE_WAVEFORM)))
+    };
+    let sys_wave_color = if volume <= 0.0 {
+        waveform_color(color)
+    } else {
+        waveform_color(Hsla::from(gpui::rgb(track_color::SYSTEM_WAVEFORM)))
+    };
     let paths = model.waveform_paths.clone();
 
     gpui::canvas(
@@ -3238,9 +3260,9 @@ fn render_waveform(
                 size: gpui::size(px(width), px(height)),
             };
 
-            for (track, peaks, scale) in [
-                (WaveformTrack::Mic, &mic, mic_scale),
-                (WaveformTrack::System, &system, system_scale),
+            for (track, peaks, scale, wave_color) in [
+                (WaveformTrack::Mic, &mic, mic_scale, mic_wave_color),
+                (WaveformTrack::System, &system, system_scale, sys_wave_color),
             ] {
                 let geometry = WaveformGeometry {
                     peaks: peaks.clone(),

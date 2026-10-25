@@ -2925,6 +2925,114 @@ mod stub {
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub use stub::*;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalVideoPlayerOption {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub app_name: &'static str,
+    pub installed: bool,
+}
+
+pub fn detect_installed_video_players() -> Vec<ExternalVideoPlayerOption> {
+    let check_app = |bundle: &str| {
+        #[cfg(target_os = "macos")]
+        {
+            std::path::Path::new(&format!("/Applications/{bundle}")).exists()
+                || std::path::Path::new(&format!("/System/Applications/{bundle}")).exists()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = bundle;
+            true
+        }
+    };
+    vec![
+        ExternalVideoPlayerOption {
+            id: "quicktime",
+            label: "🎬 QuickTime Player",
+            app_name: "QuickTime Player",
+            installed: check_app("QuickTime Player.app"),
+        },
+        ExternalVideoPlayerOption {
+            id: "vlc",
+            label: "🍊 VLC Media Player",
+            app_name: "VLC",
+            installed: check_app("VLC.app"),
+        },
+        ExternalVideoPlayerOption {
+            id: "iina",
+            label: "✨ IINA / Movist Pro",
+            app_name: "IINA",
+            installed: check_app("IINA.app") || check_app("Movist Pro.app"),
+        },
+    ]
+}
+
+pub fn open_with_external_player(app_name: &str, path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-a")
+            .arg(app_name)
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("Failed to launch {app_name}: {e}"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app_name, path);
+        Ok(())
+    }
+}
+
+pub fn set_as_default_video_player() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use core_foundation::base::TCFType;
+        use core_foundation::string::{CFString, CFStringRef};
+
+        #[link(name = "CoreServices", kind = "framework")]
+        unsafe extern "C" {
+            fn LSSetDefaultRoleHandlerForContentType(
+                in_content_type: CFStringRef,
+                in_roles: u32,
+                in_handler_bundle_id: CFStringRef,
+            ) -> i32;
+        }
+
+        const K_LS_ROLES_VIEWER: u32 = 0x0000_0002;
+        const K_LS_ROLES_EDITOR: u32 = 0x0000_0004;
+        let bundle_id = CFString::from_static_string("com.sri.sricap-rec");
+        let content_types = [
+            "public.movie",
+            "public.mpeg-4",
+            "com.apple.quicktime-movie",
+            "org.matroska.mkv",
+            "org.webmproject.webm",
+            "com.apple.m4v-video",
+        ];
+        for uti in content_types {
+            let cf_uti = CFString::new(uti);
+            let status = unsafe {
+                LSSetDefaultRoleHandlerForContentType(
+                    cf_uti.as_concrete_TypeRef(),
+                    K_LS_ROLES_VIEWER | K_LS_ROLES_EDITOR,
+                    bundle_id.as_concrete_TypeRef(),
+                )
+            };
+            if status != 0 {
+                tracing::debug!(uti, status, "LaunchServices role handler returned non-zero");
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

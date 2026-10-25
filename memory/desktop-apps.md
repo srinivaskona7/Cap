@@ -6,10 +6,10 @@ Cap maintains two desktop application directories in the monorepo that share the
 
 ## 1. `apps/desktop-gpui` — Primary Shipping Desktop App (`sricap-rec`)
 
-- **Status**: **Active production desktop client** (`sricap-rec`, v0.6.5+, bundle ID `com.sri.sricap-rec`).
+- **Status**: **Active production desktop client** (`sricap-rec`, v0.6.7+, bundle ID `com.sri.sricap-rec`).
 - **Standalone Cargo Workspace**:
   - Intentionally excluded from the root `Cargo.toml` workspace (`apps/desktop-gpui/Cargo.toml` defines its own `[workspace]` with members `[".", "kernels"]` and `[[bin]] name = "sricap-rec"`).
-  - **Important Offline Lockfile Invariant**: Keep `apps/desktop-gpui/Cargo.lock`'s `cap-desktop-gpui` `version` field synchronized with `apps/desktop-gpui/Cargo.toml` (`0.6.5`) so `cargo build` never attempts network fetches against `wingleeio/zed`.
+  - **Important Offline Lockfile Invariant**: Keep `apps/desktop-gpui/Cargo.lock`'s `cap-desktop-gpui` `version` field synchronized with `apps/desktop-gpui/Cargo.toml` (`0.6.7`) so `cargo build` never attempts network fetches against `wingleeio/zed`.
   - **In-App Auto-Updater (`src/installer.rs` & `src/updates.rs`)**: Queries `https://api.github.com/repos/srinivaskona7/Cap/releases/latest` (`parse_github_release`), shows release notes in the update prompt, downloads `sricap-rec-macos-arm64.zip`, unpacks via `/usr/bin/ditto -x -k`, and atomically hot-replaces `/Applications/sricap-rec.app`.
   - **Why**: GPUI (`wingleeio/zed` fork) pulls a massive dependency tree including `wgpu` v29, whereas `cap-rendering` uses `wgpu` v25 with `[patch.crates-io]` `vendor/wgpu-hal`. Isolating the workspace keeps `Cargo.lock`, `cargo hakari`, and Tauri patches cleanly separated.
 - **Direct Studio Launch, Opt-In Auto-Zoom & Camera/MP4 Workflow**:

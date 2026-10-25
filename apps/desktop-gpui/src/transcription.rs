@@ -71,7 +71,40 @@ const PARAKEET_UNSUPPORTED_MESSAGE: &str = "Parakeet transcription is not availa
 /// mirror the `localStorage` keys `CaptionsTab.tsx` persists under.
 pub const GPUI_STORE_SECTION: &str = "gpui";
 pub const SELECTED_MODEL_KEY: &str = "selectedTranscriptionModel";
+pub const FALLBACK_MODEL_KEY: &str = "fallbackTranscriptionModel";
 pub const SELECTED_LANGUAGE_KEY: &str = "selectedTranscriptionLanguage";
+
+pub fn primary_model_name() -> String {
+    store::store_section(GPUI_STORE_SECTION)
+        .get(SELECTED_MODEL_KEY)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("best")
+        .to_string()
+}
+
+pub fn set_primary_model_name(model: &str) {
+    let _ = store::set_store_setting(
+        GPUI_STORE_SECTION,
+        SELECTED_MODEL_KEY,
+        serde_json::Value::String(model.to_string()),
+    );
+}
+
+pub fn fallback_model_name() -> String {
+    store::store_section(GPUI_STORE_SECTION)
+        .get(FALLBACK_MODEL_KEY)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("small")
+        .to_string()
+}
+
+pub fn set_fallback_model_name(model: &str) {
+    let _ = store::set_store_setting(
+        GPUI_STORE_SECTION,
+        FALLBACK_MODEL_KEY,
+        serde_json::Value::String(model.to_string()),
+    );
+}
 
 /// `supportsParakeetTranscription` (`captions.ts:54-56`).
 pub fn supports_parakeet() -> bool {

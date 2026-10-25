@@ -945,14 +945,19 @@ impl SidebarState {
         self.grade_adjust[usize::from(target == GradeTarget::Camera)].set_open(open);
     }
 
-    /// A panel section's reveal state, created closed on first sight. Panel
-    /// state is per-panel and transient -- `createSignal(false)` inside the
-    /// component -- so it lives in a map rather than in named fields.
+    /// A panel section's reveal state, created closed on first sight (except
+    /// the three Argon Inspector accordion cards which start expanded).
     pub(crate) fn section(&self, key: PanelSection) -> std::rc::Rc<CollapsibleState> {
+        let default_open = matches!(
+            key,
+            PanelSection::ArgonCanvasBackground
+                | PanelSection::ArgonCameraShape
+                | PanelSection::ArgonStudioVoiceShield
+        );
         self.panel_sections
             .borrow_mut()
             .entry(key)
-            .or_insert_with(|| std::rc::Rc::new(CollapsibleState::new(false)))
+            .or_insert_with(|| std::rc::Rc::new(CollapsibleState::new(default_open)))
             .clone()
     }
 }
@@ -977,6 +982,9 @@ pub enum PanelSection {
     /// "Timing & advanced".
     Camera3DAdvanced,
     ZoomHelper,
+    ArgonCanvasBackground,
+    ArgonCameraShape,
+    ArgonStudioVoiceShield,
 }
 
 // ---------------------------------------------------------------------------
@@ -2596,6 +2604,7 @@ impl EditorWindow {
             .flex()
             .flex_col()
             .gap(px(14.))
+            .child(self.render_argon_canvas_background_accordion(cx))
             .child(self.render_source_field(cx))
             .child(dashed_divider(Hsla::from(theme.editor.line)))
             .child(
@@ -2682,6 +2691,123 @@ impl EditorWindow {
                     .is_none()
                     .then(|| self.render_color_correction(GradeTarget::Screen, cx)),
             )
+    }
+
+    fn render_argon_canvas_background_accordion(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let state = self.sidebar.section(PanelSection::ArgonCanvasBackground);
+        let open = state.is_open();
+        let is_mesh = self.sidebar.source_tab == SourceTab::AnimatedGradient;
+        let has_3d_tilt = self
+            .project
+            .timeline
+            .as_ref()
+            .is_some_and(|tl| !tl.camera3d_segments.is_empty());
+
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .pt(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-bg-mesh-gradient",
+                                if is_mesh {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Mesh Gradient")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.select_source_tab(SourceTab::AnimatedGradient, window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-bg-iso-3d-tilt",
+                                if has_3d_tilt {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("3D Isometric Tilt")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.add_hero_3d_tilt_at_playhead(window, cx);
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-bg-flat-reset",
+                                if !has_3d_tilt {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Flat 2D")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.edit_project("argon-flat-2d", window, cx, |project| {
+                                        if let Some(tl) = project.timeline.as_mut() {
+                                            tl.camera3d_segments.clear();
+                                            return true;
+                                        }
+                                        false
+                                    });
+                                },
+                            )),
+                        ),
+                    ),
+            )
+            .into_any_element();
+
+        div()
+            .flex()
+            .flex_col()
+            .p(px(12.))
+            .rounded(px(10.))
+            .bg(Hsla::from(theme.editor.card_2))
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .child(disclosure_row(
+                &theme,
+                "argon-accordion-canvas-bg",
+                "Canvas Background (Mesh / 3D Isometric Tilt)",
+                open,
+                cx.listener(|this, _, window, cx| {
+                    this.sidebar
+                        .section(PanelSection::ArgonCanvasBackground)
+                        .toggle();
+                    this.animate_collapsibles(window, cx);
+                }),
+            ))
+            .child(collapsible(&state, body))
+            .into_any_element()
     }
 
     fn render_social_layout_presets(&self, cx: &mut Context<Self>) -> AnyElement {

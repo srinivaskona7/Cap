@@ -3981,6 +3981,22 @@ pub fn toggle_camera_bubble(cx: &mut App) {
 
 pub fn open_android_window(cx: &mut App) {
     let _ = crate::android_window::AndroidWindow::open(cx);
+    hide_main_and_park_camera_preview(cx);
+}
+
+pub fn open_video_player(path: Option<PathBuf>, cx: &mut App) {
+    let _ = crate::player_window::PlayerWindow::open(path, cx);
+    hide_main_and_park_camera_preview(cx);
+}
+
+pub fn open_book_reader(path: Option<PathBuf>, cx: &mut App) {
+    let _ = crate::reader_window::ReaderWindow::open(path, cx);
+    hide_main_and_park_camera_preview(cx);
+}
+
+pub fn open_copilot_window(cx: &mut App) {
+    let _ = crate::copilot_window::CopilotWindow::open(cx);
+    hide_main_and_park_camera_preview(cx);
 }
 
 pub fn toggle_editor_spotlight_or_zoom(cx: &mut App) {

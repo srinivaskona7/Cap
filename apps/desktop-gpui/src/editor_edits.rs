@@ -947,6 +947,63 @@ pub fn delete_segments(
     }
 }
 
+pub fn ripple_delete_segments(
+    timeline: &mut TimelineConfiguration,
+    kind: TrackKind,
+    indices: &[usize],
+) -> bool {
+    if kind == TrackKind::Clip {
+        return delete_clip_segments(timeline, indices);
+    }
+
+    fn apply_ripple<T: TrackSegmentOps>(segments: &mut Vec<T>, indices: &[usize]) -> bool {
+        let mut deleted = false;
+        for index in descending_indices(indices, segments.len()) {
+            let Some(segment) = segments.get(index) else {
+                continue;
+            };
+            let lane = segment.lane();
+            let removed_end = segment.end();
+            let shift = (removed_end - segment.start()).max(0.0);
+            segments.remove(index);
+            if shift > 0.0 {
+                for candidate in segments.iter_mut() {
+                    if candidate.lane() == lane && candidate.start() >= removed_end - 1e-6 {
+                        let next_start = (candidate.start() - shift).max(0.0);
+                        let next_end = (candidate.end() - shift).max(next_start);
+                        candidate.set_start(next_start);
+                        candidate.set_end(next_end);
+                    }
+                }
+            }
+            deleted = true;
+        }
+        deleted
+    }
+
+    match kind {
+        TrackKind::Image => apply_ripple(&mut timeline.image_segments, indices),
+        TrackKind::Style => {
+            let deleted = apply_ripple(&mut timeline.style_segments, indices);
+            normalize_track(&mut timeline.style_segments, |segment, lane| {
+                segment.track = lane
+            });
+            deleted
+        }
+        TrackKind::Mask => apply_ripple(&mut timeline.mask_segments, indices),
+        TrackKind::Text => apply_ripple(&mut timeline.text_segments, indices),
+        TrackKind::Audio => {
+            let deleted = apply_ripple(&mut timeline.audio_segments, indices);
+            normalize_track(&mut timeline.audio_segments, |segment, lane| {
+                segment.track = lane
+            });
+            deleted
+        }
+        TrackKind::Clip => delete_clip_segments(timeline, indices),
+        _ => with_track!(timeline, kind, |segments| apply_ripple(segments, indices)),
+    }
+}
+
 /// `deleteTrackLane` (`TL/index.tsx:146-157`): drop every segment on the lane
 /// and renumber the lanes above it down by one.
 pub fn delete_track_lane(timeline: &mut TimelineConfiguration, kind: TrackKind, lane: u32) -> bool {
@@ -4931,5 +4988,25 @@ mod style_image_replacement_tests {
             serde_json::to_value(history.redo().unwrap()).unwrap(),
             expected
         );
+    }
+
+    #[test]
+    fn ripple_delete_closes_gap_on_same_lane() {
+        let mut project: ProjectConfiguration = serde_json::from_value(serde_json::json!({
+            "timeline": {
+                "zoomSegments": [],
+                "segments": [],
+                "audioSegments": [
+                    {"start": 1.0, "end": 3.0, "track": 0, "path": "a.wav"},
+                    {"start": 4.0, "end": 7.0, "track": 0, "path": "b.wav"}
+                ]
+            }
+        }))
+        .unwrap();
+        let timeline = project.timeline.as_mut().unwrap();
+        assert!(ripple_delete_segments(timeline, TrackKind::Audio, &[0]));
+        assert_eq!(timeline.audio_segments.len(), 1);
+        assert!((timeline.audio_segments[0].start - 2.0).abs() < 1e-6);
+        assert!((timeline.audio_segments[0].end - 5.0).abs() < 1e-6);
     }
 }

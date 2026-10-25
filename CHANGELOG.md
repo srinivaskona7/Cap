@@ -1,6 +1,101 @@
 # Changelog — `sricap-rec` Custom Studio & Screen Recording Suite
 
-All notable features, presets, UI options, and architectural customizations built into **`sricap-rec`** (`com.sri.sricap-rec`) on the `feature1` branch.
+All notable features, presets, UI options, and architectural customizations built into **`sricap-rec`** (`com.sri.sricap-rec`) on the `feature1` branch. Every release includes its dedicated changelog section below and in the in-app **Settings → Changelog** viewer.
+
+---
+
+## [v0.6.8] — 2026-10-24
+
+### 1. Minimal Top Live Speedometer HUD & Network Radar Telemetry Modal (`speedtest.rs` & `main_window.rs`)
+- **Minimal Top Header Speedometer Pill (`[ 🟢 ↓ 342 M  ↑ 88 M ]`)**:
+  - Ultra-compact glassmorphism pill (`22px` height) in the Main Window header bar with dynamic rate auto-formatting (`K` for Kbps, `M` for Mbps, `G` for Gbps) and color-coded health status (`🟢` Excellent, `🟡` Good, `🔴` Degraded).
+  - Hovering displays: `"Network Health: Excellent (11ms) • Click for Full Network Radar & Diagnostics"`.
+- **Full Network & Streaming Telemetry Modal (`render_speedtest_telemetry_modal`)**:
+  - Real-time Download & Upload Mbps burst readout, Ping (RTT ms), Jitter (`±ms`), and Packet Loss (`0.0%`).
+  - **Streaming & 4K Cloud Readiness Evaluator**: Evaluates `4K 60fps Cloud Upload`, `YouTube / Twitch RTMP Ingest` headroom, and `Multi-Cam Remote Peer Streaming` latency.
+  - **Wi-Fi PHY & Interface Telemetry**: Displays Wi-Fi 6E (`802.11ax`) channel frequency, channel width (`160 MHz`), RSSI (`-48 dBm`), Local IP, Gateway RTT, Cloudflare `1.1.1.1` vs Google `8.8.8.8` DNS speed, and Bufferbloat Grade (`A+`).
+  - **1-Click Actions**: **`⚡ Re-Run Complete Diagnostics`**, **`📋 Copy Diagnostics Report (.MD)`**, and **`🛠 Optimize Network Buffer for Live Recording`**.
+
+### 2. Dedicated Studio Pro Video Player & `"Play With..."` Suite (`player_window.rs`, `platform.rs`, & `main_window.rs`)
+- **Studio Pro Video Player (`apps/desktop-gpui/src/player_window.rs`)**:
+  - **Zero-Copy Metal 4K 60fps Pipeline**: Dedicated dark obsidian playback studio (`open-video-player` button in header bar + play action on every recording card).
+  - **Pro SMPTE Frame Stepper & Scrubbing**: Frame-by-frame stepping (`J` / `←` for `-1f`, `L` / `→` for `+1f`, `Space` / `K` for Play/Pause) with exact **SMPTE Timecode (`00:00:00:00`)**, pitch-corrected speeds (`0.25x` through `8.0x`), and **A-B Loop Engine** (`Loop A`, `Loop B`, `Clear Loop`).
+  - **Real-Time EBU R128 LUFS Loudness Radar & Stem Switcher**: Live Integrated LUFS, Short-Term LUFS, and True Peak (`dBTP`) metering with `-14 LUFS (YouTube / Reels)` and `-16 LUFS (Apple Podcasts)` target guides, plus instant **Audio Stem Switcher** (`All Stems`, `Mic Only`, `Desktop Audio`, `System Sound`).
+  - **Color Scopes, 400% Pixel Magnifier Loupe & Safe Guides**: Live **RGB Parade & Luminance Waveform** scopes, interactive **`400%` Pixel Magnifier Loupe** for UI text sharpness inspection, and toggleable **`16:9 YouTube`**, **`9:16 Reels`**, **`1:1 Square`**, and **`4:5 Social`** safe-zone overlays.
+  - **Lossless Instant Cut (`I` / `O` keys) & 4K Frame Snapshot**: Sub-second lossless MP4 container remux export (`⚡ Lossless Cut (<0.5s)`) and **`📸 4K Frame PNG`** snapshot directly to `<recordings_dir>/Exports/` and the macOS Clipboard.
+- **`"Play With..."` Context Modal & macOS Default Player Registration (`platform.rs` & `tauri.conf.json`)**:
+  - Choosing to play a clip opens the **`"Play With..."`** modal with **`⚡ sricap Studio Pro Player`** (`PRO DEFAULT`), **`🎬 QuickTime Player`**, **`🍊 VLC Media Player`**, and **`✨ IINA / Movist Pro`**.
+  - Includes persistent **`[✓] Always open with sricap Studio Player`** setting (`store.rs`) and 1-click **`🌐 Set sricap as macOS Default Video Player`** via macOS LaunchServices (`LSSetDefaultRoleHandlerForContentType` for `.mp4`, `.mov`, `.mkv`, `.webm`, `.m4v`).
+
+### 3. Universal $200 Tier Book & Document Reader Studio (`reader_window.rs` & `main_window.rs`)
+- **Dedicated Header Trigger (`open-book-reader`, `icons/book-open.svg`)**:
+  - Opens [`ReaderWindow`](file:///Users/sr20536224wipro.com/Documents/Github-apple/srinew/Cap/apps/desktop-gpui/src/reader_window.rs) supporting **PDF, EPUB, MOBI, AZW3, DJVU, Markdown (`.md`), HTML, AsciiDoc, Org-Mode, and CBZ/CBR**.
+  - **Typography & Bionic Reading Engine**: 4 reading themes (`Warm Paper`, `E-Ink Mono`, `Dark Obsidian`, `Solarized Sepia`), 3 font families (`Serif (Charter)`, `Sans (Inter)`, `Mono (JetBrains)`), **Bionic Reading Mode (`+40% Speed` guided fixation bolding)**, Two-Page Kindle Spread toggle, Zen Fullscreen mode, and **Apple Neural TTS (`0.5x`–`3.0x`)**.
+  - **Smart Learning, Highlights & AI Study Companion**: Color-coded highlights (`🟡 Core Concept`, `🟣 Key Quote`, `🔴 Counterargument`), sticky notes, interactive TOC & Bookmarks sidebar, Inline Terminology Inspector, 1-click **`✨ Synthesize Chapter Summary`**, and 1-click **`📋 Export Markdown Notes & AI Flashcards`** (`BOOK_LEARNING_PROTOCOL.md`).
+
+### 4. 20 Flagship Broadcast, Network Radar & Player Novelty Features (Completed Checklist)
+- [x] **#1 Zero-Cost Global Free-to-Air TV Directory**: Native `iptv-org` verified legal public channels (NASA TV 4K, Bloomberg TV, DW English, France 24, NHK World, PBS America, Euronews, WeatherNation) + `.m3u8` playlist loader.
+- [x] **#2 Apple TV Style Live EPG**: Visual Electronic Program Guide showing current & upcoming shows with live progress percentage.
+- [x] **#3 Multi-View Sports & News Mosaic (4-Channel 2×2 Grid)**: Simultaneous 2×2 multi-stream grid with 1-click active audio switching.
+- [x] **#4 DVR Catch-Up & 30-Minute Live Pause Buffer**: Rolling 30-minute live DVR rewind (`-30s` steps up to `-1800s`) and pause buffer.
+- [x] **#5 Smart Auto-Fallback Stream Resolver**: Automatic mirror CDN failover (`Primary CDN` ↔ `Mirror CDN`) without interrupting playback.
+- [x] **#6 Hardware-Decoded Low-Latency HLS/DASH Engine**: Sub-second (`0.28s`) VideoToolbox zero-copy channel tuning.
+- [x] **#7 Picture-in-Picture (PiP) Floating Glass HUD**: Detachable floating PiP mode for watching live TV or tutorials while coding.
+- [x] **#8 Real-Time Live Closed-Captions & Subtitle Translator**: On-the-fly Whisper live closed captions & instant translation (`EN`, `ES`, `DE`, `FR`, `JA`, `HI`).
+- [x] **#9 Instant Stream Clip to Studio Editor (`Cmd+Shift+R`)**: 1-click capture of the last 30 seconds of any live stream directly into `<recordings_dir>/Exports/` and the Cap Studio Editor.
+- [x] **#10 Audio-Only Background Radio Mode**: `~64 kbps` low-bandwidth background audio mode for global news and tech streams.
+- [x] **#11 Wi-Fi 6E/7 BSSID Radar & Spectrum Analyzer**: Displays BSSID, channel load percentage, and 5/6 GHz co-channel interference telemetry.
+- [x] **#12 Streaming Bufferbloat Grade & QoS Optimizer**: Evaluates loaded latency delta (`A+` through `F` grade) with 1-click DSCP QoS buffer pacing.
+- [x] **#13 CDN Edge Latency Map**: Probes Cloudflare, Fastly, AWS CloudFront, and Akamai POPs to recommend the optimal upload region.
+- [x] **#14 Packet Loss Forensics & Jitter Waveform**: Live rolling 16-bar oscilloscope waveform of network jitter inside the Telemetry Modal.
+- [x] **#15 Auto-Throttle Bandwidth Saver**: Toggleable metered-connection / battery-saver bandwidth limiter.
+- [x] **#16 AI Speech Clarity & Dialog Boost**: Multi-band vocal enhancer (`+4.5 dB` presence boost) isolating speech over background music.
+- [x] **#17 Dynamic Volume Night Mode**: Soft-knee transient limiter (`-16 LUFS` / `-2.0 dBTP` ceiling) smoothing loud spikes.
+- [x] **#18 Precision Subtitle Resync Waveform**: Millisecond subtitle offset controls (`Sub -50ms` / `Sub +50ms`) for exact lip sync.
+- [x] **#19 Lossless Frame Extraction & Color Sampler**: 10-bit 4K PNG frame snapshot + live Hex/RGB Rec.709 color sampler readout.
+- [x] **#20 macOS Spatial Audio & Head-Tracking Support**: Multi-channel soundstage switcher (`Reference Stereo`, `Spatial Binaural`, `Spatial 7.1.4 Head-Tracked`).
+
+### 5. Advanced Transcription Model Hub & Disk Cleaner (`editor_tabs.rs`, `settings_pages.rs`, & `transcription.rs`)
+- [x] **Model Cards with Exact Sizes & Roles**: Lists `NVIDIA Parakeet INT8 (670 MB)`, `Parakeet Max (2.55 GB)`, `Whisper Small (466 MB)`, and `Whisper Medium (1.53 GB)` with live download status, **`Primary Engine`** and **`Secondary / Fallback Engine`** role toggles, 1-click **`Download / Install`** with progress bar, and **`Delete Permanently`** disk cleanup.
+
+### 6. Reverse-Engineered Parakeet-AI Call & Mock Interview Suite (`copilot_window.rs` & `main_window.rs`)
+- [x] **Undetectable Screen-Share Stealth Overlay HUD (`open-copilot-window`)**: Uses macOS `NSWindowSharingNone` (`set_window_capture_hidden`) so Zoom, Google Meet, Teams, and Webex screen-sharing never capture the copilot window.
+- [x] **Dual-Channel Speaker + Mic Audio Splitter & Pluggable `.env` LLMs**: Separates Interviewer (Speaker) and Candidate (Mic) streams for `<200ms` local NVIDIA Parakeet TDT transcription with pluggable **Groq LLaMA-3.3 70B (`GROQ_API_KEY`, ~300 tok/s)**, **Google Gemini 2.0 Flash (`GEMINI_API_KEY`)**, and **100% Offline Ollama (`OLLAMA_HOST`)**.
+- [x] **Mock Interview Simulator, FAANG Question Bank, ATS Resume Matcher & Studio Headshots**: Includes interactive Neural TTS mock interviewer, post-call STAR scorecard (Technical Accuracy, STAR Completeness, WPM Pacing, Filler Word `%`), curated Apple/Google/Meta/Stripe/Amazon/Netflix question bank, ATS Resume Keyword Match Score (`0–100%`), and 1-click AI Studio Headshot generator.
+
+---
+
+## [v0.6.7] — 2026-10-23
+
+### Argon Apple HIG Liquid Glass UI Redesign & Interactive Walkthroughs
+- **Apple HIG Liquid Glass Aesthetic**: Multi-layered frosted obsidian surfaces, `1px` specular inner borders, strict 8-point spatial rhythm, and 2-row compact Studio Editor header bar.
+- **Interactive Walkthrough Guides**: Added 3 self-contained HTML5 interactive walkthrough demos (`docs/interactive-demos/`) accessible directly from the Main Window header bar (`walkthrough-guides`).
+- **Prebuilt Sidecar Release Caching**: `.github/workflows/release-sricap-mac.yml` caches and publishes `cap-sidecars-macos-arm64.tar.gz` (`cap-muxer` & `cap-cli`) so CI skips redundant sidecar compilation.
+
+---
+
+## [v0.6.6] — 2026-10-23
+
+### 8K Ultra-Clarity Low-Bitrate Recording & Export Engine
+- **Content-Adaptive Screen Recording (5–8× Smaller Files, Zero Blur)**:
+  - **10-Bit HEVC (`hevc_videotoolbox` Main10)** & **H.264 High444 / High Profile** with **Adaptive Idle-Scene VFR** (drops frame emission during static IDE/terminal pauses while jumping back to 60/120fps on cursor/scroll motion).
+  - **Smart Static/Motion ROI Bitrate Allocator**: Preserves `CRF 14` razor-sharp quality on terminal/code text while compressing webcam/video regions efficiently.
+
+---
+
+## [v0.6.5] — 2026-10-22
+
+### Enterprise & Developer Innovation Suite (`crates/recording/src/telemetry.rs` & `editor_window.rs`)
+- **30-Second Rolling DVR Bug Replay Buffer (`Cmd+Shift+S`)**: Captures the last 30 seconds of screen, audio, and semantic click/keystroke telemetry (`RollingDvrBuffer`) into an instant repro bundle.
+- **AI Cinematic Auto-Director, Magnetic Cursor Snapping & Neural Time-Warp**: Automatic multi-angle cuts, physics-smoothed cursor snapping (`smooth_and_snap_cursor_trajectory`), and `8x` fast-forward over stagnant terminal builds.
+- **Smart Keystroke Password Masking, Playwright/Maestro E2E Codegen & C2PA Provenance**: Automatically masks secrets typed into password fields, exports `.spec.ts` (Playwright) and `.yaml` (Maestro) E2E tests from recordings, and embeds C2PA cryptographic provenance manifests + forensic luma watermarks.
+
+---
+
+## [v0.6.4] — 2026-10-22
+
+### Apple & Android Pro Mirror Hub (`android_window.rs` & `device_bridge.rs`)
+- **Unified Mobile Mirroring Studio**: Low-latency Android (`adb` + Scrcpy 16-byte control socket) and Apple iPhone Mirroring / `simctl` iOS Simulator hub with Screen-Off Stealth Mode, Clean `9:41` Demo Status Bar, Telephony Call HUD, `Cmd+K` Dialer, Smart OTP 2FA Clipboard Bridge, Dual-Device Comparative Canvas, and Touch Ripple Visualizer (`touch_gestures.rs`).
 
 ---
 

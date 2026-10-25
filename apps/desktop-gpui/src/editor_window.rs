@@ -10107,6 +10107,31 @@ impl EditorWindow {
         }
     }
 
+    pub(crate) fn ripple_delete_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(selection) = self.selection.clone() else {
+            return;
+        };
+        let deleted = if selection.track == TrackKind::Caption {
+            self.edit_caption_project(
+                |project| delete_caption_segments(project, &selection.indices),
+                window,
+                cx,
+            )
+        } else {
+            self.edit(
+                |timeline| {
+                    edits::ripple_delete_segments(timeline, selection.track, &selection.indices)
+                },
+                window,
+                cx,
+            )
+        };
+        if deleted {
+            self.set_selection(None, cx);
+            self.note_edit("ripple-delete", Some(selection.track));
+        }
+    }
+
     /// `handleDeleteTrackLane` (`TL/index.tsx:497-555`): the red gutter button
     /// on a text/mask/audio row -- drop the lane's segments, renumber the
     /// lanes above it, and lower the lane count.
@@ -14469,6 +14494,7 @@ impl EditorWindow {
                     .flex_row()
                     .items_center()
                     .flex_none()
+                    .font_family(crate::theme::MONO_FONT)
                     .text_size(px(13.))
                     .when(narrow, |clock| clock.text_size(px(12.)))
                     .child(
@@ -14608,6 +14634,37 @@ impl EditorWindow {
                                 .on_click(cx.listener(
                                     |this, _, window, cx| {
                                         this.toggle_split_mode(cx);
+                                        window.refresh();
+                                    },
+                                )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("transport-ripple-delete-tooltip")
+                            .tooltip_show_delay(crate::ui::TOOLTIP_SHOW_DELAY)
+                            .tooltip(move |_, cx| {
+                                ui::Tooltip::new(
+                                    &theme,
+                                    "Ripple delete selected segment & close timeline gap",
+                                )
+                                .keys(["⌫"])
+                                .view(cx)
+                            })
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    "transport-ripple-delete",
+                                    ui::ButtonVariant::Gray,
+                                    ui::ButtonSize::Sm,
+                                )
+                                .icon("icons/trash.svg")
+                                .label("Ripple Delete")
+                                .radius(px(7.))
+                                .disabled(!self.project_ready() || self.selection.is_none())
+                                .on_click(cx.listener(
+                                    |this, _, window, cx| {
+                                        this.ripple_delete_selection(window, cx);
                                         window.refresh();
                                     },
                                 )),

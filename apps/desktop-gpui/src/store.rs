@@ -1332,6 +1332,21 @@ pub fn set_has_completed_onboarding(value: bool) -> bool {
     )
 }
 
+pub fn always_open_with_sricap_player() -> bool {
+    store_section(GENERAL_SETTINGS)
+        .get("alwaysOpenWithSricapPlayer")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+pub fn set_always_open_with_sricap_player(value: bool) -> bool {
+    set_store_setting(
+        GENERAL_SETTINGS,
+        "alwaysOpenWithSricapPlayer",
+        Value::Bool(value),
+    )
+}
+
 /// `should_show_onboarding` (`lib.rs:463-477`): first-run flags or missing
 /// macOS screen-recording + accessibility.
 pub fn should_show_onboarding() -> bool {

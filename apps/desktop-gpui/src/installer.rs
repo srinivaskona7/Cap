@@ -774,10 +774,10 @@ mod tests {
     #[test]
     fn release_metadata_requires_https_and_a_signature() {
         let gh_release = parse_github_release(
-            br#"{"tag_name":"v0.6.5","body":"New Features\n- 40 Studio Tools","assets":[{"name":"sricap-rec-macos-arm64.zip","browser_download_url":"https://github.com/srinivaskona7/Cap/releases/download/v0.6.5/sricap-rec-macos-arm64.zip"}]}"#,
+            br#"{"tag_name":"v0.6.7","body":"New Features\n- Argon Apple HIG Liquid Glass UI","assets":[{"name":"sricap-rec-macos-arm64.zip","browser_download_url":"https://github.com/srinivaskona7/Cap/releases/download/v0.6.7/sricap-rec-macos-arm64.zip"}]}"#,
         )
         .unwrap();
-        assert_eq!(gh_release.version, Version::new(0, 6, 5));
+        assert_eq!(gh_release.version, Version::new(0, 6, 7));
         assert_eq!(gh_release.signature, GITHUB_SIGNATURE_MARKER);
         assert!(ArtifactKind::AppArchive.matches(b"PK\x03\x04\x14\x00"));
 

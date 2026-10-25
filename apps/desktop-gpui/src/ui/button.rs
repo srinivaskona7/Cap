@@ -457,20 +457,22 @@ impl RenderOnce for Button {
             })
             .when(dim_disabled, |this| this.opacity(0.5))
             .when(!disabled, |this| {
-                this.hover(move |style| {
-                    let style = match paint.hover_bg {
-                        Some(bg) => style.bg(bg),
-                        None => style,
-                    };
-                    let style = match paint.hover_text {
-                        Some(color) => style.text_color(color),
-                        None => style,
-                    };
-                    match paint.hover_border {
-                        Some(color) => style.border_color(color),
-                        None => style,
-                    }
-                })
+                this.cursor_pointer()
+                    .hover(move |style| {
+                        let style = match paint.hover_bg {
+                            Some(bg) => style.bg(bg),
+                            None => style.opacity(0.92),
+                        };
+                        let style = match paint.hover_text {
+                            Some(color) => style.text_color(color),
+                            None => style,
+                        };
+                        match paint.hover_border {
+                            Some(color) => style.border_color(color),
+                            None => style,
+                        }
+                    })
+                    .active(move |style| style.opacity(0.88))
             })
             .children(icon.map(|icon| {
                 svg()
@@ -682,16 +684,18 @@ impl RenderOnce for IconButton {
             .when(
                 !disabled && (hover_bg.is_some() || hover_color.is_some()),
                 |this| {
-                    this.hover(move |style| {
-                        let style = match hover_bg {
-                            Some(bg) => style.bg(bg),
-                            None => style,
-                        };
-                        match hover_color {
-                            Some(color) => style.text_color(color),
-                            None => style,
-                        }
-                    })
+                    this.cursor_pointer()
+                        .hover(move |style| {
+                            let style = match hover_bg {
+                                Some(bg) => style.bg(bg),
+                                None => style,
+                            };
+                            match hover_color {
+                                Some(color) => style.text_color(color),
+                                None => style,
+                            }
+                        })
+                        .active(|style| style.opacity(0.86))
                 },
             )
             .when_some(on_click.filter(|_| !disabled), |this, handler| {

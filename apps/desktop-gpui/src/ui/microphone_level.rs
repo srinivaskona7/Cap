@@ -60,15 +60,50 @@ impl MicrophoneLevel {
     pub(crate) fn snapshot(fill: f32, color: Hsla) -> gpui::Div {
         let mut background = color;
         background.a *= 0.14;
-        div().size_full().when(fill > 0., |this| {
-            this.child(
+        let clamped = fill.clamp(0., 1.);
+        let active_leds = ((clamped * 14.).ceil() as usize).min(14);
+
+        div()
+            .size_full()
+            .relative()
+            .when(clamped > 0., |this| {
+                this.child(
+                    div()
+                        .h_full()
+                        .w(gpui::relative(clamped))
+                        .rounded(px(10.))
+                        .bg(background),
+                )
+            })
+            .child(
                 div()
-                    .h_full()
-                    .w(gpui::relative(fill))
-                    .rounded(px(10.))
-                    .bg(background),
+                    .absolute()
+                    .bottom(px(3.))
+                    .left(px(38.))
+                    .right(px(58.))
+                    .h(px(3.))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(2.))
+                    .children((0..14).map(|idx| {
+                        let lit = idx < active_leds && clamped > 0.01;
+                        let led_color: Hsla = if idx >= 12 {
+                            gpui::rgb(crate::theme::Theme::ARGON_EMBER_RED).into()
+                        } else if idx >= 9 {
+                            gpui::rgb(crate::theme::Theme::ARGON_AMBER_LED).into()
+                        } else {
+                            gpui::rgb(crate::theme::Theme::ARGON_EMERALD_LED).into()
+                        };
+                        let mut unlit = led_color;
+                        unlit.a = 0.18;
+                        div().flex_1().h_full().rounded_full().bg(if lit {
+                            led_color
+                        } else {
+                            unlit
+                        })
+                    })),
             )
-        })
     }
 }
 

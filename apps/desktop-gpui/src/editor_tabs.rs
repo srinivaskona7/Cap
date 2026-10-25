@@ -156,31 +156,31 @@ pub struct CaptionModel {
 pub static CAPTION_MODELS: &[CaptionModel] = &[
     CaptionModel {
         name: "best",
-        label: "Recommended",
+        label: "NVIDIA Parakeet INT8",
         model_name: "parakeet-tdt-0.6b-v3 int8",
-        size: "~640MB",
-        description: "Best balance for most recordings",
+        size: "670 MB",
+        description: "Sub-200ms local TDT • Best balance",
     },
     CaptionModel {
         name: "best-max",
-        label: "High Accuracy",
+        label: "Parakeet Max",
         model_name: "parakeet-tdt-0.6b-v3",
-        size: "~2.4GB",
-        description: "Larger download, higher accuracy",
+        size: "2.55 GB",
+        description: "Full-precision ONNX • Maximum accuracy",
     },
     CaptionModel {
         name: "small",
-        label: "Small",
+        label: "Whisper Small",
         model_name: "whisper.cpp small",
-        size: "466MB",
-        description: "Smallest download",
+        size: "466 MB",
+        description: "Smallest multilingual fallback engine",
     },
     CaptionModel {
         name: "medium",
-        label: "Medium",
+        label: "Whisper Medium",
         model_name: "whisper.cpp medium",
-        size: "1.5GB",
-        description: "Slower, more accurate",
+        size: "1.53 GB",
+        description: "Deep multilingual transcription",
     },
 ];
 
@@ -1374,6 +1374,7 @@ impl EditorWindow {
             .flex()
             .flex_col()
             .gap(px(14.))
+            .child(self.render_argon_camera_shape_accordion(cx))
             .child(
                 div()
                     .flex()
@@ -1576,6 +1577,147 @@ impl EditorWindow {
                     .w(px(150.))
                     .child(self.menu_select(kind, id, label, cx)),
             )
+            .into_any_element()
+    }
+
+    fn render_argon_camera_shape_accordion(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = self.theme;
+        let state = self
+            .sidebar
+            .section(crate::editor_sidebar::PanelSection::ArgonCameraShape);
+        let open = state.is_open();
+        let camera = &self.project.camera;
+        let is_circle = matches!(camera.shape, CameraShape::Square) && camera.rounding >= 95.0;
+        let is_squircle = camera.rounding_type == CornerStyle::Squircle && camera.rounding < 95.0;
+        let gaze = crate::store::neural_persona_settings().gaze_auto_center;
+
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .pt(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(6.))
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-cam-circle",
+                                if is_circle {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Circle")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.edit_project("argon-cam-circle", window, cx, |p| {
+                                        p.camera.hide = false;
+                                        p.camera.shape = CameraShape::Square;
+                                        p.camera.rounding = 100.0;
+                                        p.camera.rounding_type = CornerStyle::Rounded;
+                                        true
+                                    });
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-cam-squircle",
+                                if is_squircle {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label("Squircle")
+                            .full_width()
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.edit_project("argon-cam-squircle", window, cx, |p| {
+                                        p.camera.hide = false;
+                                        p.camera.shape = CameraShape::Square;
+                                        p.camera.rounding = 26.0;
+                                        p.camera.rounding_type = CornerStyle::Squircle;
+                                        true
+                                    });
+                                },
+                            )),
+                        ),
+                    )
+                    .child(
+                        div().flex_1().child(
+                            ui::Button::plain(
+                                &theme,
+                                "argon-cam-gaze-align",
+                                if gaze {
+                                    ui::ButtonVariant::Primary
+                                } else {
+                                    ui::ButtonVariant::Gray
+                                },
+                                ui::ButtonSize::Xs,
+                            )
+                            .label(if gaze {
+                                "Gaze Alignment: ON"
+                            } else {
+                                "Gaze Alignment"
+                            })
+                            .full_width()
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    let next = !gaze;
+                                    let _ = crate::store::set_neural_persona_key(
+                                        "neuralGazeAutoCenter",
+                                        serde_json::Value::Bool(next),
+                                    );
+                                    this.show_notice(
+                                        if next {
+                                            "Gaze Alignment ON: Pupils aligned to camera lens."
+                                        } else {
+                                            "Gaze Alignment OFF."
+                                        },
+                                        window,
+                                        cx,
+                                    );
+                                    cx.notify();
+                                },
+                            )),
+                        ),
+                    ),
+            )
+            .into_any_element();
+
+        div()
+            .flex()
+            .flex_col()
+            .p(px(12.))
+            .rounded(px(10.))
+            .bg(Hsla::from(theme.editor.card_2))
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .child(crate::editor_sidebar::disclosure_row(
+                &theme,
+                "argon-accordion-camera-shape",
+                "Camera Shape (Circle / Squircle / Gaze Alignment)",
+                open,
+                cx.listener(|this, _, window, cx| {
+                    this.sidebar
+                        .section(crate::editor_sidebar::PanelSection::ArgonCameraShape)
+                        .toggle();
+                    this.animate_collapsibles(window, cx);
+                }),
+            ))
+            .child(crate::editor_sidebar::collapsible(&state, body))
             .into_any_element()
     }
 
@@ -2256,6 +2398,7 @@ impl EditorWindow {
             .flex()
             .flex_col()
             .gap(px(14.))
+            .child(self.render_studio_sound_card(cx))
             .child(
                 ui::Field::section(&theme, "Studio Voiceover, Video & Audio Controls").child(
                     div()
@@ -3010,7 +3153,6 @@ impl EditorWindow {
                         })),
                 ),
             )
-            .children(has_microphone.then(|| self.render_studio_sound_card(cx)))
             .children(has_microphone.then(|| {
                 self.slider_field_disabled(
                     "Microphone Volume",
@@ -3035,11 +3177,15 @@ impl EditorWindow {
             .into_any_element()
     }
 
-    /// The Studio Sound card: an icon tile that tints accent while the
-    /// enhancement is on, the per-recording toggle, and under a hairline the
-    /// store-backed default every new Studio recording starts from.
+    /// The Studio Voice Shield card: collapsible accordion card with an icon
+    /// tile that tints accent while noise removal is on, the per-recording
+    /// toggle, Light/Balanced/Strong isolation, and default setting.
     fn render_studio_sound_card(&self, cx: &mut Context<Self>) -> AnyElement {
         let theme = self.theme;
+        let state = self
+            .sidebar
+            .section(crate::editor_sidebar::PanelSection::ArgonStudioVoiceShield);
+        let open = state.is_open();
         let isolation_options = [
             (
                 cap_project::VoiceIsolation::Light,
@@ -3062,12 +3208,10 @@ impl EditorWindow {
         let accent = Hsla::from(theme.editor.accent);
         let line = Hsla::from(theme.editor.line);
 
-        div()
+        let body = div()
             .flex()
             .flex_col()
-            .rounded(px(12.))
-            .bg(Hsla::from(theme.editor.card_2))
-            .p(px(14.))
+            .pt(px(10.))
             .child(
                 div()
                     .flex()
@@ -3107,7 +3251,7 @@ impl EditorWindow {
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(Hsla::from(theme.editor.text_1))
-                                    .child("Studio Sound"),
+                                    .child("Studio Voice Shield"),
                             )
                             .child(
                                 div()
@@ -3115,7 +3259,7 @@ impl EditorWindow {
                                     .line_height(px(16.))
                                     .text_color(Hsla::from(theme.editor.text_3))
                                     .child(
-                                        "Reduces background noise and balances your voice level.",
+                                        "AI neural noise removal, room de-reverb, and voice leveling.",
                                     ),
                             ),
                     )
@@ -3232,6 +3376,29 @@ impl EditorWindow {
                     .child(error.clone())
                     .into_any_element()
             }))
+            .into_any_element();
+
+        div()
+            .flex()
+            .flex_col()
+            .rounded(px(12.))
+            .bg(Hsla::from(theme.editor.card_2))
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .p(px(14.))
+            .child(crate::editor_sidebar::disclosure_row(
+                &theme,
+                "argon-accordion-voice-shield",
+                "Studio Voice Shield (Noise Removal)",
+                open,
+                cx.listener(|this, _, window, cx| {
+                    this.sidebar
+                        .section(crate::editor_sidebar::PanelSection::ArgonStudioVoiceShield)
+                        .toggle();
+                    this.animate_collapsibles(window, cx);
+                }),
+            ))
+            .child(crate::editor_sidebar::collapsible(&state, body))
             .into_any_element()
     }
 
@@ -4184,6 +4351,169 @@ impl EditorWindow {
             column
         };
 
+        let primary_engine = transcription::primary_model_name();
+        let fallback_engine = transcription::fallback_model_name();
+        let model_hub = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .mt(px(8.))
+            .p(px(10.))
+            .rounded(px(8.))
+            .bg(self.panel_bg())
+            .border_1()
+            .border_color(Hsla::from(theme.editor.line))
+            .child(
+                div()
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(Hsla::from(theme.gray_12))
+                    .child("🎙️ Transcription Model Hub & Disk Cleaner"),
+            )
+            .children(CAPTION_MODELS.iter().map(|entry| {
+                let is_downloaded = snapshot.downloaded.contains(entry.name);
+                let is_primary =
+                    primary_engine == entry.name || self.sidebar.caption_model == entry.name;
+                let is_fallback = fallback_engine == entry.name;
+                let entry_name = entry.name;
+                let entry_downloading = active_download.is_some_and(|d| d.model == entry_name);
+                let entry_deleting = snapshot.deleting.as_deref() == Some(entry_name);
+
+                div()
+                    .id(SharedString::from(format!("hub-model-{}", entry.name)))
+                    .p(px(8.))
+                    .rounded(px(6.))
+                    .bg(Hsla::from(theme.gray_2))
+                    .border_1()
+                    .border_color(Hsla::from(theme.editor.line))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(Hsla::from(theme.gray_12))
+                                    .child(format!("{} ({})", entry.label, entry.size)),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(Hsla::from(if is_downloaded {
+                                        theme.blue_9
+                                    } else {
+                                        theme.gray_10
+                                    }))
+                                    .child(if is_downloaded {
+                                        format!("Downloaded ({})", entry.size)
+                                    } else if entry_downloading {
+                                        format!("Downloading {download_percent}%")
+                                    } else {
+                                        "Not Downloaded".to_string()
+                                    }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    SharedString::from(format!("hub-primary-{entry_name}")),
+                                    if is_primary {
+                                        ui::ButtonVariant::Blue
+                                    } else {
+                                        ui::ButtonVariant::Gray
+                                    },
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("Primary Engine")
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.sidebar.caption_model = entry_name;
+                                        transcription::set_primary_model_name(entry_name);
+                                        cx.notify();
+                                    },
+                                )),
+                            )
+                            .child(
+                                ui::Button::plain(
+                                    &theme,
+                                    SharedString::from(format!("hub-fallback-{entry_name}")),
+                                    if is_fallback {
+                                        ui::ButtonVariant::Blue
+                                    } else {
+                                        ui::ButtonVariant::Gray
+                                    },
+                                    ui::ButtonSize::Sm,
+                                )
+                                .label("Secondary / Fallback Engine")
+                                .on_click(cx.listener(
+                                    move |_, _, _, cx| {
+                                        transcription::set_fallback_model_name(entry_name);
+                                        cx.notify();
+                                    },
+                                )),
+                            )
+                            .when(!is_downloaded, |row| {
+                                row.child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        SharedString::from(format!("hub-install-{entry_name}")),
+                                        ui::ButtonVariant::Primary,
+                                        ui::ButtonSize::Sm,
+                                    )
+                                    .label(if entry_downloading {
+                                        format!("Installing {download_percent}%")
+                                    } else {
+                                        "Download / Install".to_string()
+                                    })
+                                    .disabled(is_downloading)
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            this.sidebar.caption_model = entry_name;
+                                            this.start_caption_model_download(cx);
+                                        },
+                                    )),
+                                )
+                            })
+                            .when(is_downloaded, |row| {
+                                row.child(
+                                    ui::Button::plain(
+                                        &theme,
+                                        SharedString::from(format!("hub-purge-{entry_name}")),
+                                        ui::ButtonVariant::Gray,
+                                        ui::ButtonSize::Sm,
+                                    )
+                                    .icon("icons/trash.svg")
+                                    .label(if entry_deleting {
+                                        "Deleting..."
+                                    } else {
+                                        "Delete Permanently"
+                                    })
+                                    .disabled(entry_deleting || generating)
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            this.sidebar.caption_model = entry_name;
+                                            this.delete_caption_model(cx);
+                                        },
+                                    )),
+                                )
+                            }),
+                    )
+            }));
+
         let transcription = div()
             .flex()
             .flex_col()
@@ -4234,7 +4564,8 @@ impl EditorWindow {
                     ),
                 )),
             )
-            .child(div().pt(px(8.)).child(action));
+            .child(div().pt(px(8.)).child(action))
+            .child(model_hub);
 
         let style = div()
             .flex()

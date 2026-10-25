@@ -22,6 +22,30 @@ pub const UI_FONT: &str = if cfg!(any(target_os = "macos", target_os = "windows"
     "Geist"
 };
 
+pub const DISPLAY_FONT: &str = if cfg!(target_os = "macos") {
+    "SF Pro Display"
+} else if cfg!(target_os = "windows") {
+    ".SystemUIFont"
+} else {
+    "Geist"
+};
+
+pub const TEXT_FONT: &str = if cfg!(target_os = "macos") {
+    "SF Pro Text"
+} else if cfg!(target_os = "windows") {
+    ".SystemUIFont"
+} else {
+    "Geist"
+};
+
+pub const MONO_FONT: &str = if cfg!(target_os = "macos") {
+    "SF Mono"
+} else if cfg!(target_os = "windows") {
+    "Consolas"
+} else {
+    "JetBrains Mono"
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
     Light,
@@ -1139,17 +1163,110 @@ impl Theme {
     /// palette there.
     pub const TARGET_HIGHLIGHT: u32 = 0x155dfc;
 
-    /// `--macos-settings-accent: AccentColor` -- the selected sidebar icon and
-    /// the checked toggle. `AccentColor` is the system-wide accent the user
-    /// picked in System Settings; gpui exposes no query for it, so this is
-    /// macOS's default blue. A user on a non-blue accent sees blue here and
-    /// their own colour in the Tauri app (README deviation).
     pub const SETTINGS_ACCENT: u32 = 0x007aff;
 
-    /// The TSX has a `#DCDCDC` unfocused state, but it hangs off an
+    ///The TSX has a `#DCDCDC` unfocused state, but it hangs off an
     /// `onFocusChanged` the non-activating main panel never delivers -- the
     /// shipping lights stay colored, so no inactive color exists here.
     pub const TRAFFIC_CLOSE: u32 = 0xff5f57;
+
+    pub const ARGON_INDIGO_START: u32 = 0x3b82f6;
+    pub const ARGON_INDIGO_END: u32 = 0x6366f1;
+    pub const ARGON_EMBER_RED: u32 = 0xef4444;
+    pub const ARGON_EMERALD_LED: u32 = 0x10b981;
+    pub const ARGON_AMBER_LED: u32 = 0xf59e0b;
+
+    pub fn argon_glass_surface(&self) -> Hsla {
+        if self.is_dark() {
+            rgba(0x121318c7).into()
+        } else {
+            rgba(0xf8f9fcd9).into()
+        }
+    }
+
+    pub fn argon_specular_border(&self) -> Hsla {
+        if self.is_dark() {
+            rgba(0xffffff1f).into()
+        } else {
+            rgba(0x0000001a).into()
+        }
+    }
+
+    pub fn argon_card_surface(&self) -> Hsla {
+        if self.is_dark() {
+            rgba(0x1c1e26aa).into()
+        } else {
+            rgba(0xffffffcc).into()
+        }
+    }
+
+    pub fn argon_card_hover_surface(&self) -> Hsla {
+        if self.is_dark() {
+            rgba(0x282b36cc).into()
+        } else {
+            rgba(0xffffffff).into()
+        }
+    }
+
+    pub fn argon_primary_gradient() -> gpui::Background {
+        gpui::linear_gradient(
+            135.,
+            gpui::linear_color_stop(rgb(Self::ARGON_INDIGO_START), 0.),
+            gpui::linear_color_stop(rgb(Self::ARGON_INDIGO_END), 1.),
+        )
+    }
+
+    pub fn argon_primary_hover_gradient() -> gpui::Background {
+        gpui::linear_gradient(
+            135.,
+            gpui::linear_color_stop(mix(rgb(Self::ARGON_INDIGO_START), rgb(0xffffff), 0.12), 0.),
+            gpui::linear_color_stop(mix(rgb(Self::ARGON_INDIGO_END), rgb(0xffffff), 0.12), 1.),
+        )
+    }
+
+    pub fn argon_primary_active_gradient() -> gpui::Background {
+        gpui::linear_gradient(
+            135.,
+            gpui::linear_color_stop(mix(rgb(Self::ARGON_INDIGO_START), rgb(0x000000), 0.10), 0.),
+            gpui::linear_color_stop(mix(rgb(Self::ARGON_INDIGO_END), rgb(0x000000), 0.10), 1.),
+        )
+    }
+
+    pub fn argon_primary_glow(&self) -> Vec<BoxShadow> {
+        vec![
+            BoxShadow {
+                color: rgba(0x3b82f659).into(),
+                offset: point(px(0.), px(6.)),
+                blur_radius: px(20.),
+                spread_radius: px(-2.),
+                inset: false,
+            },
+            BoxShadow {
+                color: self.ring_offset(),
+                offset: point(px(0.), px(0.)),
+                blur_radius: px(0.),
+                spread_radius: px(0.),
+                inset: false,
+            },
+            BoxShadow {
+                color: rgba(0xffffff40).into(),
+                offset: point(px(0.), px(1.)),
+                blur_radius: px(0.),
+                spread_radius: px(0.),
+                inset: true,
+            },
+        ]
+    }
+
+    pub fn argon_ember_glow() -> Vec<BoxShadow> {
+        vec![BoxShadow {
+            color: rgba(0xef444466).into(),
+            offset: point(px(0.), px(0.)),
+            blur_radius: px(16.),
+            spread_radius: px(1.),
+            inset: false,
+        }]
+    }
 }
 
 #[cfg(test)]
@@ -1352,5 +1469,18 @@ mod tests {
         let dark = Theme::dark().with_material(Some(MaterialKind::LiquidGlass));
         assert!((light.shell_bg().a - 0.55).abs() < 0.01);
         assert!((dark.shell_bg().a - 0.88).abs() < 0.01);
+    }
+
+    #[test]
+    fn argon_liquid_glass_and_typography_tokens_match_spec() {
+        let dark = Theme::dark();
+        assert!((dark.argon_glass_surface().a - 0.78).abs() < 0.01);
+        assert!((dark.argon_specular_border().a - 0.12).abs() < 0.01);
+        assert_eq!(Theme::ARGON_INDIGO_START, 0x3b82f6);
+        assert_eq!(Theme::ARGON_INDIGO_END, 0x6366f1);
+        assert_eq!(Theme::ARGON_EMBER_RED, 0xef4444);
+        assert!(!DISPLAY_FONT.is_empty());
+        assert!(!TEXT_FONT.is_empty());
+        assert!(!MONO_FONT.is_empty());
     }
 }
