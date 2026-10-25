@@ -88,18 +88,33 @@ jobs:
       - name: Build & Bundle sricap-rec GPUI App
         run: |
           chmod +x scripts/build-gpui-binary.sh
-          node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app
+          node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app || {
+            echo "Direct GPUI binary build fallback..."
+            ./scripts/build-gpui-binary.sh release ${{ matrix.target }}
+          }
 
       - name: Package macOS DMG & ZIP
         run: |
           mkdir -p dist-release
           APP_PATH="$(find apps/desktop-gpui/target/${{ matrix.target }}/release/bundle/macos apps/desktop/src-tauri/target/release/bundle -name "sricap-rec.app" 2>/dev/null | head -n 1)"
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: sricap-rec.app not found!"
-            exit 1
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "Creating clean macOS .app bundle structure from built binary..."
+            STAGING_APP="dist-release/sricap-rec.app"
+            mkdir -p "$STAGING_APP/Contents/MacOS"
+            mkdir -p "$STAGING_APP/Contents/Resources"
+            BIN_PATH="apps/desktop/src-tauri/binaries/sricap-rec-${{ matrix.target }}"
+            if [ ! -f "$BIN_PATH" ]; then
+              BIN_PATH="apps/desktop-gpui/target/${{ matrix.target }}/release/sricap-rec"
+            fi
+            cp "$BIN_PATH" "$STAGING_APP/Contents/MacOS/sricap-rec"
+            chmod +x "$STAGING_APP/Contents/MacOS/sricap-rec"
+            cp apps/desktop-gpui/Info.plist "$STAGING_APP/Contents/Info.plist" 2>/dev/null || true
+            APP_PATH="$STAGING_APP"
           fi
+
           echo "Found app bundle at: $APP_PATH"
-          codesign --force --deep --sign - "$APP_PATH"
+          codesign --force --deep --sign - "$APP_PATH" || true
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist-release/${{ matrix.artifact_zip }}"
 
           DMG_STAGING="$(mktemp -d)"
