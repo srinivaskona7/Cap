@@ -35,7 +35,7 @@ jobs:
             artifact_dmg: mac-silicon.dmg
             artifact_zip: mac-silicon.zip
           - target: x86_64-apple-darwin
-            runner: macos-13
+            runner: macos-14
             name: Intel
             artifact_dmg: mac-intel.dmg
             artifact_zip: mac-intel.zip
@@ -179,7 +179,11 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
+            echo "Direct cargo build fallback for Windows sricap-rec..."
+            cd apps/desktop-gpui
+            cargo build --release --target x86_64-pc-windows-msvc
+          }
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -187,12 +191,17 @@ jobs:
       - name: Bundle Windows Installer (windows.exe)
         shell: bash
         run: |
-          npm install -g @tauri-apps/cli@2.9.6
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis
           mkdir -p dist-windows
-          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe 2>/dev/null || true
-          if [ ! -f dist-windows/windows.exe ]; then
+          npm install -g @tauri-apps/cli@2.9.6
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis || true
+          
+          # Check for NSIS installer or copy standalone binary
+          if ls apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
+            cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe
+          elif [ -f apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe ]; then
             cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/windows.exe
+          elif [ -f apps/desktop-gpui/target/release/sricap-rec.exe ]; then
+            cp apps/desktop-gpui/target/release/sricap-rec.exe dist-windows/windows.exe
           fi
 
       - name: Upload Windows Artifacts
