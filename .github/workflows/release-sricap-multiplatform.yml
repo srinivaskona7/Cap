@@ -17,9 +17,12 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  MACOSX_DEPLOYMENT_TARGET: "13.0"
+  CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_BUILD_JOBS: "4"
+  ACTIONS_RUNNER_FORCE_ENV_WARNINGS: "false"
 
 jobs:
   build-macos:
@@ -69,29 +72,11 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal --target ${{ matrix.target }}
           rustup default 1.88.0
 
-      - name: Install Dependencies
-        run: bun install
-
-      - name: Run cap-setup
+      - name: Install Dependencies & Setup Native Libraries
         run: |
+          bun install
           echo "RUST_TARGET_TRIPLE=${{ matrix.target }}" >> .env
-          bun run cap-setup
-          mkdir -p apps/desktop-gpui/.cargo
-          cp .cargo/config.toml apps/desktop-gpui/.cargo/config.toml 2>/dev/null || true
-          mkdir -p apps/desktop-gpui/target/${{ matrix.target }}/release/Frameworks
-          mkdir -p apps/desktop-gpui/target/Frameworks
-          if [ -d "target/Frameworks/Spacedrive.framework" ]; then
-            cp -R target/Frameworks/Spacedrive.framework apps/desktop-gpui/target/${{ matrix.target }}/release/Frameworks/
-            cp -R target/Frameworks/Spacedrive.framework apps/desktop-gpui/target/Frameworks/
-          fi
-        env:
-          RUST_TARGET_TRIPLE: ${{ matrix.target }}
-
-      - name: Prepare GPUI Dependency
-        run: |
-          node scripts/sync-desktop-versions.mjs
-          chmod +x scripts/prepare-gpui-dependency.sh
-          ./scripts/prepare-gpui-dependency.sh
+          RUST_TARGET_TRIPLE=${{ matrix.target }} bun run cap-setup
 
       - name: Build Sidecar Binaries
         run: |
@@ -105,7 +90,7 @@ jobs:
         run: |
           chmod +x scripts/build-gpui-binary.sh
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app || ./scripts/build-gpui-binary.sh release ${{ matrix.target }}
+            node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app
           else
             ./scripts/build-gpui-binary.sh release ${{ matrix.target }} || {
               echo "Direct Cargo build fallback..."
