@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feature1
-      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -104,15 +103,12 @@ jobs:
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
             node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app
           else
-            export RUSTFLAGS="-F $GITHUB_WORKSPACE/target/Frameworks -L $GITHUB_WORKSPACE/target/native-deps/lib"
-            node scripts/bundle-gpui.mjs x86_64-apple-darwin --bundles app || {
-              echo "Executing fallback build for Intel..."
-              ./scripts/build-gpui-binary.sh release x86_64-apple-darwin || {
-                cd apps/desktop-gpui
-                cargo +1.95.0 build --release --target x86_64-apple-darwin
-                cd ../..
-              }
-            }
+            echo "Building GPUI binary for x86_64-apple-darwin..."
+            cd apps/desktop-gpui
+            RUSTFLAGS="-F $GITHUB_WORKSPACE/target/Frameworks -L $GITHUB_WORKSPACE/target/native-deps/lib" cargo +1.95.0 build --release --target x86_64-apple-darwin
+            cd ../..
+            mkdir -p apps/desktop/src-tauri/binaries
+            cp apps/desktop-gpui/target/x86_64-apple-darwin/release/sricap-rec apps/desktop/src-tauri/binaries/sricap-rec-x86_64-apple-darwin || true
           fi
 
       - name: Package macOS DMG & ZIP
@@ -220,17 +216,13 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
-          chmod +x scripts/build-gpui-binary.sh
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
-            echo "Falling back to build-gpui-binary or direct cargo..."
-            ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
-              cd apps/desktop-gpui
-              cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
-              cd ../..
-              mkdir -p apps/desktop/src-tauri/binaries
-              cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
-            }
-          }
+          echo "Building GPUI binary for Windows x64..."
+          cd apps/desktop-gpui
+          cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
+          cd ../..
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
+          node scripts/verify-windows-stack.mjs apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
