@@ -158,11 +158,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Rust Toolchain (1.88.0 + 1.95.0)
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --target x86_64-pc-windows-msvc
-          rustup toolchain install 1.95.0 --profile minimal --target x86_64-pc-windows-msvc
-          rustup default 1.88.0
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - name: Install Dependencies
         run: bun install
@@ -190,12 +189,6 @@ jobs:
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
 
-      - name: Prepare GPUI Dependency (Windows)
-        shell: bash
-        run: |
-          node scripts/sync-desktop-versions.mjs
-          ./scripts/prepare-gpui-dependency.sh
-
       - name: Build Sidecar Binaries (Windows)
         shell: bash
         run: |
@@ -207,11 +200,11 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
-          ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
-            echo "Falling back to node scripts/bundle-gpui.mjs or direct cargo..."
-            node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
+            echo "Falling back to build-gpui-binary or direct cargo..."
+            ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
               cd apps/desktop-gpui
-              cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
+              cargo build --release --target x86_64-pc-windows-msvc
               cd ../..
               mkdir -p apps/desktop/src-tauri/binaries
               cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
