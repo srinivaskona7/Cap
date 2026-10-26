@@ -77,6 +77,14 @@ jobs:
           bun install
           echo "RUST_TARGET_TRIPLE=${{ matrix.target }}" >> .env
           RUST_TARGET_TRIPLE=${{ matrix.target }} bun run cap-setup
+          mkdir -p apps/desktop-gpui/.cargo
+          cp .cargo/config.toml apps/desktop-gpui/.cargo/config.toml 2>/dev/null || true
+          mkdir -p apps/desktop-gpui/target/Frameworks
+          cp -R target/Frameworks/* apps/desktop-gpui/target/Frameworks/ 2>/dev/null || true
+          mkdir -p apps/desktop-gpui/target/${{ matrix.target }}/release/Frameworks
+          cp -R target/Frameworks/* apps/desktop-gpui/target/${{ matrix.target }}/release/Frameworks/ 2>/dev/null || true
+          mkdir -p apps/desktop-gpui/target/native-deps
+          cp -R target/native-deps/* apps/desktop-gpui/target/native-deps/ 2>/dev/null || true
 
       - name: Build Sidecar Binaries
         run: |
@@ -92,13 +100,14 @@ jobs:
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
             node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app
           else
-            ./scripts/build-gpui-binary.sh release ${{ matrix.target }} || {
-              echo "Direct Cargo build fallback..."
-              cd apps/desktop-gpui
-              cargo +1.95.0 build --release --target ${{ matrix.target }}
-              cd ../..
-              mkdir -p apps/desktop/src-tauri/binaries
-              cp apps/desktop-gpui/target/${{ matrix.target }}/release/sricap-rec apps/desktop/src-tauri/binaries/sricap-rec-${{ matrix.target }} || true
+            export RUSTFLAGS="-F $GITHUB_WORKSPACE/target/Frameworks -L $GITHUB_WORKSPACE/target/native-deps/lib"
+            node scripts/bundle-gpui.mjs x86_64-apple-darwin --bundles app || {
+              echo "Executing fallback build for Intel..."
+              ./scripts/build-gpui-binary.sh release x86_64-apple-darwin || {
+                cd apps/desktop-gpui
+                cargo +1.95.0 build --release --target x86_64-apple-darwin
+                cd ../..
+              }
             }
           fi
 
@@ -112,6 +121,7 @@ jobs:
             STAGING_APP="dist-release/sricap-rec.app"
             mkdir -p "$STAGING_APP/Contents/MacOS"
             mkdir -p "$STAGING_APP/Contents/Resources"
+            mkdir -p "$STAGING_APP/Contents/Frameworks"
             BIN_PATH="apps/desktop/src-tauri/binaries/sricap-rec-${{ matrix.target }}"
             if [ ! -f "$BIN_PATH" ]; then
               BIN_PATH="apps/desktop-gpui/target/${{ matrix.target }}/release/sricap-rec"
@@ -119,6 +129,7 @@ jobs:
             cp "$BIN_PATH" "$STAGING_APP/Contents/MacOS/sricap-rec"
             chmod +x "$STAGING_APP/Contents/MacOS/sricap-rec"
             cp apps/desktop-gpui/Info.plist "$STAGING_APP/Contents/Info.plist" 2>/dev/null || true
+            cp -R target/Frameworks/* "$STAGING_APP/Contents/Frameworks/" 2>/dev/null || true
             APP_PATH="$STAGING_APP"
           fi
 
@@ -163,6 +174,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Install Toolchain 1.95.0 for GPUI
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --target x86_64-pc-windows-msvc
+
       - name: Install Dependencies
         run: bun install
 
@@ -200,11 +216,12 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
+          chmod +x scripts/build-gpui-binary.sh
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
             echo "Falling back to build-gpui-binary or direct cargo..."
             ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
               cd apps/desktop-gpui
-              cargo build --release --target x86_64-pc-windows-msvc
+              cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
               cd ../..
               mkdir -p apps/desktop/src-tauri/binaries
               cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
