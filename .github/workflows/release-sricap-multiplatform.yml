@@ -88,10 +88,11 @@ jobs:
       - name: Build & Bundle sricap-rec GPUI App
         run: |
           chmod +x scripts/build-gpui-binary.sh
-          node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app || {
-            echo "Direct GPUI binary build fallback..."
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+            node scripts/bundle-gpui.mjs ${{ matrix.target }} --bundles app || ./scripts/build-gpui-binary.sh release ${{ matrix.target }}
+          else
             ./scripts/build-gpui-binary.sh release ${{ matrix.target }}
-          }
+          fi
 
       - name: Package macOS DMG & ZIP
         run: |
@@ -148,7 +149,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Rust Toolchains (1.88.0 + 1.95.0)
+      - name: Setup Rust Toolchain (1.88.0 + 1.95.0)
         run: |
           rustup toolchain install 1.88.0 --profile minimal --target x86_64-pc-windows-msvc
           rustup toolchain install 1.95.0 --profile minimal --target x86_64-pc-windows-msvc
@@ -194,10 +195,10 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
-            echo "Direct cargo build fallback for Windows sricap-rec..."
-            cd apps/desktop-gpui
-            cargo build --release --target x86_64-pc-windows-msvc
+          chmod +x scripts/build-gpui-binary.sh
+          ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
+            echo "Falling back to node scripts/bundle-gpui.mjs..."
+            node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle
           }
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
@@ -215,6 +216,8 @@ jobs:
             cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe
           elif [ -f apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe ]; then
             cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/windows.exe
+          elif [ -f apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe ]; then
+            cp apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe dist-windows/windows.exe
           elif [ -f apps/desktop-gpui/target/release/sricap-rec.exe ]; then
             cp apps/desktop-gpui/target/release/sricap-rec.exe dist-windows/windows.exe
           fi
