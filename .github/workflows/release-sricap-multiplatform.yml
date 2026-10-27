@@ -106,7 +106,7 @@ jobs:
           else
             echo "Building GPUI binary for x86_64-apple-darwin..."
             cd apps/desktop-gpui
-            RUSTFLAGS="-F $GITHUB_WORKSPACE/target/Frameworks -L $GITHUB_WORKSPACE/target/native-deps/lib" cargo +1.95.0 build --release --target x86_64-apple-darwin
+            RUSTFLAGS="-L framework=$GITHUB_WORKSPACE/target/Frameworks -L native=$GITHUB_WORKSPACE/target/native-deps/lib" cargo +1.95.0 build --release --locked --target x86_64-apple-darwin
             cd ../..
             mkdir -p apps/desktop/src-tauri/binaries
             cp apps/desktop-gpui/target/x86_64-apple-darwin/release/sricap-rec apps/desktop/src-tauri/binaries/sricap-rec-x86_64-apple-darwin || true
