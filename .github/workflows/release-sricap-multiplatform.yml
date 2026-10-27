@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature1
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -100,6 +98,9 @@ jobs:
       - name: Build & Bundle sricap-rec GPUI App
         run: |
           chmod +x scripts/build-gpui-binary.sh
+          chmod +x scripts/prepare-gpui-dependency.sh
+          node scripts/sync-desktop-versions.mjs
+          ./scripts/prepare-gpui-dependency.sh
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
             node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app
           else
@@ -216,6 +217,9 @@ jobs:
       - name: Build sricap-rec for Windows
         shell: bash
         run: |
+          chmod +x scripts/prepare-gpui-dependency.sh
+          node scripts/sync-desktop-versions.mjs
+          ./scripts/prepare-gpui-dependency.sh
           echo "Building GPUI binary for Windows x64..."
           cd apps/desktop-gpui
           cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
