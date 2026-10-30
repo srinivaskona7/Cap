@@ -1,5 +1,5 @@
-[build]
 # Use modern multi-threaded linking on macOS
+[target.'cfg(target_os = "macos")']
 rustflags = [
     "-C", "split-debuginfo=unpacked",
 ]
