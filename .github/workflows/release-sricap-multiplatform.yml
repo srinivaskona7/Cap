@@ -203,6 +203,13 @@ jobs:
           cp .cargo/config.toml apps/desktop-gpui/.cargo/config.toml 2>/dev/null || true
           mkdir -p apps/desktop-gpui/target/native-deps
           cp -r target/native-deps/* apps/desktop-gpui/target/native-deps/ 2>/dev/null || true
+          mkdir -p target/x86_64-pc-windows-msvc/release
+          cp -r target/native-deps/lib/* target/x86_64-pc-windows-msvc/release/ 2>/dev/null || true
+          cp -r target/ffmpeg/bin/* target/x86_64-pc-windows-msvc/release/ 2>/dev/null || true
+          cp -r target/native-deps/onnxruntime/lib/* target/x86_64-pc-windows-msvc/release/ 2>/dev/null || true
+          cp -r target/native-deps/dxc/* target/x86_64-pc-windows-msvc/release/ 2>/dev/null || true
+          mkdir -p apps/desktop-gpui/target/x86_64-pc-windows-msvc/release
+          cp -r target/x86_64-pc-windows-msvc/release/* apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/ 2>/dev/null || true
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
 
@@ -222,7 +229,7 @@ jobs:
           ./scripts/prepare-gpui-dependency.sh
           echo "Building GPUI binary for Windows x64..."
           cd apps/desktop-gpui
-          cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
+          FFMPEG_DIR="$GITHUB_WORKSPACE/target/native-deps" cargo +1.95.0 build --release --locked --target x86_64-pc-windows-msvc
           cd ../..
           mkdir -p apps/desktop/src-tauri/binaries
           cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
