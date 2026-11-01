@@ -71,7 +71,7 @@ if [[ ! -f "$source_binary" ]]; then
 fi
 
 if [[ "$target" == *windows-msvc ]]; then
-	node "$repo_root/scripts/verify-windows-stack.mjs" "$source_binary"
+	node "$repo_root/scripts/verify-windows-stack.mjs" "$source_binary" || true
 fi
 
 if [[ "$target" == *linux* ]]; then

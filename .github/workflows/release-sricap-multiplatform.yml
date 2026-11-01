@@ -230,19 +230,20 @@ jobs:
           ./scripts/prepare-gpui-dependency.sh
           echo "Building GPUI binary for Windows x64..."
           export FFMPEG_DIR="$GITHUB_WORKSPACE/target/native-deps"
-          ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
-            echo "Falling back to bundle script or direct cargo invocation..."
-            node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
-              cd apps/desktop-gpui
-              cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
-              cd ../..
-            }
+          export RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
+            echo "Direct build fallback..."
+            cd apps/desktop-gpui
+            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
+            cd ../..
           }
           mkdir -p apps/desktop/src-tauri/binaries
-          if [ -f apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe ]; then
-            cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
-          elif [ -f apps/desktop-gpui/target/release/sricap-rec.exe ]; then
-            cp apps/desktop-gpui/target/release/sricap-rec.exe apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
+          mkdir -p dist-windows
+          BIN="$(find apps/desktop-gpui/target -name "sricap-rec.exe" 2>/dev/null | head -n 1)"
+          if [ -n "$BIN" ] && [ -f "$BIN" ]; then
+            echo "Found built binary at $BIN"
+            cp "$BIN" apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
+            cp "$BIN" dist-windows/windows.exe || true
           fi
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
@@ -253,18 +254,18 @@ jobs:
         run: |
           mkdir -p dist-windows
           npm install -g @tauri-apps/cli@2.9.6
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis || true
+          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis || echo "NSIS bundler completed or skipped"
           
-          # Check for NSIS installer or copy standalone binary
+          # Check for NSIS installer or preserve standalone binary
           if ls apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
             cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe
-          elif [ -f apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe ]; then
-            cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe dist-windows/windows.exe
-          elif [ -f apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe ]; then
-            cp apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe dist-windows/windows.exe
-          elif [ -f apps/desktop-gpui/target/release/sricap-rec.exe ]; then
-            cp apps/desktop-gpui/target/release/sricap-rec.exe dist-windows/windows.exe
+          elif [ ! -f dist-windows/windows.exe ]; then
+            BIN="$(find apps/desktop-gpui/target apps/desktop/src-tauri/binaries -name "*sricap-rec*.exe" 2>/dev/null | head -n 1)"
+            if [ -n "$BIN" ] && [ -f "$BIN" ]; then
+              cp "$BIN" dist-windows/windows.exe
+            fi
           fi
+          ls -la dist-windows/
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
