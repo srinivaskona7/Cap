@@ -289,7 +289,7 @@ debug = "line-tables-only"
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "off"
 codegen-units = 16
 panic = "abort"
 strip = true
