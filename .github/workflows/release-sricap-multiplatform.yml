@@ -232,9 +232,13 @@ jobs:
           export FFMPEG_DIR="$GITHUB_WORKSPACE/target/native-deps"
           export RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
-            echo "Direct build fallback..."
+            echo "Direct build fallback with debug logging..."
             cd apps/desktop-gpui
-            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc
+            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc --verbose || {
+              echo "Build failed. Inspecting target directory for any generated binary..."
+              find target/ -name "*.exe" 2>/dev/null || true
+              exit 1
+            }
             cd ../..
           }
           mkdir -p apps/desktop/src-tauri/binaries
