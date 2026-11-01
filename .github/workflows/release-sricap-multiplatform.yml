@@ -231,6 +231,11 @@ jobs:
           echo "Building GPUI binary for Windows x64..."
           export FFMPEG_DIR="$GITHUB_WORKSPACE/target/native-deps"
           export RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc
+          export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$GITHUB_WORKSPACE/target/native-deps/dxc:$PATH"
+          export LIB="$GITHUB_WORKSPACE/target/native-deps/lib;$LIB"
+          export CARGO_PROFILE_RELEASE_LTO="off"
+          export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="16"
+          export CARGO_PROFILE_RELEASE_INCREMENTAL="false"
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
             echo "Direct build fallback with debug logging..."
             cd apps/desktop-gpui
@@ -251,7 +256,9 @@ jobs:
           fi
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+          CARGO_PROFILE_RELEASE_LTO: "off"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
 
       - name: Bundle Windows Installer (windows.exe)
         shell: bash
