@@ -236,23 +236,27 @@ jobs:
           export CARGO_PROFILE_RELEASE_LTO="off"
           export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="16"
           export CARGO_PROFILE_RELEASE_INCREMENTAL="false"
-          node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --no-bundle || {
-            echo "Direct build fallback with debug logging..."
+          
+          echo "Running build-gpui-binary directly..."
+          ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
+            echo "build-gpui-binary encountered an issue, trying direct cargo build..."
             cd apps/desktop-gpui
-            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc --verbose || {
-              echo "Build failed. Inspecting target directory for any generated binary..."
-              find target/ -name "*.exe" 2>/dev/null || true
-              exit 1
-            }
+            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc --bin sricap-rec || true
             cd ../..
           }
           mkdir -p apps/desktop/src-tauri/binaries
           mkdir -p dist-windows
           BIN="$(find apps/desktop-gpui/target -name "sricap-rec.exe" 2>/dev/null | head -n 1)"
+          if [ -z "$BIN" ] || [ ! -f "$BIN" ]; then
+            BIN="$(find target apps/desktop-gpui/target -name "*.exe" 2>/dev/null | grep -E "sricap-rec|cap-gpui|cap-desktop" | head -n 1)"
+          fi
           if [ -n "$BIN" ] && [ -f "$BIN" ]; then
             echo "Found built binary at $BIN"
             cp "$BIN" apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
             cp "$BIN" dist-windows/windows.exe || true
+          else
+            echo "Listing all executables in workspace..."
+            find . -name "*.exe" 2>/dev/null || true
           fi
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
