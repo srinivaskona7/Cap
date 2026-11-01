@@ -34,12 +34,12 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-15
             name: Silicon
             artifact_dmg: mac-silicon.dmg
             artifact_zip: mac-silicon.zip
           - target: x86_64-apple-darwin
-            runner: macos-14
+            runner: macos-15
             name: Intel
             artifact_dmg: mac-intel.dmg
             artifact_zip: mac-intel.zip
