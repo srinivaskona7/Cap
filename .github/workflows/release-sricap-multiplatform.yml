@@ -241,22 +241,35 @@ jobs:
           ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc || {
             echo "build-gpui-binary encountered an issue, trying direct cargo build..."
             cd apps/desktop-gpui
-            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc --bin sricap-rec || true
+            cargo +1.95.0 build --release --target x86_64-pc-windows-msvc --bin sricap-rec
             cd ../..
           }
           mkdir -p apps/desktop/src-tauri/binaries
           mkdir -p dist-windows
-          BIN="$(find apps/desktop-gpui/target -name "sricap-rec.exe" 2>/dev/null | head -n 1)"
-          if [ -z "$BIN" ] || [ ! -f "$BIN" ]; then
-            BIN="$(find target apps/desktop-gpui/target -name "*.exe" 2>/dev/null | grep -E "sricap-rec|cap-gpui|cap-desktop" | head -n 1)"
-          fi
-          if [ -n "$BIN" ] && [ -f "$BIN" ]; then
-            echo "Found built binary at $BIN"
-            cp "$BIN" apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe || true
-            cp "$BIN" dist-windows/windows.exe || true
+          
+          # Exact executable discovery: ONLY match sricap-rec.exe at expected release paths (exclude build/ and deps/)
+          BIN=""
+          if [ -f "apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe" ]; then
+            BIN="apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/sricap-rec.exe"
+          elif [ -f "apps/desktop-gpui/target/release/sricap-rec.exe" ]; then
+            BIN="apps/desktop-gpui/target/release/sricap-rec.exe"
           else
-            echo "Listing all executables in workspace..."
-            find . -name "*.exe" 2>/dev/null || true
+            BIN="$(find apps/desktop-gpui/target -type f -name "sricap-rec.exe" ! -path "*/build/*" ! -path "*/deps/*" ! -path "*/incremental/*" 2>/dev/null | head -n 1)"
+          fi
+          
+          if [ -n "$BIN" ] && [ -f "$BIN" ]; then
+            FILE_BYTES=$(wc -c < "$BIN" | tr -d ' ')
+            echo "Found verified binary at $BIN (size: $FILE_BYTES bytes)"
+            if [ "$FILE_BYTES" -lt 10000000 ]; then
+              echo "::error::Detected incomplete or build-script binary (<10MB): $BIN ($FILE_BYTES bytes)"
+              exit 1
+            fi
+            cp "$BIN" apps/desktop/src-tauri/binaries/sricap-rec-x86_64-pc-windows-msvc.exe
+            cp "$BIN" dist-windows/sricap-rec.exe
+          else
+            echo "::error::Could not find sricap-rec.exe in target directories!"
+            find apps/desktop-gpui/target -name "*.exe" 2>/dev/null || true
+            exit 1
           fi
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
@@ -271,14 +284,36 @@ jobs:
           npm install -g @tauri-apps/cli@2.9.6
           node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --skip-build --bundles nsis || echo "NSIS bundler completed or skipped"
           
-          # Check for NSIS installer or preserve standalone binary
-          if ls apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe 1> /dev/null 2>&1; then
-            cp apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe dist-windows/windows.exe
-          elif [ ! -f dist-windows/windows.exe ]; then
-            BIN="$(find apps/desktop-gpui/target apps/desktop/src-tauri/binaries -name "*sricap-rec*.exe" 2>/dev/null | head -n 1)"
-            if [ -n "$BIN" ] && [ -f "$BIN" ]; then
-              cp "$BIN" dist-windows/windows.exe
-            fi
+          # Verify NSIS installer (> 20MB) or package complete distribution
+          NSIS_INSTALLER="$(find apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis -type f -name "*.exe" 2>/dev/null | head -n 1)"
+          if [ -n "$NSIS_INSTALLER" ] && [ -f "$NSIS_INSTALLER" ]; then
+            echo "Packaging NSIS installer from $NSIS_INSTALLER..."
+            cp "$NSIS_INSTALLER" dist-windows/windows.exe
+          else
+            echo "NSIS installer not produced; staging full standalone application with DLLs..."
+            mkdir -p dist-windows/sricap-rec-app
+            cp dist-windows/sricap-rec.exe dist-windows/sricap-rec-app/sricap-rec.exe
+            cp -r target/ffmpeg/bin/*.dll dist-windows/sricap-rec-app/ 2>/dev/null || true
+            cp -r target/native-deps/dxc/*.dll dist-windows/sricap-rec-app/ 2>/dev/null || true
+            cp -r target/native-deps/onnxruntime/lib/*.dll dist-windows/sricap-rec-app/ 2>/dev/null || true
+            cp apps/desktop/src-tauri/binaries/cap-muxer-x86_64-pc-windows-msvc.exe dist-windows/sricap-rec-app/cap-muxer.exe 2>/dev/null || true
+            cp apps/desktop/src-tauri/binaries/cap-cli-x86_64-pc-windows-msvc.exe dist-windows/sricap-rec-app/cap-cli.exe 2>/dev/null || true
+            
+            # Create a 7z self-extracting archive or standalone executable package
+            cd dist-windows/sricap-rec-app
+            7z a -sfx7z.sfx ../windows.exe * || {
+              echo "7z SFX failed, creating standard zip and standalone exe..."
+              7z a ../sricap-rec-windows-x64.zip *
+              cp sricap-rec.exe ../windows.exe
+            }
+            cd ../..
+          fi
+          
+          FINAL_BYTES=$(wc -c < "dist-windows/windows.exe" | tr -d ' ')
+          echo "Final dist-windows/windows.exe size: $FINAL_BYTES bytes"
+          if [ "$FINAL_BYTES" -lt 10000000 ]; then
+            echo "::error::windows.exe is only $FINAL_BYTES bytes; expected full application or installer (>10MB)!"
+            exit 1
           fi
           ls -la dist-windows/
 
